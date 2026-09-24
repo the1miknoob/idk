@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Music Player · Mikaeel</title>
-  <meta name="description" content="A music player that plays songs from your own device">
+  <title>My Music</title>
+  <meta name="description" content="A customizable music player that plays songs from your own device">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Poppins:wght@400;500;700&family=Press+Start+2P&family=Comic+Neue:wght@400;700&family=Playfair+Display:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #fafaf7;
@@ -19,6 +19,8 @@
       --accent: #5b5bd6;
       --accent-soft: #ececfb;
       --on-accent: #ffffff;
+      --radius: 20px;
+      --font: "Space Grotesk";
     }
     @media (prefers-color-scheme: dark) {
       :root:not([data-theme="light"]) {
@@ -47,36 +49,52 @@
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: "Space Grotesk", system-ui, sans-serif;
+      font-family: var(--font), system-ui, sans-serif;
       background: var(--bg);
       color: var(--text);
       line-height: 1.5;
       min-height: 100vh;
     }
     a { color: var(--accent); text-decoration: none; }
-    button { font: inherit; color: inherit; }
+    button, input, select { font: inherit; color: inherit; }
+
+    /* Custom background layers */
+    #bg, #bg-dim { position: fixed; inset: 0; pointer-events: none; }
+    #bg { z-index: -2; background-size: cover; background-position: center; }
+    #bg-dim { z-index: -1; background: #000; opacity: 0; }
 
     .wrap { max-width: 640px; margin: 0 auto; padding: 0 16px 48px; }
 
-    nav { display: flex; align-items: center; justify-content: space-between; height: 56px; margin-bottom: 8px; }
+    nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 56px; }
     nav a { color: var(--muted); font-size: 15px; }
     nav a:hover { color: var(--text); }
-    #theme-toggle {
-      background: none; border: 1px solid var(--border);
+    .nav-btns { display: flex; gap: 8px; }
+    .square-btn {
+      background: var(--surface); border: 1px solid var(--border);
       border-radius: 8px; width: 34px; height: 34px; cursor: pointer; font-size: 16px;
+      display: grid; place-items: center;
     }
+    h1.player-name { font-size: 28px; margin: 6px 0 14px; overflow-wrap: anywhere; }
 
-    /* Player card */
-    .player {
-      background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+    .panel {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
       padding: 20px; margin-bottom: 20px;
     }
+    body.has-bg .panel, body.has-bg .square-btn {
+      background: color-mix(in srgb, var(--surface) 80%, transparent);
+      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    }
+    body.has-bg nav a, body.has-bg h1.player-name { text-shadow: 0 1px 8px color-mix(in srgb, var(--bg) 70%, transparent); }
+    body.has-bg nav a { color: var(--text); }
+
     canvas {
       display: block; width: 100%; height: 120px;
-      background: var(--surface-2); border-radius: 12px; margin-bottom: 18px;
+      background: var(--surface-2); border-radius: calc(var(--radius) * .6); margin-bottom: 18px;
     }
+    canvas.tall { height: 220px; }
     .title { font-size: 22px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 14px; }
+    .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 14px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .badge { background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 0 8px; font-size: 12px; font-weight: 500; }
 
     input[type="range"] {
       -webkit-appearance: none; appearance: none; width: 100%; height: 6px;
@@ -101,9 +119,7 @@
     .icon-btn:hover { color: var(--text); background: var(--surface-2); }
     .icon-btn.active { color: var(--accent); }
     .icon-btn svg { width: 22px; height: 22px; fill: currentColor; }
-    .icon-btn.big {
-      width: 60px; height: 60px; background: var(--accent); color: var(--on-accent);
-    }
+    .icon-btn.big { width: 60px; height: 60px; background: var(--accent); color: var(--on-accent); }
     .icon-btn.big:hover { background: var(--accent); color: var(--on-accent); transform: scale(1.05); }
     .icon-btn.big svg { width: 28px; height: 28px; }
     .icon-btn:disabled { opacity: .4; cursor: default; }
@@ -116,19 +132,29 @@
     .repeat-one.show { display: grid; }
 
     .volume { display: flex; align-items: center; gap: 10px; color: var(--muted); }
+    .volume button { background: none; border: none; cursor: pointer; color: inherit; display: grid; }
     .volume svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 
     /* Playlist */
-    .list-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .list-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
     .list-head h2 { font-size: 18px; }
     .btn {
-      display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 10px;
+      display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: calc(var(--radius) * .5);
       font-weight: 500; border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent); cursor: pointer;
+      white-space: nowrap;
     }
     .btn:hover { filter: brightness(1.08); }
+    .btn.ghost { background: transparent; color: var(--text); border-color: var(--border); }
+    .btn.danger { background: transparent; color: #e5484d; border-color: #e5484d; }
+    .search {
+      width: 100%; padding: 8px 12px; border-radius: calc(var(--radius) * .5); border: 1px solid var(--border);
+      background: var(--surface-2); margin-bottom: 10px; display: none;
+    }
+    .search.show { display: block; }
+    .search:focus, .rename:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
     .drop {
-      border: 2px dashed var(--border); border-radius: 16px; padding: 36px 16px; text-align: center;
+      border: 2px dashed var(--border); border-radius: calc(var(--radius) * .8); padding: 36px 16px; text-align: center;
       color: var(--muted); cursor: pointer; transition: border-color .15s, background .15s;
     }
     .drop.over { border-color: var(--accent); background: var(--accent-soft); }
@@ -136,38 +162,114 @@
 
     ul { list-style: none; }
     li {
-      display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; cursor: pointer;
+      display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: calc(var(--radius) * .6); cursor: pointer;
+      border-top: 2px solid transparent; border-bottom: 2px solid transparent;
     }
     li:hover { background: var(--surface-2); }
     li.playing { background: var(--accent-soft); }
     li.playing .name { color: var(--accent); font-weight: 700; }
+    li.drag-above { border-top-color: var(--accent); }
+    li.drag-below { border-bottom-color: var(--accent); }
+    li.dragging { opacity: .4; }
     li .num { width: 22px; text-align: right; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; flex: none; }
     li .name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    li .rename { flex: 1; min-width: 0; padding: 2px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
     li .dur { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; flex: none; }
-    li .remove {
-      background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px;
+    li .mini {
+      background: none; border: none; color: var(--muted); cursor: pointer; font-size: 15px;
       width: 28px; height: 28px; border-radius: 50%; flex: none; opacity: 0;
     }
-    li:hover .remove, li .remove:focus { opacity: 1; }
-    li .remove:hover { color: #e5484d; background: var(--surface); }
-    @media (hover: none) { li .remove { opacity: 1; } }
+    li:hover .mini, li .mini:focus { opacity: 1; }
+    li .mini:hover { color: var(--text); background: var(--surface); }
+    li .mini.remove:hover { color: #e5484d; }
+    @media (hover: none) { li .mini { opacity: 1; } }
+    .empty-search { color: var(--muted); text-align: center; padding: 16px; display: none; }
 
-    .hint { color: var(--muted); font-size: 13px; margin-top: 16px; text-align: center; }
+    .hint { color: var(--muted); font-size: 13px; margin-top: 14px; text-align: center; }
     kbd { font-family: inherit; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; font-size: 12px; }
     @media (hover: none) { .hint.keys { display: none; } }
+
+    /* Compact mode */
+    body.compact canvas { display: none; }
+    body.compact .panel { padding: 14px 16px; }
+    body.compact .title { font-size: 18px; }
+    body.compact h1.player-name { font-size: 22px; margin-bottom: 10px; }
+    body.hide-keys .hint.keys { display: none; }
+
+    /* Settings dialog */
+    dialog {
+      margin: auto; width: min(560px, calc(100vw - 24px)); max-height: 88vh; border: 1px solid var(--border);
+      border-radius: var(--radius); background: var(--surface); color: var(--text); padding: 0;
+    }
+    dialog::backdrop { background: rgba(0, 0, 0, .5); backdrop-filter: blur(3px); }
+    .dlg-head {
+      position: sticky; top: 0; z-index: 1; background: var(--surface); display: flex; align-items: center;
+      justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border);
+    }
+    .dlg-head h2 { font-size: 20px; }
+    .tabs { display: flex; gap: 4px; padding: 12px 20px 0; overflow-x: auto; scrollbar-width: none; }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab {
+      background: none; border: 1px solid transparent; border-radius: 999px; padding: 6px 10px; cursor: pointer; color: var(--muted);
+      white-space: nowrap; flex: none;
+    }
+    .tab.active { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+    .tab-body { padding: 8px 20px 20px; }
+    .tab-page { display: none; }
+    .tab-page.active { display: block; }
+    .row { padding: 12px 0; border-bottom: 1px solid var(--border); }
+    .row:last-child { border-bottom: none; }
+    .row > label, .row > .label { display: flex; justify-content: space-between; font-weight: 500; margin-bottom: 8px; gap: 8px; }
+    .row > label span.val, .row > .label span.val { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+    .row .desc { color: var(--muted); font-size: 13px; margin-top: -4px; margin-bottom: 8px; }
+    .field {
+      width: 100%; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2);
+    }
+    .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+    .seg button {
+      padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); cursor: pointer;
+    }
+    .seg button.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+    .swatches { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .swatch {
+      width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--border); cursor: pointer; position: relative;
+    }
+    .swatch.on { outline: 3px solid var(--text); outline-offset: 2px; }
+    .swatch.default { background: conic-gradient(#5b5bd6 0 50%, #8b8bf5 0); }
+    .color-input { width: 44px; height: 32px; border: 1px solid var(--border); border-radius: 8px; background: none; cursor: pointer; padding: 2px; }
+    .bg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 8px; }
+    .bg-opt {
+      height: 56px; border-radius: 10px; border: 2px solid var(--border); cursor: pointer; font-size: 12px; font-weight: 500;
+      display: flex; align-items: flex-end; padding: 4px 6px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6);
+      background-size: cover; background-position: center;
+    }
+    .bg-opt.on { outline: 3px solid var(--text); outline-offset: 2px; }
+    .toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; font-weight: 500; }
+    .toggle input { width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer; }
+    .eq { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .eq label { display: block; font-size: 13px; color: var(--muted); text-align: center; margin-top: 6px; }
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
   </style>
 </head>
 <body>
+  <div id="bg"></div>
+  <div id="bg-dim"></div>
+
   <div class="wrap">
     <nav>
       <a href="../">← Back to Mikaeel's site</a>
-      <button id="theme-toggle" aria-label="Toggle dark mode">🌙</button>
+      <div class="nav-btns">
+        <button class="square-btn" id="theme-toggle" aria-label="Toggle dark mode" title="Light / dark">🌙</button>
+        <button class="square-btn" id="open-settings" aria-label="Customize" title="Customize">⚙️</button>
+      </div>
     </nav>
 
-    <section class="player">
+    <h1 class="player-name" id="player-name">My Music</h1>
+
+    <section class="panel">
       <canvas id="viz"></canvas>
       <div class="title" id="title">No song playing</div>
-      <div class="subtitle" id="subtitle">Add some songs below to get started</div>
+      <div class="subtitle"><span id="subtitle">Add some songs below to get started</span><span class="badge" id="speed-badge" hidden></span><span class="badge" id="sleep-badge" hidden></span></div>
 
       <input type="range" id="seek" min="0" max="1000" value="0" aria-label="Seek">
       <div class="times"><span id="cur">0:00</span><span id="dur">0:00</span></div>
@@ -194,87 +296,515 @@
       </div>
 
       <div class="volume">
-        <svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3Zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4Z"/></svg>
+        <button id="mute" aria-label="Mute" title="Mute">
+          <svg viewBox="0 0 24 24" id="vol-icon"></svg>
+        </button>
         <input type="range" id="volume" min="0" max="100" value="80" aria-label="Volume">
       </div>
     </section>
 
-    <section>
+    <section class="panel">
       <div class="list-head">
         <h2>Playlist <span id="count" style="color:var(--muted);font-weight:400"></span></h2>
-        <button class="btn" id="add">＋ Add songs</button>
+        <div class="btn-row">
+          <button class="btn ghost" id="toggle-search" title="Search songs" aria-label="Search songs">🔍</button>
+          <button class="btn" id="add">＋ Add songs</button>
+        </div>
       </div>
+      <input type="search" class="search" id="search" placeholder="Search your songs…" aria-label="Search songs">
       <input type="file" id="file" accept="audio/*" multiple hidden>
       <div class="drop" id="drop">
         <strong>Drop your music here</strong>
         or click to pick MP3, WAV, OGG or M4A files from your device
       </div>
       <ul id="list"></ul>
-      <p class="hint">Songs are saved in this browser only. Nothing is uploaded anywhere.</p>
-      <p class="hint keys"><kbd>Space</kbd> play/pause · <kbd>←</kbd> <kbd>→</kbd> skip 5s · <kbd>Shift</kbd>+<kbd>←</kbd> <kbd>→</kbd> previous/next song</p>
+      <p class="empty-search" id="empty-search">No songs match your search.</p>
+      <p class="hint">Songs and settings are saved in this browser only. Nothing is uploaded anywhere.</p>
+      <p class="hint" id="drag-hint" hidden>Drag songs to reorder · ✏️ to rename</p>
+      <p class="hint keys"><kbd>Space</kbd> play/pause · <kbd>←</kbd> <kbd>→</kbd> skip 5s · <kbd>Shift</kbd>+<kbd>←</kbd> <kbd>→</kbd> previous/next · <kbd>M</kbd> mute</p>
     </section>
   </div>
+
+  <!-- ================= Settings ================= -->
+  <dialog id="settings">
+    <div class="dlg-head">
+      <h2>🎨 Customize</h2>
+      <button class="square-btn" id="close-settings" aria-label="Close">✕</button>
+    </div>
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-tab="look">Look</button>
+      <button class="tab" data-tab="background">Background</button>
+      <button class="tab" data-tab="visualizer">Visualizer</button>
+      <button class="tab" data-tab="sound">Sound</button>
+      <button class="tab" data-tab="more">More</button>
+    </div>
+    <div class="tab-body">
+
+      <!-- LOOK -->
+      <div class="tab-page active" data-page="look">
+        <div class="row">
+          <label for="s-name">Player name</label>
+          <input class="field" id="s-name" data-setting="name" maxlength="40" placeholder="My Music">
+        </div>
+        <div class="row">
+          <div class="label">Theme</div>
+          <div class="seg" data-seg="theme">
+            <button data-v="auto">Auto</button><button data-v="light">☀️ Light</button><button data-v="dark">🌙 Dark</button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">Accent color</div>
+          <div class="swatches" id="accent-swatches"></div>
+        </div>
+        <div class="row">
+          <div class="label">Font</div>
+          <div class="seg" data-seg="font">
+            <button data-v="Space Grotesk" style="font-family:'Space Grotesk'">Modern</button>
+            <button data-v="Poppins" style="font-family:Poppins">Clean</button>
+            <button data-v="Comic Neue" style="font-family:'Comic Neue'">Comic</button>
+            <button data-v="Playfair Display" style="font-family:'Playfair Display'">Fancy</button>
+            <button data-v="JetBrains Mono" style="font-family:'JetBrains Mono'">Code</button>
+            <button data-v="Press Start 2P" style="font-family:'Press Start 2P';font-size:10px">Retro</button>
+          </div>
+        </div>
+        <div class="row">
+          <label for="s-radius">Corner roundness <span class="val" id="v-radius"></span></label>
+          <input type="range" id="s-radius" data-setting="radius" min="0" max="32" step="1">
+        </div>
+        <div class="row">
+          <label class="toggle">Compact mode (hide visualizer, smaller player) <input type="checkbox" data-setting="compact"></label>
+        </div>
+      </div>
+
+      <!-- BACKGROUND -->
+      <div class="tab-page" data-page="background">
+        <div class="row">
+          <div class="label">Background</div>
+          <div class="bg-grid" id="bg-grid"></div>
+        </div>
+        <div class="row">
+          <div class="label">Your own picture</div>
+          <div class="btn-row">
+            <button class="btn" id="bg-upload">🖼️ Upload image</button>
+            <input type="file" id="bg-file" accept="image/*" hidden>
+          </div>
+        </div>
+        <div class="row">
+          <label for="s-bgDim">Darken <span class="val" id="v-bgDim"></span></label>
+          <input type="range" id="s-bgDim" data-setting="bgDim" min="0" max="80" step="1">
+        </div>
+        <div class="row">
+          <label for="s-bgBlur">Blur <span class="val" id="v-bgBlur"></span></label>
+          <input type="range" id="s-bgBlur" data-setting="bgBlur" min="0" max="30" step="1">
+        </div>
+      </div>
+
+      <!-- VISUALIZER -->
+      <div class="tab-page" data-page="visualizer">
+        <div class="row">
+          <div class="label">Style</div>
+          <div class="seg" data-seg="viz">
+            <button data-v="bars">Bars</button><button data-v="mirror">Mirror</button><button data-v="wave">Wave</button>
+            <button data-v="circle">Circle</button><button data-v="dots">Dots</button><button data-v="off">Off</button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">Colors</div>
+          <div class="seg" data-seg="vizColor">
+            <button data-v="accent">Accent</button><button data-v="gradient">Gradient</button><button data-v="rainbow">🌈 Rainbow</button>
+          </div>
+        </div>
+        <div class="row" id="grad-row">
+          <label for="s-vizColor2">Gradient end color</label>
+          <input type="color" class="color-input" id="s-vizColor2" data-setting="vizColor2">
+        </div>
+        <div class="row">
+          <label for="s-vizBars">Number of bars <span class="val" id="v-vizBars"></span></label>
+          <input type="range" id="s-vizBars" data-setting="vizBars" min="12" max="96" step="4">
+        </div>
+        <div class="row">
+          <label for="s-vizSens">Sensitivity <span class="val" id="v-vizSens"></span></label>
+          <input type="range" id="s-vizSens" data-setting="vizSens" min="0.5" max="2" step="0.1">
+        </div>
+        <div class="row">
+          <label for="s-vizSmooth">Smoothness <span class="val" id="v-vizSmooth"></span></label>
+          <input type="range" id="s-vizSmooth" data-setting="vizSmooth" min="0" max="0.95" step="0.05">
+        </div>
+        <div class="row">
+          <label class="toggle">Big visualizer <input type="checkbox" data-setting="vizTall"></label>
+        </div>
+      </div>
+
+      <!-- SOUND -->
+      <div class="tab-page" data-page="sound">
+        <div class="row">
+          <div class="label">Playback speed</div>
+          <div class="seg" data-seg="speed">
+            <button data-v="0.5">0.5×</button><button data-v="0.75">0.75×</button><button data-v="1">1×</button>
+            <button data-v="1.25">1.25×</button><button data-v="1.5">1.5×</button><button data-v="2">2×</button>
+          </div>
+        </div>
+        <div class="row">
+          <label class="toggle">Keep pitch when changing speed <input type="checkbox" data-setting="keepPitch"></label>
+        </div>
+        <div class="row">
+          <div class="label">Equalizer</div>
+          <div class="seg" id="eq-presets" style="margin-bottom:14px">
+            <button data-eq="0,0,0">Flat</button><button data-eq="9,0,0">Bass boost</button>
+            <button data-eq="-2,5,2">Vocals</button><button data-eq="0,-1,7">Treble</button>
+            <button data-eq="6,-2,5">Party</button><button data-eq="-3,2,-3">Soft</button>
+          </div>
+          <div class="eq">
+            <div><input type="range" data-setting="eqLow" min="-12" max="12" step="1" aria-label="Bass"><label>Bass <span id="v-eqLow"></span></label></div>
+            <div><input type="range" data-setting="eqMid" min="-12" max="12" step="1" aria-label="Mids"><label>Mids <span id="v-eqMid"></span></label></div>
+            <div><input type="range" data-setting="eqHigh" min="-12" max="12" step="1" aria-label="Treble"><label>Treble <span id="v-eqHigh"></span></label></div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">Sleep timer</div>
+          <div class="desc">Stops the music after a while. Not saved when you leave.</div>
+          <div class="seg" id="sleep-seg">
+            <button data-sleep="0">Off</button><button data-sleep="5">5 min</button><button data-sleep="15">15 min</button>
+            <button data-sleep="30">30 min</button><button data-sleep="60">1 hour</button><button data-sleep="end">End of song</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MORE -->
+      <div class="tab-page" data-page="more">
+        <div class="row">
+          <label class="toggle">Start playing when I add songs <input type="checkbox" data-setting="autoplayOnAdd"></label>
+        </div>
+        <div class="row">
+          <label class="toggle">Remember shuffle &amp; repeat <input type="checkbox" data-setting="rememberModes"></label>
+        </div>
+        <div class="row">
+          <label class="toggle">Show keyboard shortcuts <input type="checkbox" data-setting="showKeys"></label>
+        </div>
+        <div class="row">
+          <div class="label">Reset</div>
+          <div class="btn-row">
+            <button class="btn ghost" id="reset-settings">↺ Reset all settings</button>
+            <button class="btn danger" id="clear-songs">🗑️ Remove all songs</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </dialog>
 
   <audio id="audio" preload="metadata"></audio>
 
   <script>
-    // ---------- Theme (shared with the main site) ----------
+    const $ = id => document.getElementById(id);
     const root = document.documentElement;
-    const themeBtn = document.getElementById('theme-toggle');
-    const isDark = () => root.dataset.theme
-      ? root.dataset.theme === 'dark'
-      : matchMedia('(prefers-color-scheme: dark)').matches;
-    const setThemeIcon = () => { themeBtn.textContent = isDark() ? '☀️' : '🌙'; };
-    try { const t = localStorage.getItem('theme'); if (t) root.dataset.theme = t; } catch (e) {}
-    setThemeIcon();
-    themeBtn.addEventListener('click', () => {
-      root.dataset.theme = isDark() ? 'light' : 'dark';
-      try { localStorage.setItem('theme', root.dataset.theme); } catch (e) {}
-      setThemeIcon();
-    });
+    const audio = $('audio');
 
-    // ---------- Saved songs (IndexedDB, stays in this browser) ----------
+    // ================= Settings (saved per browser) =================
+    const DEFAULTS = {
+      name: 'My Music',
+      accent: null,           // null = theme default
+      font: 'Space Grotesk',
+      radius: 20,
+      compact: false,
+      bg: 'none',
+      bgDim: 0,
+      bgBlur: 0,
+      viz: 'bars',
+      vizColor: 'accent',
+      vizColor2: '#ff5fa2',
+      vizBars: 40,
+      vizSens: 1,
+      vizSmooth: 0.8,
+      vizTall: false,
+      speed: 1,
+      keepPitch: true,
+      eqLow: 0, eqMid: 0, eqHigh: 0,
+      autoplayOnAdd: false,
+      rememberModes: true,
+      showKeys: true,
+      volume: 80,
+      shuffle: false,
+      repeat: 'off',
+    };
+    let S = { ...DEFAULTS };
+    try { Object.assign(S, JSON.parse(localStorage.getItem('mp-settings') || '{}')); } catch (e) {}
+    try { const v = localStorage.getItem('mp-volume'); if (v !== null && !localStorage.getItem('mp-settings')) S.volume = +v; } catch (e) {}
+    const save = () => { try { localStorage.setItem('mp-settings', JSON.stringify(S)); } catch (e) {} };
+
+    const ACCENTS = ['#e5484d', '#f76b15', '#ffc53d', '#30a46c', '#12a594', '#0090ff', '#5b5bd6', '#8e4ec6', '#d6409f', '#8d8d86'];
+    const BACKGROUNDS = {
+      none:     { label: 'None', css: '' },
+      sunset:   { label: 'Sunset', css: 'linear-gradient(135deg,#ff7e5f,#feb47b)' },
+      ocean:    { label: 'Ocean', css: 'linear-gradient(135deg,#2193b0,#6dd5ed)' },
+      aurora:   { label: 'Aurora', css: 'linear-gradient(135deg,#00c9a7,#845ec2)' },
+      candy:    { label: 'Candy', css: 'linear-gradient(135deg,#f093fb,#f5576c)' },
+      forest:   { label: 'Forest', css: 'linear-gradient(135deg,#134e5e,#71b280)' },
+      midnight: { label: 'Midnight', css: 'linear-gradient(135deg,#0f2027,#203a43,#2c5364)' },
+      lava:     { label: 'Lava', css: 'linear-gradient(135deg,#200122,#6f0000)' },
+      peach:    { label: 'Peach', css: 'linear-gradient(135deg,#ffecd2,#fcb69f)' },
+      galaxy:   { label: 'Galaxy', css: 'radial-gradient(circle at 30% 20%,#5b2a86,transparent 50%),radial-gradient(circle at 80% 70%,#1f4e8c,transparent 50%),#0b0b1a' },
+      image:    { label: 'My picture', css: '' },
+    };
+    let bgImageUrl = null;
+
+    // ================= Storage (IndexedDB, stays in this browser) =================
     const db = {
       conn: null,
       open() {
         return new Promise((resolve) => {
           try {
-            const req = indexedDB.open('music-player', 1);
-            req.onupgradeneeded = () => req.result.createObjectStore('tracks', { keyPath: 'id' });
+            const req = indexedDB.open('music-player', 2);
+            req.onupgradeneeded = () => {
+              const d = req.result;
+              if (!d.objectStoreNames.contains('tracks')) d.createObjectStore('tracks', { keyPath: 'id' });
+              if (!d.objectStoreNames.contains('files')) d.createObjectStore('files');
+            };
             req.onsuccess = () => { this.conn = req.result; resolve(); };
             req.onerror = () => resolve();
           } catch (e) { resolve(); }
         });
       },
-      run(mode, fn) {
+      run(store, mode, fn) {
         return new Promise((resolve) => {
           if (!this.conn) return resolve(null);
           try {
-            const store = this.conn.transaction('tracks', mode).objectStore('tracks');
-            const req = fn(store);
+            const req = fn(this.conn.transaction(store, mode).objectStore(store));
             req.onsuccess = () => resolve(req.result);
             req.onerror = () => resolve(null);
           } catch (e) { resolve(null); }
         });
       },
-      all() { return this.run('readonly', s => s.getAll()); },
-      put(t) { return this.run('readwrite', s => s.put(t)); },
-      remove(id) { return this.run('readwrite', s => s.delete(id)); },
+      allTracks() { return this.run('tracks', 'readonly', s => s.getAll()); },
+      putTrack(t) {
+        const { id, name, blob, duration, addedAt, order } = t;
+        return this.run('tracks', 'readwrite', s => s.put({ id, name, blob, duration, addedAt, order }));
+      },
+      removeTrack(id) { return this.run('tracks', 'readwrite', s => s.delete(id)); },
+      clearTracks() { return this.run('tracks', 'readwrite', s => s.clear()); },
+      getFile(k) { return this.run('files', 'readonly', s => s.get(k)); },
+      putFile(k, v) { return this.run('files', 'readwrite', s => s.put(v, k)); },
     };
 
-    // ---------- State ----------
-    const audio = document.getElementById('audio');
-    const $ = id => document.getElementById(id);
-    let tracks = [];          // { id, name, blob, duration, addedAt, url }
+    // ================= Applying settings =================
+    function luminance(hex) {
+      const m = /^#?([\da-f]{6})$/i.exec(hex); if (!m) return 0.5;
+      const n = parseInt(m[1], 16);
+      const c = [n >> 16, (n >> 8) & 255, n & 255].map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); });
+      return .2126 * c[0] + .7152 * c[1] + .0722 * c[2];
+    }
+
+    function applyTheme() {
+      let t = 'auto';
+      try { t = localStorage.getItem('theme') || 'auto'; } catch (e) {}
+      if (t === 'auto') delete root.dataset.theme; else root.dataset.theme = t;
+      const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+      $('theme-toggle').textContent = dark ? '☀️' : '🌙';
+      document.querySelectorAll('[data-seg="theme"] button').forEach(b => b.classList.toggle('on', b.dataset.v === t));
+    }
+    function setTheme(t) {
+      try { t === 'auto' ? localStorage.removeItem('theme') : localStorage.setItem('theme', t); } catch (e) {}
+      applyTheme();
+    }
+
+    function applyAll() {
+      // Name
+      $('player-name').textContent = S.name || 'My Music';
+      if (current === -1) document.title = S.name || 'My Music';
+
+      // Accent
+      if (S.accent) {
+        root.style.setProperty('--accent', S.accent);
+        root.style.setProperty('--accent-soft', `color-mix(in srgb, ${S.accent} 18%, var(--surface))`);
+        root.style.setProperty('--on-accent', luminance(S.accent) > 0.4 ? '#111114' : '#ffffff');
+      } else {
+        ['--accent', '--accent-soft', '--on-accent'].forEach(p => root.style.removeProperty(p));
+      }
+
+      // Font & shape
+      root.style.setProperty('--font', `"${S.font}"`);
+      root.style.setProperty('--radius', S.radius + 'px');
+      document.body.classList.toggle('compact', S.compact);
+      document.body.classList.toggle('hide-keys', !S.showKeys);
+
+      // Background
+      const bgEl = $('bg');
+      const bg = BACKGROUNDS[S.bg] ? S.bg : 'none';
+      bgEl.style.background = bg === 'image' ? (bgImageUrl ? `center / cover no-repeat url("${bgImageUrl}")` : '') : BACKGROUNDS[bg].css;
+      bgEl.style.filter = S.bgBlur ? `blur(${S.bgBlur}px)` : '';
+      bgEl.style.transform = S.bgBlur ? 'scale(1.08)' : '';
+      $('bg-dim').style.opacity = bg === 'none' ? 0 : S.bgDim / 100;
+      document.body.classList.toggle('has-bg', bg !== 'none' && !(bg === 'image' && !bgImageUrl));
+
+      // Visualizer
+      $('viz').classList.toggle('tall', S.vizTall || S.viz === 'circle');
+      $('viz').style.display = S.viz === 'off' ? 'none' : '';
+      if (analyser) analyser.smoothingTimeConstant = S.vizSmooth;
+      $('grad-row').style.display = S.vizColor === 'gradient' ? '' : 'none';
+
+      // Sound
+      audio.defaultPlaybackRate = audio.playbackRate = S.speed;
+      audio.preservesPitch = audio.mozPreservesPitch = audio.webkitPreservesPitch = S.keepPitch;
+      $('speed-badge').hidden = S.speed === 1;
+      $('speed-badge').textContent = S.speed + '×';
+      if (eq.low) { eq.low.gain.value = S.eqLow; eq.mid.gain.value = S.eqMid; eq.high.gain.value = S.eqHigh; }
+    }
+
+    // Keep the settings panel's controls in sync with S
+    function syncControls() {
+      document.querySelectorAll('[data-setting]').forEach(el => {
+        const k = el.dataset.setting;
+        if (el.type === 'checkbox') el.checked = !!S[k]; else el.value = S[k];
+        if (el.type === 'range') paintRange(el);
+      });
+      document.querySelectorAll('[data-seg]').forEach(seg => {
+        const k = seg.dataset.seg;
+        if (k === 'theme') return;
+        seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', String(S[k]) === b.dataset.v));
+      });
+      document.querySelectorAll('#eq-presets button').forEach(b => b.classList.toggle('on', b.dataset.eq === `${S.eqLow},${S.eqMid},${S.eqHigh}`));
+      document.querySelectorAll('.swatch').forEach(s => s.classList.toggle('on', (s.dataset.c || null) === S.accent));
+      $('custom-accent').value = S.accent || getComputedStyle(root).getPropertyValue('--accent').trim();
+      document.querySelectorAll('.bg-opt').forEach(o => o.classList.toggle('on', o.dataset.bg === S.bg));
+      const sign = v => (v > 0 ? '+' : '') + v;
+      $('v-radius').textContent = S.radius + 'px';
+      $('v-bgDim').textContent = S.bgDim + '%';
+      $('v-bgBlur').textContent = S.bgBlur + 'px';
+      $('v-vizBars').textContent = S.vizBars;
+      $('v-vizSens').textContent = (+S.vizSens).toFixed(1) + '×';
+      $('v-vizSmooth').textContent = Math.round(S.vizSmooth * 100) + '%';
+      $('v-eqLow').textContent = sign(S.eqLow);
+      $('v-eqMid').textContent = sign(S.eqMid);
+      $('v-eqHigh').textContent = sign(S.eqHigh);
+      document.querySelectorAll('#sleep-seg button').forEach(b => b.classList.toggle('on', b.dataset.sleep === String(sleepMode)));
+      applyTheme();
+    }
+
+    function set(k, v) {
+      S[k] = v;
+      save(); applyAll(); syncControls();
+    }
+
+    // ================= Settings panel wiring =================
+    const dlg = $('settings');
+    $('open-settings').addEventListener('click', () => { syncControls(); dlg.showModal(); });
+    $('close-settings').addEventListener('click', () => dlg.close());
+    dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });   // click outside to close
+
+    document.querySelectorAll('.tab').forEach(tab => tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === tab));
+      document.querySelectorAll('.tab-page').forEach(p => p.classList.toggle('active', p.dataset.page === tab.dataset.tab));
+    }));
+
+    document.querySelectorAll('[data-setting]').forEach(el => {
+      el.addEventListener('input', () => {
+        const k = el.dataset.setting;
+        const v = el.type === 'checkbox' ? el.checked : el.type === 'range' ? +el.value : el.value;
+        set(k, v);
+      });
+    });
+
+    document.querySelectorAll('[data-seg]').forEach(seg => seg.addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      const k = seg.dataset.seg;
+      if (k === 'theme') return setTheme(b.dataset.v);
+      set(k, k === 'speed' ? +b.dataset.v : b.dataset.v);
+    }));
+
+    // Accent swatches
+    const sw = $('accent-swatches');
+    sw.innerHTML = `<button class="swatch default" title="Default" aria-label="Default color"></button>` +
+      ACCENTS.map(c => `<button class="swatch" data-c="${c}" style="background:${c}" title="${c}" aria-label="${c}"></button>`).join('') +
+      `<input type="color" class="color-input" id="custom-accent" title="Pick any color" aria-label="Custom color">`;
+    sw.addEventListener('click', e => {
+      const b = e.target.closest('.swatch'); if (!b) return;
+      set('accent', b.dataset.c || null);
+    });
+    $('custom-accent').addEventListener('input', e => set('accent', e.target.value));
+
+    // Background options
+    $('bg-grid').innerHTML = Object.entries(BACKGROUNDS).filter(([k]) => k !== 'image').map(([k, b]) =>
+      `<button class="bg-opt" data-bg="${k}" style="background:${b.css || 'var(--surface-2)'};${k === 'none' ? 'color:var(--text);text-shadow:none' : ''}">${b.label}</button>`
+    ).join('') + `<button class="bg-opt" data-bg="image" id="bg-image-opt" style="background:var(--surface-2);color:var(--text);text-shadow:none">🖼️ My picture</button>`;
+    $('bg-grid').addEventListener('click', e => {
+      const b = e.target.closest('.bg-opt'); if (!b) return;
+      if (b.dataset.bg === 'image' && !bgImageUrl) return $('bg-file').click();
+      if (b.dataset.bg !== 'none' && S.bgDim === 0 && S.bg === 'none') S.bgDim = 15;
+      set('bg', b.dataset.bg);
+    });
+    $('bg-upload').addEventListener('click', () => $('bg-file').click());
+    $('bg-file').addEventListener('change', async () => {
+      const f = $('bg-file').files[0]; $('bg-file').value = '';
+      if (!f) return;
+      if (bgImageUrl) URL.revokeObjectURL(bgImageUrl);
+      bgImageUrl = URL.createObjectURL(f);
+      await db.putFile('bg', f);
+      updateBgThumb();
+      if (S.bgDim === 0) S.bgDim = 25;
+      set('bg', 'image');
+    });
+    function updateBgThumb() {
+      const o = $('bg-image-opt');
+      if (bgImageUrl) { o.style.background = `center / cover url("${bgImageUrl}")`; o.style.color = '#fff'; o.style.textShadow = ''; }
+    }
+
+    // EQ presets
+    $('eq-presets').addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      const [l, m, h] = b.dataset.eq.split(',').map(Number);
+      S.eqLow = l; S.eqMid = m; S.eqHigh = h;
+      save(); applyAll(); syncControls();
+    });
+
+    // Sleep timer (not saved)
+    let sleepMode = 0, sleepEnd = 0, sleepTick = null;
+    $('sleep-seg').addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      clearInterval(sleepTick);
+      sleepMode = b.dataset.sleep === 'end' ? 'end' : +b.dataset.sleep;
+      if (typeof sleepMode === 'number' && sleepMode > 0) {
+        sleepEnd = Date.now() + sleepMode * 60000;
+        sleepTick = setInterval(updateSleep, 1000);
+      }
+      updateSleep(); syncControls();
+    });
+    function updateSleep() {
+      const badge = $('sleep-badge');
+      if (sleepMode === 'end') { badge.hidden = false; badge.textContent = '💤 end of song'; return; }
+      if (!sleepMode) { badge.hidden = true; return; }
+      const left = Math.max(0, sleepEnd - Date.now());
+      badge.hidden = false;
+      badge.textContent = '💤 ' + fmt(left / 1000);
+      if (left === 0) { audio.pause(); cancelSleep(); }
+    }
+    function cancelSleep() { clearInterval(sleepTick); sleepMode = 0; updateSleep(); syncControls(); }
+
+    $('reset-settings').addEventListener('click', () => {
+      if (!confirm('Reset all your customizations back to the defaults? Your songs will stay.')) return;
+      S = { ...DEFAULTS, volume: S.volume };
+      setTheme('auto');
+      save(); applyAll(); syncControls(); applyModes(); applyVolume();
+    });
+    $('clear-songs').addEventListener('click', async () => {
+      if (!tracks.length || !confirm(`Remove all ${tracks.length} songs from this player?`)) return;
+      audio.pause(); audio.removeAttribute('src');
+      tracks.forEach(t => t.url && URL.revokeObjectURL(t.url));
+      tracks = []; current = -1; history = [];
+      await db.clearTracks();
+      showEmpty(); render();
+    });
+
+    // ================= Playback state =================
+    let tracks = [];          // { id, name, blob, duration, addedAt, order, url }
     let current = -1;
-    let shuffle = false;
-    let repeat = 'off';       // 'off' | 'all' | 'one'
     let history = [];         // for "previous" while shuffling
+    let searchTerm = '';
 
     const fmt = s => {
       if (!isFinite(s)) return '0:00';
       s = Math.floor(s);
-      return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+      const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = String(s % 60).padStart(2, '0');
+      return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
     };
     const cleanName = f => f.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').trim();
     const urlFor = t => t.url || (t.url = URL.createObjectURL(t.blob));
@@ -290,9 +820,11 @@
       });
     }
 
-    // ---------- Adding / removing songs ----------
+    // ================= Adding / removing / reordering songs =================
     async function addFiles(files) {
       const audioFiles = [...files].filter(f => f.type.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|aac|flac|opus|webm)$/i.test(f.name));
+      const firstNew = tracks.length;
+      let order = tracks.reduce((m, t) => Math.max(m, t.order ?? 0), 0);
       for (const f of audioFiles) {
         const t = {
           id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
@@ -300,18 +832,21 @@
           blob: f,
           duration: await getDuration(f),
           addedAt: Date.now(),
+          order: ++order,
         };
         tracks.push(t);
-        await db.put({ id: t.id, name: t.name, blob: t.blob, duration: t.duration, addedAt: t.addedAt });
+        await db.putTrack(t);
       }
       render();
-      if (current === -1 && audioFiles.length) load(tracks.length - audioFiles.length, false);
+      if (!audioFiles.length) return;
+      if (S.autoplayOnAdd) load(firstNew, true);
+      else if (current === -1) load(firstNew, false);
     }
 
     async function removeTrack(i) {
       const [t] = tracks.splice(i, 1);
       if (t.url) URL.revokeObjectURL(t.url);
-      await db.remove(t.id);
+      await db.removeTrack(t.id);
       history = [];
       if (i === current) {
         const wasPlaying = !audio.paused;
@@ -326,18 +861,45 @@
       render();
     }
 
-    // ---------- Playback ----------
+    async function moveTrack(from, to) {
+      if (from === to) return;
+      const playing = tracks[current];
+      const [t] = tracks.splice(from, 1);
+      tracks.splice(to, 0, t);
+      current = playing ? tracks.indexOf(playing) : -1;
+      history = [];
+      tracks.forEach((tr, i) => tr.order = i + 1);
+      render();
+      for (const tr of tracks) await db.putTrack(tr);
+    }
+
+    async function renameTrack(i, name) {
+      const t = tracks[i];
+      name = name.trim();
+      if (name && name !== t.name) {
+        t.name = name;
+        await db.putTrack(t);
+        if (i === current) { $('title').textContent = name; updateMediaSession(t); }
+      }
+      render();
+    }
+
+    // ================= Playback =================
+    function updateMediaSession(t) {
+      if ('mediaSession' in navigator && window.MediaMetadata) {
+        navigator.mediaSession.metadata = new MediaMetadata({ title: t.name, artist: S.name || 'My Music' });
+      }
+    }
+
     function load(i, autoplay = true) {
       if (i < 0 || i >= tracks.length) return;
       current = i;
       const t = tracks[i];
       audio.src = urlFor(t);
+      audio.playbackRate = S.speed;
       $('title').textContent = t.name;
-      $('subtitle').textContent = `Song ${i + 1} of ${tracks.length}`;
-      document.title = `${t.name} · Music Player`;
-      if ('mediaSession' in navigator) {
-        navigator.mediaSession.metadata = new MediaMetadata({ title: t.name, artist: 'Mikaeel\'s Music Player' });
-      }
+      document.title = `${t.name} · ${S.name || 'My Music'}`;
+      updateMediaSession(t);
       render();
       if (autoplay) play();
     }
@@ -345,9 +907,9 @@
     function play() {
       if (current === -1) {
         if (!tracks.length) { $('file').click(); return; }
-        return load(shuffle ? randomIndex() : 0);
+        return load(S.shuffle ? randomIndex() : 0);
       }
-      setupVisualizer();
+      setupAudioGraph();
       audio.play().catch(() => {});
     }
     function togglePlay() { audio.paused ? play() : audio.pause(); }
@@ -362,25 +924,26 @@
     function next(auto = false) {
       if (!tracks.length) return;
       if (current !== -1) history.push(current);
-      if (shuffle) return load(randomIndex());
+      if (S.shuffle) return load(randomIndex());
       if (current + 1 < tracks.length) return load(current + 1);
-      if (repeat === 'all' || !auto) return load(0);
+      if (S.repeat === 'all' || !auto) return load(0);
       audio.pause(); audio.currentTime = 0;   // end of playlist
     }
 
     function prev() {
       if (!tracks.length) return;
       if (audio.currentTime > 3) { audio.currentTime = 0; return; }
-      if (shuffle && history.length) return load(history.pop());
+      if (S.shuffle && history.length) return load(history.pop());
       load(current > 0 ? current - 1 : tracks.length - 1);
     }
 
     audio.addEventListener('ended', () => {
-      if (repeat === 'one') { audio.currentTime = 0; play(); }
+      if (sleepMode === 'end') { cancelSleep(); return; }
+      if (S.repeat === 'one') { audio.currentTime = 0; play(); }
       else next(true);
     });
 
-    // ---------- Play/pause icon ----------
+    // ================= Play/pause & volume icons =================
     const PLAY = '<path d="M8 5v14l11-7L8 5Z"/>';
     const PAUSE = '<path d="M6 5h4v14H6V5Zm8 0h4v14h-4V5Z"/>';
     function updatePlayIcon() {
@@ -393,9 +956,12 @@
     audio.addEventListener('play', updatePlayIcon);
     audio.addEventListener('pause', updatePlayIcon);
 
-    // ---------- Progress & volume ----------
-    const seek = $('seek');
+    const VOL_ON = '<path d="M3 9v6h4l5 5V4L7 9H3Zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4Z"/>';
+    const VOL_OFF = '<path d="M3 9v6h4l5 5V4L7 9H3Zm18.6 1.4-1.4-1.4L18 11.2 15.8 9l-1.4 1.4 2.2 2.2-2.2 2.2 1.4 1.4 2.2-2.2 2.2 2.2 1.4-1.4-2.2-2.2 2.2-2.2Z"/>';
+
+    // ================= Progress & volume =================
     const paintRange = el => { el.style.backgroundSize = (el.value - el.min) / (el.max - el.min) * 100 + '% 100%'; };
+    const seek = $('seek');
     let seeking = false;
     audio.addEventListener('timeupdate', () => {
       if (!seeking && audio.duration) seek.value = audio.currentTime / audio.duration * 1000;
@@ -414,93 +980,169 @@
     });
 
     const vol = $('volume');
-    try { const v = localStorage.getItem('mp-volume'); if (v !== null) vol.value = v; } catch (e) {}
-    const applyVolume = () => {
-      audio.volume = vol.value / 100;
+    let lastVolume = S.volume || 80;
+    function applyVolume() {
+      vol.value = S.volume;
+      audio.volume = S.volume / 100;
       paintRange(vol);
-      try { localStorage.setItem('mp-volume', vol.value); } catch (e) {}
-    };
-    vol.addEventListener('input', applyVolume);
-    applyVolume();
+      $('vol-icon').innerHTML = S.volume == 0 ? VOL_OFF : VOL_ON;
+    }
+    vol.addEventListener('input', () => { S.volume = +vol.value; if (S.volume) lastVolume = S.volume; save(); applyVolume(); });
+    function toggleMute() {
+      if (S.volume > 0) { lastVolume = S.volume; S.volume = 0; } else S.volume = lastVolume || 80;
+      save(); applyVolume();
+    }
+    $('mute').addEventListener('click', toggleMute);
 
-    // ---------- Shuffle / repeat ----------
-    $('shuffle').addEventListener('click', () => {
-      shuffle = !shuffle;
-      history = [];
-      $('shuffle').classList.toggle('active', shuffle);
-      $('shuffle').title = shuffle ? 'Shuffle: on' : 'Shuffle';
-    });
-    $('repeat').addEventListener('click', () => {
-      repeat = { off: 'all', all: 'one', one: 'off' }[repeat];
-      $('repeat').classList.toggle('active', repeat !== 'off');
-      $('repeat-one').classList.toggle('show', repeat === 'one');
-      const label = { off: 'Repeat: off', all: 'Repeat: all', one: 'Repeat: this song' }[repeat];
+    // ================= Shuffle / repeat =================
+    function applyModes() {
+      $('shuffle').classList.toggle('active', S.shuffle);
+      $('shuffle').title = S.shuffle ? 'Shuffle: on' : 'Shuffle';
+      $('repeat').classList.toggle('active', S.repeat !== 'off');
+      $('repeat-one').classList.toggle('show', S.repeat === 'one');
+      const label = { off: 'Repeat: off', all: 'Repeat: all', one: 'Repeat: this song' }[S.repeat];
       $('repeat').title = label;
       $('repeat').setAttribute('aria-label', label);
+    }
+    const saveModes = () => { if (S.rememberModes) save(); };
+    $('shuffle').addEventListener('click', () => { S.shuffle = !S.shuffle; history = []; applyModes(); saveModes(); });
+    $('repeat').addEventListener('click', () => {
+      S.repeat = { off: 'all', all: 'one', one: 'off' }[S.repeat] || 'off';
+      applyModes(); saveModes();
     });
+    if (!S.rememberModes) { S.shuffle = false; S.repeat = 'off'; }
 
     $('play').addEventListener('click', togglePlay);
     $('next').addEventListener('click', () => next());
     $('prev').addEventListener('click', prev);
 
-    // ---------- Playlist UI ----------
+    // ================= Playlist UI =================
+    let dragFrom = null;
     function render() {
       const list = $('list');
       list.innerHTML = '';
+      const q = searchTerm.toLowerCase();
+      let shown = 0;
       tracks.forEach((t, i) => {
+        if (q && !t.name.toLowerCase().includes(q)) return;
+        shown++;
         const li = document.createElement('li');
         if (i === current) li.className = 'playing';
+        li.draggable = !q;
         li.innerHTML = `<span class="num">${i === current && !audio.paused ? '♪' : i + 1}</span>
           <span class="name"></span><span class="dur">${fmt(t.duration)}</span>
-          <button class="remove" aria-label="Remove" title="Remove">×</button>`;
+          <button class="mini edit" aria-label="Rename" title="Rename">✏️</button>
+          <button class="mini remove" aria-label="Remove" title="Remove">✕</button>`;
         li.querySelector('.name').textContent = t.name;
+
         li.addEventListener('click', e => {
           if (e.target.closest('.remove')) return removeTrack(i);
-          if (i === current) togglePlay(); else { history.push(current); load(i); }
+          if (e.target.closest('.edit')) return startRename(li, i);
+          if (e.target.closest('.rename')) return;
+          if (i === current) togglePlay(); else { if (current !== -1) history.push(current); load(i); }
+        });
+        li.addEventListener('dblclick', e => { if (!e.target.closest('button, .rename')) startRename(li, i); });
+
+        // Drag to reorder
+        li.addEventListener('dragstart', e => {
+          dragFrom = i; li.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', String(i));
+        });
+        li.addEventListener('dragend', () => { dragFrom = null; li.classList.remove('dragging'); clearDragMarks(); });
+        li.addEventListener('dragover', e => {
+          if (dragFrom === null) return;
+          e.preventDefault();
+          const below = e.offsetY > li.clientHeight / 2;
+          clearDragMarks();
+          li.classList.add(below ? 'drag-below' : 'drag-above');
+        });
+        li.addEventListener('drop', e => {
+          if (dragFrom === null) return;
+          e.preventDefault(); e.stopPropagation();
+          const below = li.classList.contains('drag-below');
+          let to = i + (below ? 1 : 0);
+          if (dragFrom < to) to--;
+          const from = dragFrom;
+          dragFrom = null; clearDragMarks();
+          moveTrack(from, to);
         });
         list.appendChild(li);
       });
       $('count').textContent = tracks.length ? `(${tracks.length})` : '';
       $('drop').style.display = tracks.length ? 'none' : '';
+      $('drag-hint').hidden = tracks.length < 1;
+      $('empty-search').style.display = q && tracks.length && !shown ? 'block' : 'none';
       ['prev', 'next'].forEach(id => $(id).disabled = !tracks.length);
-      if (current !== -1) $('subtitle').textContent = `Song ${current + 1} of ${tracks.length}`;
+      $('subtitle').textContent = current !== -1 ? `Song ${current + 1} of ${tracks.length}` : (tracks.length ? `${tracks.length} songs ready` : 'Add some songs below to get started');
     }
+    const clearDragMarks = () => document.querySelectorAll('.drag-above, .drag-below').forEach(el => el.classList.remove('drag-above', 'drag-below'));
     audio.addEventListener('play', render);
     audio.addEventListener('pause', render);
 
-    function showEmpty() {
-      $('title').textContent = 'No song playing';
-      $('subtitle').textContent = 'Add some songs below to get started';
-      $('cur').textContent = $('dur').textContent = '0:00';
-      seek.value = 0; paintRange(seek);
-      document.title = 'Music Player · Mikaeel';
+    function startRename(li, i) {
+      const nameEl = li.querySelector('.name');
+      const input = document.createElement('input');
+      input.className = 'rename';
+      input.value = tracks[i].name;
+      input.maxLength = 120;
+      li.draggable = false;
+      nameEl.replaceWith(input);
+      input.focus(); input.select();
+      let done = false;
+      const finish = ok => { if (done) return; done = true; ok ? renameTrack(i, input.value) : render(); };
+      input.addEventListener('keydown', e => {
+        e.stopPropagation();
+        if (e.key === 'Enter') finish(true);
+        if (e.key === 'Escape') finish(false);
+      });
+      input.addEventListener('blur', () => finish(true));
     }
 
-    // ---------- File picking & drag and drop ----------
+    function showEmpty() {
+      $('title').textContent = 'No song playing';
+      $('cur').textContent = $('dur').textContent = '0:00';
+      seek.value = 0; paintRange(seek);
+      document.title = S.name || 'My Music';
+    }
+
+    // Search
+    $('toggle-search').addEventListener('click', () => {
+      const s = $('search');
+      s.classList.toggle('show');
+      if (s.classList.contains('show')) s.focus(); else { s.value = ''; searchTerm = ''; render(); }
+    });
+    $('search').addEventListener('input', e => { searchTerm = e.target.value; render(); });
+
+    // ================= File picking & drag and drop =================
     const fileInput = $('file');
     $('add').addEventListener('click', () => fileInput.click());
     $('drop').addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', () => { addFiles(fileInput.files); fileInput.value = ''; });
 
+    const isFileDrag = e => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
     let dragDepth = 0;
-    document.addEventListener('dragenter', e => { e.preventDefault(); dragDepth++; $('drop').classList.add('over'); });
-    document.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('drop').classList.remove('over'); } });
-    document.addEventListener('dragover', e => e.preventDefault());
+    document.addEventListener('dragenter', e => { if (!isFileDrag(e)) return; e.preventDefault(); dragDepth++; $('drop').classList.add('over'); });
+    document.addEventListener('dragleave', e => { if (!isFileDrag(e)) return; if (--dragDepth <= 0) { dragDepth = 0; $('drop').classList.remove('over'); } });
+    document.addEventListener('dragover', e => { if (isFileDrag(e)) e.preventDefault(); });
     document.addEventListener('drop', e => {
+      if (!isFileDrag(e)) return;
       e.preventDefault(); dragDepth = 0; $('drop').classList.remove('over');
       if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
     });
 
-    // ---------- Keyboard shortcuts ----------
+    // ================= Keyboard shortcuts =================
     document.addEventListener('keydown', e => {
+      if (dlg.open) return;
       if (e.target.matches('textarea, input:not([type="range"])')) return;
       if (e.code === 'Space' && e.target.closest('button')) return;  // the button handles its own click
       if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
       else if (e.key === 'ArrowRight') { e.preventDefault(); e.shiftKey ? next() : (audio.currentTime = Math.min(audio.currentTime + 5, audio.duration || 0)); }
       else if (e.key === 'ArrowLeft') { e.preventDefault(); e.shiftKey ? prev() : (audio.currentTime = Math.max(audio.currentTime - 5, 0)); }
+      else if (e.key === 'm' || e.key === 'M') toggleMute();
     });
 
-    // ---------- Lock screen / media keys ----------
+    // ================= Lock screen / media keys =================
     if ('mediaSession' in navigator) {
       navigator.mediaSession.setActionHandler('play', play);
       navigator.mediaSession.setActionHandler('pause', () => audio.pause());
@@ -508,63 +1150,165 @@
       navigator.mediaSession.setActionHandler('previoustrack', prev);
     }
 
-    // ---------- Visualizer ----------
-    const canvas = $('viz');
-    const ctx = canvas.getContext('2d');
-    let analyser, freq, audioCtx;
-    function setupVisualizer() {
+    // ================= Audio graph: equalizer + visualizer =================
+    let audioCtx, analyser, freq, wave;
+    const eq = {};
+    function setupAudioGraph() {
       if (audioCtx) { if (audioCtx.state === 'suspended') audioCtx.resume(); return; }
       try {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const src = audioCtx.createMediaElementSource(audio);
+        eq.low = audioCtx.createBiquadFilter();  eq.low.type = 'lowshelf';  eq.low.frequency.value = 200;
+        eq.mid = audioCtx.createBiquadFilter();  eq.mid.type = 'peaking';   eq.mid.frequency.value = 1200; eq.mid.Q.value = 0.9;
+        eq.high = audioCtx.createBiquadFilter(); eq.high.type = 'highshelf'; eq.high.frequency.value = 4500;
         analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 128;
-        analyser.smoothingTimeConstant = 0.8;
+        analyser.fftSize = 512;
         freq = new Uint8Array(analyser.frequencyBinCount);
-        src.connect(analyser);
+        wave = new Uint8Array(analyser.fftSize);
+        src.connect(eq.low); eq.low.connect(eq.mid); eq.mid.connect(eq.high); eq.high.connect(analyser);
         analyser.connect(audioCtx.destination);
+        applyAll();
       } catch (e) { analyser = null; }
     }
 
+    // ================= Visualizer drawing =================
+    const canvas = $('viz');
+    const ctx = canvas.getContext('2d');
+
+    function hexToRgb(h) {
+      const m = /^#?([\da-f]{6})$/i.exec((h || '').trim());
+      if (!m) return null;
+      const n = parseInt(m[1], 16);
+      return [n >> 16, (n >> 8) & 255, n & 255];
+    }
+    function colorAt(i, n, accent) {
+      if (S.vizColor === 'rainbow') return `hsl(${(i / n) * 330 + (performance.now() / 50) % 360}, 85%, 60%)`;
+      if (S.vizColor === 'gradient') {
+        const a = hexToRgb(accent), b = hexToRgb(S.vizColor2);
+        if (a && b) {
+          const t = n > 1 ? i / (n - 1) : 0;
+          return `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * t)).join(',')})`;
+        }
+      }
+      return accent;
+    }
+
     function draw() {
+      requestAnimationFrame(draw);
+      if (S.viz === 'off' || S.compact) return;
       const dpr = window.devicePixelRatio || 1;
       const w = canvas.clientWidth, h = canvas.clientHeight;
-      if (canvas.width !== w * dpr || canvas.height !== h * dpr) { canvas.width = w * dpr; canvas.height = h * dpr; }
+      if (!w || !h) return;
+      if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+        canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+      }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
 
-      const bars = 40;
-      const gap = 4;
-      const bw = (w - gap * (bars + 1)) / bars;
+      const live = analyser && !audio.paused;
       const accent = getComputedStyle(root).getPropertyValue('--accent').trim();
-      if (analyser && !audio.paused) analyser.getByteFrequencyData(freq);
+      const n = S.viz === 'dots' ? Math.round(S.vizBars / 2) : S.vizBars;
       const t = performance.now() / 1000;
 
-      for (let i = 0; i < bars; i++) {
-        let v;
-        if (analyser && !audio.paused) {
-          v = freq[Math.floor(i * (freq.length * 0.75) / bars)] / 255;
-        } else {
-          v = 0.05 + 0.03 * Math.sin(t * 1.5 + i * 0.4);  // gentle idle wave
+      if (S.viz === 'wave') return drawWave(w, h, live, accent, t);
+
+      if (live) analyser.getByteFrequencyData(freq);
+      const vals = [];
+      for (let i = 0; i < n; i++) {
+        vals.push(live
+          ? Math.min(1, freq[Math.floor(Math.pow(i / n, 1.25) * freq.length * 0.7)] / 255 * S.vizSens)
+          : 0.05 + 0.03 * Math.sin(t * 1.5 + i * 0.4));
+      }
+
+      if (S.viz === 'circle') {
+        const cx = w / 2, cy = h / 2, r0 = Math.min(w, h) * 0.22, maxLen = Math.min(w, h) / 2 - r0 - 8;
+        ctx.lineCap = 'round';
+        ctx.lineWidth = Math.max(2, (2 * Math.PI * r0 / n) * 0.55);
+        vals.forEach((v, i) => {
+          const a = (i / n) * Math.PI * 2 - Math.PI / 2;
+          const len = 3 + v * maxLen;
+          ctx.strokeStyle = colorAt(i, n, accent);
+          ctx.globalAlpha = 0.45 + v * 0.55;
+          ctx.beginPath();
+          ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+          ctx.lineTo(cx + Math.cos(a) * (r0 + len), cy + Math.sin(a) * (r0 + len));
+          ctx.stroke();
+        });
+        ctx.globalAlpha = 1;
+        const avg = vals.reduce((s, v) => s + v, 0) / n;
+        ctx.fillStyle = colorAt(0, n, accent);
+        ctx.globalAlpha = 0.25 + avg * 0.5;
+        ctx.beginPath(); ctx.arc(cx, cy, r0 * (0.7 + avg * 0.3), 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+        return;
+      }
+
+      const gap = S.viz === 'dots' ? 6 : 4;
+      const bw = Math.max(1, (w - gap * (n + 1)) / n);
+      vals.forEach((v, i) => {
+        const x = gap + i * (bw + gap);
+        ctx.fillStyle = colorAt(i, n, accent);
+        ctx.globalAlpha = 0.35 + v * 0.65;
+        if (S.viz === 'dots') {
+          const r = Math.min(bw / 2, 7);
+          const levels = Math.max(1, Math.floor((h - 12) / (r * 2 + 4)));
+          const lit = Math.max(1, Math.round(v * levels));
+          for (let k = 0; k < lit; k++) {
+            ctx.beginPath(); ctx.arc(x + bw / 2, h - 8 - r - k * (r * 2 + 4), r, 0, Math.PI * 2); ctx.fill();
+          }
+          return;
         }
         const bh = Math.max(4, v * (h - 16));
-        const x = gap + i * (bw + gap);
-        ctx.fillStyle = accent;
-        ctx.globalAlpha = 0.35 + v * 0.65;
+        const y = S.viz === 'mirror' ? (h - bh) / 2 : h - 8 - bh;
         ctx.beginPath();
-        if (ctx.roundRect) ctx.roundRect(x, h - 8 - bh, bw, bh, 3); else ctx.rect(x, h - 8 - bh, bw, bh);
+        if (ctx.roundRect) ctx.roundRect(x, y, bw, bh, Math.min(3, bw / 2)); else ctx.rect(x, y, bw, bh);
         ctx.fill();
-      }
+      });
       ctx.globalAlpha = 1;
-      requestAnimationFrame(draw);
     }
+
+    function drawWave(w, h, live, accent, t) {
+      if (live) analyser.getByteTimeDomainData(wave);
+      const points = 128;
+      const g = ctx.createLinearGradient(0, 0, w, 0);
+      if (S.vizColor === 'rainbow') {
+        for (let k = 0; k <= 6; k++) g.addColorStop(k / 6, `hsl(${k * 55 + (performance.now() / 50) % 360},85%,60%)`);
+      } else {
+        g.addColorStop(0, accent);
+        g.addColorStop(1, S.vizColor === 'gradient' ? S.vizColor2 : accent);
+      }
+      ctx.strokeStyle = g;
+      ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.beginPath();
+      for (let i = 0; i <= points; i++) {
+        let v;
+        if (live) v = (wave[Math.floor(i / points * (wave.length - 1))] - 128) / 128 * S.vizSens;
+        else v = 0.08 * Math.sin(t * 2 + i * 0.15);
+        const x = i / points * w;
+        const y = h / 2 + Math.max(-1, Math.min(1, v)) * (h / 2 - 8);
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      }
+      ctx.stroke();
+    }
+
+    // ================= Start =================
+    matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
+    $('theme-toggle').addEventListener('click', () => {
+      const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+      setTheme(dark ? 'light' : 'dark');
+    });
+
+    applyTheme(); applyAll(); applyVolume(); applyModes(); syncControls();
     requestAnimationFrame(draw);
 
-    // ---------- Start: load saved songs ----------
     (async () => {
       await db.open();
-      const saved = (await db.all()) || [];
-      tracks = saved.sort((a, b) => a.addedAt - b.addedAt);
+      const img = await db.getFile('bg');
+      if (img) { bgImageUrl = URL.createObjectURL(img); updateBgThumb(); applyAll(); }
+      const saved = (await db.allTracks()) || [];
+      tracks = saved.sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity) || a.addedAt - b.addedAt);
+      // Songs saved by the older version of the player have no order yet
+      for (const [i, t] of tracks.entries()) if (t.order !== i + 1) { t.order = i + 1; await db.putTrack(t); }
       render();
       if (tracks.length) load(0, false);
     })();
