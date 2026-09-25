@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Dashboard</title>
+  <meta name="description" content="A personal dashboard with clock, weather, to-dos, notes, focus timer, links and countdowns">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Poppins:wght@400;500;700&family=JetBrains+Mono:wght@400;700&family=Playfair+Display:wght@400;700&family=Comic+Neue:wght@400;700&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --surface: #ffffff;
+      --surface-2: #f2f2ee;
+      --text: #16161a;
+      --muted: #5c5c66;
+      --border: #e4e4df;
+      --accent: #5b5bd6;
+      --accent-soft: #ececfb;
+      --on-accent: #ffffff;
+      --danger: #e5484d;
+      --radius: 18px;
+      --font: "Space Grotesk";
+      --card-alpha: 100%;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #111114; --surface: #1a1a1f; --surface-2: #232329; --text: #ededf0; --muted: #a0a0ab;
+        --border: #2a2a31; --accent: #8b8bf5; --accent-soft: #23233a; --on-accent: #111114;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #111114; --surface: #1a1a1f; --surface-2: #232329; --text: #ededf0; --muted: #a0a0ab;
+      --border: #2a2a31; --accent: #8b8bf5; --accent-soft: #23233a; --on-accent: #111114;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--font), system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh; }
+    a { color: var(--accent); text-decoration: none; }
+    button, input, select, textarea { font: inherit; color: inherit; }
+    #bg, #bg-dim { position: fixed; inset: 0; pointer-events: none; }
+    #bg { z-index: -2; background-size: cover; background-position: center; }
+    #bg-dim { z-index: -1; background: #000; opacity: 0; }
+
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px 48px; }
+    nav { display: flex; align-items: center; justify-content: space-between; height: 56px; }
+    nav a { color: var(--muted); font-size: 15px; }
+    nav a:hover { color: var(--text); }
+    body.has-bg nav a { color: var(--text); text-shadow: 0 1px 8px color-mix(in srgb, var(--bg) 70%, transparent); }
+    .nav-btns { display: flex; gap: 8px; }
+    .square-btn {
+      background: color-mix(in srgb, var(--surface) var(--card-alpha), transparent); border: 1px solid var(--border);
+      border-radius: 8px; width: 34px; height: 34px; cursor: pointer; font-size: 16px; display: grid; place-items: center;
+    }
+
+    /* Hero: clock & greeting */
+    .hero { padding: 28px 4px 24px; }
+    body.has-bg .hero { text-shadow: 0 2px 16px color-mix(in srgb, var(--bg) 60%, transparent); }
+    body.has-bg .date, body.has-bg .clock .sec, body.has-bg .clock .ampm { color: var(--text); opacity: .8; }
+    .clock { font-size: clamp(56px, 12vw, 112px); font-weight: 700; line-height: 1; letter-spacing: -2px; font-variant-numeric: tabular-nums; }
+    .clock .sec { font-size: .4em; color: var(--muted); letter-spacing: 0; margin-left: 6px; }
+    .clock .ampm { font-size: .3em; color: var(--muted); margin-left: 8px; letter-spacing: 0; }
+    .date { color: var(--muted); font-size: 18px; margin-top: 8px; }
+    .greeting { font-size: clamp(22px, 4vw, 32px); font-weight: 500; margin-top: 12px; }
+    .greeting b { color: var(--accent); }
+
+    /* Widget grid */
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; align-items: start; }
+    .card {
+      background: color-mix(in srgb, var(--surface) var(--card-alpha), transparent); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px 18px 16px; min-width: 0;
+    }
+    body.glass .card, body.glass .square-btn { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+    .card[hidden] { display: none; }
+    .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+    .card-head h2 { font-size: 16px; display: flex; align-items: center; gap: 8px; }
+    .card-head .sub { color: var(--muted); font-size: 13px; font-weight: 400; }
+    .link-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 2px 6px; border-radius: 6px; }
+    .link-btn:hover { color: var(--text); background: var(--surface-2); }
+
+    .field {
+      width: 100%; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border);
+      background: var(--surface-2); min-width: 0;
+    }
+    .field:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px; border-radius: 10px;
+      font-weight: 500; border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent); cursor: pointer; white-space: nowrap;
+    }
+    .btn:hover { filter: brightness(1.08); }
+    .btn.ghost { background: transparent; color: var(--text); border-color: var(--border); }
+    .row-form { display: flex; gap: 8px; }
+    .empty { color: var(--muted); font-size: 14px; text-align: center; padding: 14px 0 6px; }
+    .x-btn {
+      background: none; border: none; color: var(--muted); cursor: pointer; width: 26px; height: 26px; border-radius: 50%;
+      flex: none; opacity: 0; font-size: 14px;
+    }
+    li:hover .x-btn, .x-btn:focus { opacity: 1; }
+    .x-btn:hover { color: var(--danger); background: var(--surface-2); }
+    @media (hover: none) { .x-btn { opacity: 1; } }
+    ul { list-style: none; }
+
+    /* Weather */
+    .wx-now { display: flex; align-items: center; gap: 14px; }
+    .wx-icon { font-size: 52px; line-height: 1; }
+    .wx-temp { font-size: 44px; font-weight: 700; line-height: 1; }
+    .wx-desc { color: var(--muted); font-size: 14px; }
+    .wx-place { font-weight: 500; }
+    .wx-extra { display: flex; gap: 14px; color: var(--muted); font-size: 13px; margin-top: 12px; flex-wrap: wrap; }
+    .wx-days { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 14px; text-align: center; }
+    .wx-day { background: var(--surface-2); border-radius: 10px; padding: 6px 2px; font-size: 13px; }
+    .wx-day .d { color: var(--muted); }
+    .wx-day .i { font-size: 20px; }
+    .wx-results { margin-top: 8px; }
+    .wx-results button { display: block; width: 100%; text-align: left; background: none; border: none; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+    .wx-results button:hover { background: var(--surface-2); }
+
+    /* To-do */
+    .todo li { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-bottom: 1px solid var(--border); }
+    .todo li:last-child { border-bottom: none; }
+    .todo input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; flex: none; }
+    .todo .t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+    .todo li.done .t { text-decoration: line-through; color: var(--muted); }
+    .todo ul { margin-top: 8px; max-height: 320px; overflow: auto; }
+    .progress { height: 6px; background: var(--surface-2); border-radius: 999px; overflow: hidden; margin-top: 10px; }
+    .progress > div { height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+
+    /* Notes */
+    textarea.notes { width: 100%; min-height: 180px; resize: vertical; border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; background: var(--surface-2); line-height: 1.55; }
+    textarea.notes:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+    /* Focus timer */
+    .timer { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    .ring { position: relative; width: 190px; height: 190px; }
+    .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+    .ring circle { fill: none; stroke-width: 10; }
+    .ring .track { stroke: var(--surface-2); }
+    .ring .bar { stroke: var(--accent); stroke-linecap: round; transition: stroke-dashoffset .4s linear; }
+    .ring.break .bar { stroke: #30a46c; }
+    .ring-label { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
+    .ring-time { font-size: 42px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+    .ring-mode { color: var(--muted); font-size: 13px; margin-top: 4px; }
+    .modes { display: flex; gap: 6px; }
+    .chip { padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); cursor: pointer; font-size: 14px; }
+    .chip.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+    .sessions { color: var(--muted); font-size: 13px; }
+
+    /* Links */
+    .links { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 10px; }
+    .link {
+      position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px 10px;
+      border-radius: 12px; background: var(--surface-2); color: var(--text); font-size: 13px; text-align: center; min-width: 0;
+    }
+    .link:hover { background: var(--accent-soft); }
+    .link img, .link .letter { width: 32px; height: 32px; border-radius: 8px; }
+    .link .letter { display: grid; place-items: center; background: var(--accent); color: var(--on-accent); font-weight: 700; font-size: 16px; }
+    .link span.n { width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .link .x-btn { position: absolute; top: 2px; right: 2px; width: 22px; height: 22px; font-size: 12px; }
+    .link:hover .x-btn { opacity: 1; }
+    .add-link { display: grid; grid-template-columns: 1fr 1.4fr auto; gap: 8px; margin-top: 12px; }
+
+    /* Countdowns */
+    .cd li { display: flex; align-items: center; gap: 12px; padding: 8px 4px; border-bottom: 1px solid var(--border); }
+    .cd li:last-child { border-bottom: none; }
+    .cd .days { min-width: 64px; text-align: center; background: var(--accent-soft); color: var(--accent); border-radius: 10px; padding: 4px 6px; line-height: 1.1; }
+    .cd .days b { display: block; font-size: 22px; }
+    .cd .days small { font-size: 11px; }
+    .cd .info { flex: 1; min-width: 0; }
+    .cd .info .when { color: var(--muted); font-size: 13px; }
+    .add-cd { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; margin-top: 10px; }
+
+    /* Quote */
+    .quote { font-size: 20px; line-height: 1.45; font-weight: 500; }
+    .quote::before { content: "“"; color: var(--accent); font-size: 40px; line-height: 0; vertical-align: -14px; margin-right: 4px; }
+
+    /* Settings dialog */
+    dialog {
+      margin: auto; width: min(560px, calc(100vw - 24px)); max-height: 88vh; border: 1px solid var(--border);
+      border-radius: var(--radius); background: var(--surface); color: var(--text); padding: 0;
+    }
+    dialog::backdrop { background: rgba(0, 0, 0, .5); backdrop-filter: blur(3px); }
+    .dlg-head { position: sticky; top: 0; z-index: 1; background: var(--surface); display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+    .dlg-body { padding: 4px 20px 20px; }
+    .srow { padding: 12px 0; border-bottom: 1px solid var(--border); }
+    .srow:last-child { border-bottom: none; }
+    .srow > .label, .srow > label { display: flex; justify-content: space-between; font-weight: 500; margin-bottom: 8px; gap: 8px; }
+    .val { color: var(--muted); font-weight: 400; }
+    .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+    .seg button { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); cursor: pointer; }
+    .seg button.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+    .swatches { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .swatch { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--border); cursor: pointer; }
+    .swatch.on { outline: 3px solid var(--text); outline-offset: 2px; }
+    .swatch.default { background: conic-gradient(#5b5bd6 0 50%, #8b8bf5 0); }
+    .color-input { width: 44px; height: 30px; border: 1px solid var(--border); border-radius: 8px; background: none; cursor: pointer; padding: 2px; }
+    .bg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+    .bg-opt { height: 52px; border-radius: 10px; border: 2px solid var(--border); cursor: pointer; font-size: 12px; font-weight: 500; display: flex; align-items: flex-end; padding: 4px 6px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); background-size: cover; background-position: center; }
+    .bg-opt.on { outline: 3px solid var(--text); outline-offset: 2px; }
+    input[type="range"] { width: 100%; accent-color: var(--accent); }
+    .toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; font-weight: 500; }
+    .toggle input { width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer; flex: none; }
+    .widget-list li { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+    .widget-list li .wname { flex: 1; }
+    .widget-list input { width: 18px; height: 18px; accent-color: var(--accent); }
+    .mini { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); cursor: pointer; }
+    .mini:disabled { opacity: .35; cursor: default; }
+  </style>
+</head>
+<body>
+  <div id="bg"></div>
+  <div id="bg-dim"></div>
+
+  <div class="wrap">
+    <nav>
+      <a href="../">← Back to Mikaeel's site</a>
+      <div class="nav-btns">
+        <button class="square-btn" id="theme-toggle" aria-label="Toggle dark mode" title="Light / dark">🌙</button>
+        <button class="square-btn" id="open-settings" aria-label="Customize" title="Customize">⚙️</button>
+      </div>
+    </nav>
+
+    <header class="hero">
+      <div class="clock" id="clock">--:--</div>
+      <div class="date" id="date"></div>
+      <div class="greeting" id="greeting"></div>
+    </header>
+
+    <main class="grid" id="grid">
+      <!-- WEATHER -->
+      <section class="card" data-widget="weather">
+        <div class="card-head"><h2>🌤️ Weather</h2><button class="link-btn" id="wx-change">Change place</button></div>
+        <div id="wx-body"></div>
+        <div id="wx-search" hidden>
+          <div class="row-form">
+            <input class="field" id="wx-q" placeholder="Type a city…" aria-label="City">
+            <button class="btn" id="wx-go">Search</button>
+          </div>
+          <div class="row-form" style="margin-top:8px"><button class="btn ghost" id="wx-locate">📍 Use my location</button></div>
+          <div class="wx-results" id="wx-results"></div>
+        </div>
+      </section>
+
+      <!-- TODO -->
+      <section class="card todo" data-widget="todo">
+        <div class="card-head"><h2>✅ To-do <span class="sub" id="todo-count"></span></h2><button class="link-btn" id="todo-clear">Clear done</button></div>
+        <form class="row-form" id="todo-form">
+          <input class="field" id="todo-input" placeholder="Add a task…" maxlength="200" aria-label="New task">
+          <button class="btn" type="submit">Add</button>
+        </form>
+        <div class="progress"><div id="todo-bar"></div></div>
+        <ul id="todo-list"></ul>
+      </section>
+
+      <!-- FOCUS TIMER -->
+      <section class="card" data-widget="focus">
+        <div class="card-head"><h2>⏱️ Focus timer</h2><span class="sessions" id="sessions"></span></div>
+        <div class="timer">
+          <div class="modes">
+            <button class="chip on" data-mode="focus">Focus</button>
+            <button class="chip" data-mode="short">Short break</button>
+            <button class="chip" data-mode="long">Long break</button>
+          </div>
+          <div class="ring" id="ring">
+            <svg viewBox="0 0 200 200"><circle class="track" cx="100" cy="100" r="88"/><circle class="bar" id="ring-bar" cx="100" cy="100" r="88"/></svg>
+            <div class="ring-label"><div><div class="ring-time" id="ring-time">25:00</div><div class="ring-mode" id="ring-mode">Focus</div></div></div>
+          </div>
+          <div class="row-form">
+            <button class="btn" id="timer-start">▶ Start</button>
+            <button class="btn ghost" id="timer-reset">↺ Reset</button>
+            <button class="btn ghost" id="timer-skip" title="Skip to next">⏭</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- NOTES -->
+      <section class="card" data-widget="notes">
+        <div class="card-head"><h2>📝 Notes</h2><span class="sub" id="notes-saved"></span></div>
+        <textarea class="notes" id="notes" placeholder="Write anything… it saves by itself." aria-label="Notes"></textarea>
+      </section>
+
+      <!-- LINKS -->
+      <section class="card" data-widget="links">
+        <div class="card-head"><h2>🔗 Quick links</h2></div>
+        <div class="links" id="links"></div>
+        <form class="add-link" id="link-form">
+          <input class="field" id="link-name" placeholder="Name" maxlength="30" aria-label="Link name">
+          <input class="field" id="link-url" placeholder="youtube.com" aria-label="Link address">
+          <button class="btn" type="submit">＋</button>
+        </form>
+      </section>
+
+      <!-- COUNTDOWNS -->
+      <section class="card cd" data-widget="countdowns">
+        <div class="card-head"><h2>📅 Countdowns</h2></div>
+        <ul id="cd-list"></ul>
+        <form class="add-cd" id="cd-form">
+          <input class="field" id="cd-name" placeholder="Birthday, holiday…" maxlength="40" aria-label="Event name">
+          <input class="field" type="date" id="cd-date" aria-label="Event date">
+          <button class="btn" type="submit">＋</button>
+        </form>
+      </section>
+
+      <!-- QUOTE -->
+      <section class="card" data-widget="quote">
+        <div class="card-head"><h2>💡 Today's thought</h2><button class="link-btn" id="quote-next">Another one ↻</button></div>
+        <p class="quote" id="quote"></p>
+      </section>
+    </main>
+  </div>
+
+  <!-- ================= Settings ================= -->
+  <dialog id="settings">
+    <div class="dlg-head"><h2>🎨 Customize</h2><button class="square-btn" id="close-settings" aria-label="Close">✕</button></div>
+    <div class="dlg-body">
+      <div class="srow"><label for="s-name">Your name</label><input class="field" id="s-name" data-setting="name" maxlength="30" placeholder="Mikaeel"></div>
+      <div class="srow"><div class="label">Theme</div>
+        <div class="seg" data-seg="theme"><button data-v="auto">Auto</button><button data-v="light">☀️ Light</button><button data-v="dark">🌙 Dark</button></div></div>
+      <div class="srow"><div class="label">Accent color</div><div class="swatches" id="swatches"></div></div>
+      <div class="srow"><div class="label">Font</div><div class="seg" data-seg="font" id="font-seg"></div></div>
+      <div class="srow"><div class="label">Background</div><div class="bg-grid" id="bg-grid"></div>
+        <div class="row-form" style="margin-top:10px"><button class="btn ghost" id="bg-upload">🖼️ Use my own picture</button><input type="file" id="bg-file" accept="image/*" hidden></div></div>
+      <div class="srow"><label for="s-bgDim">Darken background <span class="val" id="v-bgDim"></span></label><input type="range" id="s-bgDim" data-setting="bgDim" min="0" max="80"></div>
+      <div class="srow"><label for="s-cardAlpha">Card see-through <span class="val" id="v-cardAlpha"></span></label><input type="range" id="s-cardAlpha" data-setting="cardAlpha" min="0" max="100"></div>
+      <div class="srow"><label for="s-radius">Corner roundness <span class="val" id="v-radius"></span></label><input type="range" id="s-radius" data-setting="radius" min="0" max="32"></div>
+      <div class="srow"><div class="label">Clock</div>
+        <div class="seg" data-seg="clock24"><button data-v="false">12-hour</button><button data-v="true">24-hour</button></div>
+        <label class="toggle" style="margin-top:10px">Show seconds <input type="checkbox" data-setting="seconds"></label></div>
+      <div class="srow"><div class="label">Temperature</div>
+        <div class="seg" data-seg="unit"><button data-v="c">°C</button><button data-v="f">°F</button></div></div>
+      <div class="srow"><div class="label">Focus timer lengths (minutes)</div>
+        <div class="row-form">
+          <label style="flex:1;font-size:13px;color:var(--muted)">Focus<input class="field" type="number" min="1" max="120" data-setting="focusMin"></label>
+          <label style="flex:1;font-size:13px;color:var(--muted)">Short break<input class="field" type="number" min="1" max="60" data-setting="shortMin"></label>
+          <label style="flex:1;font-size:13px;color:var(--muted)">Long break<input class="field" type="number" min="1" max="60" data-setting="longMin"></label>
+        </div>
+        <label class="toggle" style="margin-top:10px">Play a sound when time is up <input type="checkbox" data-setting="sound"></label></div>
+      <div class="srow"><div class="label">Widgets <span class="val">show, hide &amp; reorder</span></div><ul class="widget-list" id="widget-list"></ul></div>
+      <div class="srow"><div class="row-form"><button class="btn ghost" id="reset">↺ Reset look</button></div></div>
+    </div>
+  </dialog>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const root = document.documentElement;
+    const store = {
+      get(k, d) { try { const v = localStorage.getItem('dash-' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+      set(k, v) { try { localStorage.setItem('dash-' + k, JSON.stringify(v)); } catch (e) {} },
+    };
+
+    // ================= Settings =================
+    const WIDGETS = { weather: '🌤️ Weather', todo: '✅ To-do', focus: '⏱️ Focus timer', notes: '📝 Notes', links: '🔗 Quick links', countdowns: '📅 Countdowns', quote: '💡 Today\'s thought' };
+    const DEFAULTS = {
+      name: '', accent: null, font: 'Space Grotesk', bg: 'none', bgDim: 0, cardAlpha: 100, radius: 18,
+      clock24: false, seconds: false, unit: 'c', focusMin: 25, shortMin: 5, longMin: 15, sound: true,
+      order: Object.keys(WIDGETS), hidden: [],
+    };
+    const FONTS = [['Space Grotesk', 'Modern'], ['Poppins', 'Clean'], ['Comic Neue', 'Comic'], ['Playfair Display', 'Fancy'], ['JetBrains Mono', 'Code'], ['Orbitron', 'Sci-fi']];
+    const ACCENTS = ['#e5484d', '#ff8a3d', '#ffc53d', '#30a46c', '#12a594', '#0090ff', '#5b5bd6', '#8e4ec6', '#d946ef', '#d6409f'];
+    const BACKGROUNDS = {
+      none: ['None', ''], sunset: ['Sunset', 'linear-gradient(135deg,#ff7e5f,#feb47b)'], ocean: ['Ocean', 'linear-gradient(135deg,#2193b0,#6dd5ed)'],
+      aurora: ['Aurora', 'linear-gradient(135deg,#00c9a7,#845ec2)'], candy: ['Candy', 'linear-gradient(135deg,#f093fb,#f5576c)'],
+      forest: ['Forest', 'linear-gradient(135deg,#134e5e,#71b280)'], midnight: ['Midnight', 'linear-gradient(135deg,#0f2027,#203a43,#2c5364)'],
+      peach: ['Peach', 'linear-gradient(135deg,#ffecd2,#fcb69f)'],
+      galaxy: ['Galaxy', 'radial-gradient(circle at 30% 20%,#5b2a86,transparent 50%),radial-gradient(circle at 80% 70%,#1f4e8c,transparent 50%),#0b0b1a'],
+      image: ['My picture', ''],
+    };
+    let S = { ...structuredClone(DEFAULTS), ...store.get('settings', {}) };
+    // keep the widget order valid if widgets are added later
+    S.order = [...S.order.filter(k => WIDGETS[k]), ...Object.keys(WIDGETS).filter(k => !S.order.includes(k))];
+    const saveS = () => store.set('settings', S);
+    let bgImage = store.get('bg-image', null);   // data URL of the person's own picture
+
+    function luminance(hex) {
+      const m = /^#?([\da-f]{6})$/i.exec(hex || ''); if (!m) return .5;
+      const n = parseInt(m[1], 16);
+      const c = [n >> 16, (n >> 8) & 255, n & 255].map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); });
+      return .2126 * c[0] + .7152 * c[1] + .0722 * c[2];
+    }
+
+    function currentTheme() { try { return localStorage.getItem('theme') || 'auto'; } catch (e) { return 'auto'; } }
+    function applyTheme() {
+      const t = currentTheme();
+      if (t === 'auto') delete root.dataset.theme; else root.dataset.theme = t;
+      const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+      $('theme-toggle').textContent = dark ? '☀️' : '🌙';
+      document.querySelectorAll('[data-seg="theme"] button').forEach(b => b.classList.toggle('on', b.dataset.v === t));
+    }
+    function setTheme(t) { try { t === 'auto' ? localStorage.removeItem('theme') : localStorage.setItem('theme', t); } catch (e) {} applyTheme(); }
+    $('theme-toggle').addEventListener('click', () => {
+      const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+      setTheme(dark ? 'light' : 'dark');
+    });
+    matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
+
+    function applyAll() {
+      if (S.accent) {
+        root.style.setProperty('--accent', S.accent);
+        root.style.setProperty('--accent-soft', `color-mix(in srgb, ${S.accent} 18%, var(--surface))`);
+        root.style.setProperty('--on-accent', luminance(S.accent) > .4 ? '#111114' : '#fff');
+      } else ['--accent', '--accent-soft', '--on-accent'].forEach(p => root.style.removeProperty(p));
+      root.style.setProperty('--font', `"${S.font}"`);
+      root.style.setProperty('--radius', S.radius + 'px');
+      root.style.setProperty('--card-alpha', S.cardAlpha + '%');
+      const bg = BACKGROUNDS[S.bg] ? S.bg : 'none';
+      $('bg').style.background = bg === 'image' ? (bgImage ? `center / cover no-repeat url("${bgImage}")` : '') : BACKGROUNDS[bg][1];
+      $('bg-dim').style.opacity = bg === 'none' ? 0 : S.bgDim / 100;
+      document.body.classList.toggle('has-bg', bg !== 'none');
+      document.body.classList.toggle('glass', S.cardAlpha < 100);
+      // widget order & visibility
+      const grid = $('grid');
+      for (const k of S.order) {
+        const card = grid.querySelector(`[data-widget="${k}"]`);
+        card.hidden = S.hidden.includes(k);
+        grid.appendChild(card);
+      }
+      tickClock();
+      timerReset(false);
+      renderWeather();
+    }
+
+    function syncControls() {
+      document.querySelectorAll('[data-setting]').forEach(el => {
+        const k = el.dataset.setting;
+        if (el.type === 'checkbox') el.checked = !!S[k]; else if (document.activeElement !== el) el.value = S[k];
+      });
+      document.querySelectorAll('[data-seg]').forEach(seg => {
+        if (seg.dataset.seg === 'theme') return;
+        seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', String(S[seg.dataset.seg]) === b.dataset.v));
+      });
+      document.querySelectorAll('.swatch').forEach(s => s.classList.toggle('on', (s.dataset.c || null) === S.accent));
+      document.querySelectorAll('.bg-opt').forEach(o => o.classList.toggle('on', o.dataset.bg === S.bg));
+      $('v-bgDim').textContent = S.bgDim + '%';
+      $('v-cardAlpha').textContent = (100 - S.cardAlpha) + '%';
+      $('v-radius').textContent = S.radius + 'px';
+      $('widget-list').innerHTML = S.order.map((k, i) => `<li><input type="checkbox" data-w="${k}" ${S.hidden.includes(k) ? '' : 'checked'} aria-label="Show ${WIDGETS[k]}">
+        <span class="wname">${WIDGETS[k]}</span>
+        <button class="mini" data-up="${i}" ${i === 0 ? 'disabled' : ''} aria-label="Move up">↑</button>
+        <button class="mini" data-down="${i}" ${i === S.order.length - 1 ? 'disabled' : ''} aria-label="Move down">↓</button></li>`).join('');
+      applyTheme();
+    }
+    function set(k, v) { S[k] = v; saveS(); applyAll(); syncControls(); }
+
+    // Settings wiring
+    const dlg = $('settings');
+    $('open-settings').addEventListener('click', () => { syncControls(); dlg.showModal(); });
+    $('close-settings').addEventListener('click', () => dlg.close());
+    dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+    $('font-seg').innerHTML = FONTS.map(([f, l]) => `<button data-v="${f}" style="font-family:'${f}'">${l}</button>`).join('');
+    $('swatches').innerHTML = `<button class="swatch default" title="Default" aria-label="Default color"></button>` +
+      ACCENTS.map(c => `<button class="swatch" data-c="${c}" style="background:${c}" aria-label="${c}"></button>`).join('') +
+      `<input type="color" class="color-input" id="custom-accent" aria-label="Any color">`;
+    $('swatches').addEventListener('click', e => { const b = e.target.closest('.swatch'); if (b) set('accent', b.dataset.c || null); });
+    $('custom-accent').addEventListener('input', e => set('accent', e.target.value));
+    $('bg-grid').innerHTML = Object.entries(BACKGROUNDS).filter(([k]) => k !== 'image').map(([k, [label, css]]) =>
+      `<button class="bg-opt" data-bg="${k}" style="background:${css || 'var(--surface-2)'};${k === 'none' ? 'color:var(--text);text-shadow:none' : ''}">${label}</button>`).join('');
+    $('bg-grid').addEventListener('click', e => {
+      const b = e.target.closest('.bg-opt'); if (!b) return;
+      if (b.dataset.bg !== 'none' && S.bg === 'none') { if (!S.bgDim) S.bgDim = 15; if (S.cardAlpha === 100) S.cardAlpha = 80; }
+      set('bg', b.dataset.bg);
+    });
+    $('bg-upload').addEventListener('click', () => $('bg-file').click());
+    $('bg-file').addEventListener('change', () => {
+      const f = $('bg-file').files[0]; $('bg-file').value = ''; if (!f) return;
+      // shrink the picture so it fits in browser storage
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, 1920 / Math.max(img.width, img.height));
+        const c = document.createElement('canvas'); c.width = img.width * scale; c.height = img.height * scale;
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        bgImage = c.toDataURL('image/jpeg', 0.82);
+        store.set('bg-image', bgImage);
+        URL.revokeObjectURL(img.src);
+        if (!S.bgDim) S.bgDim = 25; if (S.cardAlpha === 100) S.cardAlpha = 80;
+        set('bg', 'image');
+      };
+      img.src = URL.createObjectURL(f);
+    });
+    document.querySelectorAll('[data-setting]').forEach(el => el.addEventListener('input', () => {
+      const k = el.dataset.setting;
+      let v = el.type === 'checkbox' ? el.checked : el.type === 'range' ? +el.value : el.value;
+      if (el.type === 'number') { v = Math.round(+el.value); if (!(v >= +el.min && v <= +el.max)) return; }
+      set(k, v);
+    }));
+    document.querySelectorAll('[data-seg]').forEach(seg => seg.addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      const k = seg.dataset.seg, v = b.dataset.v;
+      if (k === 'theme') return setTheme(v);
+      set(k, v === 'true' ? true : v === 'false' ? false : v);
+    }));
+    $('widget-list').addEventListener('click', e => {
+      const up = e.target.closest('[data-up]'), down = e.target.closest('[data-down]');
+      if (!up && !down) return;
+      const i = +(up ? up.dataset.up : down.dataset.down), j = up ? i - 1 : i + 1;
+      [S.order[i], S.order[j]] = [S.order[j], S.order[i]];
+      saveS(); applyAll(); syncControls();
+    });
+    $('widget-list').addEventListener('change', e => {
+      const k = e.target.dataset.w; if (!k) return;
+      S.hidden = e.target.checked ? S.hidden.filter(x => x !== k) : [...S.hidden, k];
+      saveS(); applyAll();
+    });
+    $('reset').addEventListener('click', () => {
+      if (!confirm('Reset the look back to default? Your to-dos, notes and links stay.')) return;
+      const keep = { name: S.name, unit: S.unit, clock24: S.clock24 };
+      S = { ...structuredClone(DEFAULTS), ...keep };
+      setTheme('auto'); saveS(); applyAll(); syncControls();
+    });
+
+    // ================= Clock & greeting =================
+    function tickClock() {
+      const now = new Date();
+      let h = now.getHours();
+      const m = String(now.getMinutes()).padStart(2, '0');
+      const s = String(now.getSeconds()).padStart(2, '0');
+      let ampm = '';
+      if (!S.clock24) { ampm = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12; }
+      const hh = S.clock24 ? String(h).padStart(2, '0') : h;
+      $('clock').innerHTML = `${hh}:${m}${S.seconds ? `<span class="sec">${s}</span>` : ''}${ampm ? `<span class="ampm">${ampm}</span>` : ''}`;
+      $('date').textContent = now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+      const hr = now.getHours();
+      const part = hr < 5 ? 'Up late' : hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : hr < 22 ? 'Good evening' : 'Good night';
+      const emoji = hr < 5 ? '🌙' : hr < 12 ? '☀️' : hr < 17 ? '🌤️' : hr < 22 ? '🌆' : '🌙';
+      const g = $('greeting');
+      g.textContent = `${part}${S.name ? ', ' : ''}`;
+      if (S.name) { const b = document.createElement('b'); b.textContent = S.name; g.appendChild(b); }
+      g.append(` ${emoji}`);
+    }
+    setInterval(tickClock, 1000);
+
+    // ================= Weather (Open-Meteo, free, no key) =================
+    const WX = {
+      0: ['☀️', 'Clear sky'], 1: ['🌤️', 'Mostly clear'], 2: ['⛅', 'Partly cloudy'], 3: ['☁️', 'Cloudy'],
+      45: ['🌫️', 'Fog'], 48: ['🌫️', 'Icy fog'], 51: ['🌦️', 'Light drizzle'], 53: ['🌦️', 'Drizzle'], 55: ['🌧️', 'Heavy drizzle'],
+      56: ['🌧️', 'Freezing drizzle'], 57: ['🌧️', 'Freezing drizzle'], 61: ['🌦️', 'Light rain'], 63: ['🌧️', 'Rain'], 65: ['🌧️', 'Heavy rain'],
+      66: ['🌧️', 'Freezing rain'], 67: ['🌧️', 'Freezing rain'], 71: ['🌨️', 'Light snow'], 73: ['🌨️', 'Snow'], 75: ['❄️', 'Heavy snow'],
+      77: ['🌨️', 'Snow grains'], 80: ['🌦️', 'Showers'], 81: ['🌧️', 'Showers'], 82: ['⛈️', 'Heavy showers'], 85: ['🌨️', 'Snow showers'],
+      86: ['❄️', 'Snow showers'], 95: ['⛈️', 'Thunderstorm'], 96: ['⛈️', 'Thunderstorm & hail'], 99: ['⛈️', 'Thunderstorm & hail'],
+    };
+    let place = store.get('place', null);      // { name, lat, lon }
+    let wx = store.get('weather', null);       // { at, data, lat, lon }
+
+    function toUnit(c) { return S.unit === 'f' ? Math.round(c * 9 / 5 + 32) : Math.round(c); }
+    function renderWeather() {
+      const body = $('wx-body');
+      if (!place) { body.innerHTML = `<p class="empty">Pick a place to see the weather.</p>`; $('wx-search').hidden = false; return; }
+      if (!wx || !wx.data) { body.innerHTML = `<p class="empty">Loading weather for ${escapeHtml(place.name)}…</p>`; return; }
+      const c = wx.data.current, d = wx.data.daily;
+      const [icon, desc] = WX[c.weather_code] || ['🌡️', 'Weather'];
+      const u = S.unit === 'f' ? '°F' : '°C';
+      const days = d.time.slice(0, 5).map((t, i) => {
+        const day = i === 0 ? 'Today' : new Date(t + 'T12:00').toLocaleDateString(undefined, { weekday: 'short' });
+        return `<div class="wx-day"><div class="d">${day}</div><div class="i">${(WX[d.weather_code[i]] || ['🌡️'])[0]}</div>
+          <div><b>${toUnit(d.temperature_2m_max[i])}°</b> <span style="color:var(--muted)">${toUnit(d.temperature_2m_min[i])}°</span></div></div>`;
+      }).join('');
+      const wind = S.unit === 'f' ? `${Math.round(c.wind_speed_10m * 0.621)} mph` : `${Math.round(c.wind_speed_10m)} km/h`;
+      body.innerHTML = `<div class="wx-now"><div class="wx-icon">${icon}</div>
+        <div><div class="wx-temp">${toUnit(c.temperature_2m)}${u}</div><div class="wx-desc">${desc}</div></div></div>
+        <div class="wx-extra"><span class="wx-place">📍 ${escapeHtml(place.name)}</span><span>Feels like ${toUnit(c.apparent_temperature)}°</span>
+        <span>💧 ${c.relative_humidity_2m}%</span><span>💨 ${wind}</span></div>
+        <div class="wx-days">${days}</div>`;
+    }
+    async function loadWeather(force = false) {
+      if (!place) return renderWeather();
+      const fresh = wx && wx.lat === place.lat && wx.lon === place.lon && Date.now() - wx.at < 30 * 60 * 1000;
+      if (fresh && !force) return renderWeather();
+      renderWeather();
+      try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${place.lat}&longitude=${place.lon}` +
+          `&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m` +
+          `&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=5`;
+        const r = await fetch(url);
+        if (!r.ok) throw new Error();
+        wx = { at: Date.now(), lat: place.lat, lon: place.lon, data: await r.json() };
+        store.set('weather', wx);
+        renderWeather();
+      } catch (e) {
+        if (!wx || !wx.data) $('wx-body').innerHTML = `<p class="empty">Couldn't load the weather right now. <button class="link-btn" id="wx-retry">Try again</button></p>`;
+        const retry = $('wx-retry'); if (retry) retry.onclick = () => loadWeather(true);
+      }
+    }
+    function choosePlace(p) {
+      place = p; store.set('place', place);
+      $('wx-search').hidden = true; $('wx-results').innerHTML = ''; $('wx-q').value = '';
+      loadWeather(true);
+    }
+    $('wx-change').addEventListener('click', () => { $('wx-search').hidden = !$('wx-search').hidden; if (!$('wx-search').hidden) $('wx-q').focus(); });
+    async function searchCity() {
+      const q = $('wx-q').value.trim(); if (!q) return;
+      $('wx-results').innerHTML = '<p class="empty">Searching…</p>';
+      try {
+        const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=5&language=en`);
+        const j = await r.json();
+        if (!j.results || !j.results.length) { $('wx-results').innerHTML = '<p class="empty">No places found. Try another spelling.</p>'; return; }
+        $('wx-results').innerHTML = '';
+        for (const res of j.results) {
+          const b = document.createElement('button');
+          b.textContent = [res.name, res.admin1, res.country].filter(Boolean).join(', ');
+          b.onclick = () => choosePlace({ name: res.name, lat: +res.latitude.toFixed(3), lon: +res.longitude.toFixed(3) });
+          $('wx-results').appendChild(b);
+        }
+      } catch (e) { $('wx-results').innerHTML = '<p class="empty">Search failed. Check your internet and try again.</p>'; }
+    }
+    $('wx-go').addEventListener('click', searchCity);
+    $('wx-q').addEventListener('keydown', e => { if (e.key === 'Enter') searchCity(); });
+    $('wx-locate').addEventListener('click', () => {
+      if (!navigator.geolocation) return;
+      $('wx-results').innerHTML = '<p class="empty">Finding you…</p>';
+      navigator.geolocation.getCurrentPosition(
+        pos => choosePlace({ name: 'My location', lat: +pos.coords.latitude.toFixed(3), lon: +pos.coords.longitude.toFixed(3) }),
+        () => { $('wx-results').innerHTML = '<p class="empty">Location was blocked. Search for your city instead.</p>'; },
+        { timeout: 10000 });
+    });
+    setInterval(() => loadWeather(), 10 * 60 * 1000);
+
+    function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+    // ================= To-do =================
+    let todos = store.get('todos', []);
+    function renderTodos() {
+      const list = $('todo-list');
+      list.innerHTML = '';
+      if (!todos.length) list.innerHTML = '<li class="empty" style="border:none;display:block">Nothing to do. Nice! 🎉</li>';
+      todos.forEach((t, i) => {
+        const li = document.createElement('li');
+        if (t.done) li.className = 'done';
+        li.innerHTML = `<input type="checkbox" ${t.done ? 'checked' : ''} aria-label="Done"><span class="t"></span><button class="x-btn" aria-label="Delete">✕</button>`;
+        li.querySelector('.t').textContent = t.text;
+        li.querySelector('input').onchange = e => { t.done = e.target.checked; saveTodos(); };
+        li.querySelector('.x-btn').onclick = () => { todos.splice(i, 1); saveTodos(); };
+        list.appendChild(li);
+      });
+      const done = todos.filter(t => t.done).length;
+      $('todo-count').textContent = todos.length ? `${done}/${todos.length}` : '';
+      $('todo-bar').style.width = todos.length ? (done / todos.length * 100) + '%' : '0';
+    }
+    function saveTodos() { store.set('todos', todos); renderTodos(); }
+    $('todo-form').addEventListener('submit', e => {
+      e.preventDefault();
+      const v = $('todo-input').value.trim(); if (!v) return;
+      todos.push({ text: v, done: false }); $('todo-input').value = ''; saveTodos();
+    });
+    $('todo-clear').addEventListener('click', () => { todos = todos.filter(t => !t.done); saveTodos(); });
+
+    // ================= Notes =================
+    $('notes').value = store.get('notes', '');
+    let notesTimer;
+    $('notes').addEventListener('input', () => {
+      clearTimeout(notesTimer);
+      $('notes-saved').textContent = 'Saving…';
+      notesTimer = setTimeout(() => { store.set('notes', $('notes').value); $('notes-saved').textContent = 'Saved ✓'; }, 400);
+    });
+
+    // ================= Focus timer =================
+    const C = 2 * Math.PI * 88;
+    $('ring-bar').style.strokeDasharray = C;
+    let mode = 'focus', left = 0, total = 0, running = false, endAt = 0, tick = null;
+    let sessions = store.get('sessions', { date: '', count: 0 });
+    const MODE_LABEL = { focus: 'Focus', short: 'Short break', long: 'Long break' };
+    const minutesFor = m => ({ focus: S.focusMin, short: S.shortMin, long: S.longMin }[m]);
+    function fmt(sec) { sec = Math.max(0, Math.round(sec)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; }
+    function drawTimer() {
+      $('ring-time').textContent = fmt(left);
+      $('ring-mode').textContent = MODE_LABEL[mode] + (running ? '' : left < total ? ' · paused' : '');
+      $('ring-bar').style.strokeDashoffset = C * (1 - (total ? left / total : 0));
+      $('ring').classList.toggle('break', mode !== 'focus');
+      $('timer-start').textContent = running ? '⏸ Pause' : left < total ? '▶ Resume' : '▶ Start';
+      document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
+      const today = new Date().toDateString();
+      const n = sessions.date === today ? sessions.count : 0;
+      $('sessions').textContent = n ? `🍅 ${n} today` : '';
+      document.title = running ? `${fmt(left)} · ${MODE_LABEL[mode]}` : 'My Dashboard';
+    }
+    function timerReset(force = true) {
+      if (!force && total && (running || left < total)) return drawTimer();   // don't wipe a timer that's in use
+      clearInterval(tick); running = false;
+      total = left = minutesFor(mode) * 60;
+      drawTimer();
+    }
+    function setMode(m) { mode = m; timerReset(); }
+    function beep() {
+      if (!S.sound) return;
+      try {
+        const ac = new (window.AudioContext || window.webkitAudioContext)();
+        [0, 0.25, 0.5].forEach((t, i) => {
+          const o = ac.createOscillator(), g = ac.createGain();
+          o.frequency.value = [660, 880, 1100][i]; o.type = 'sine';
+          g.gain.setValueAtTime(0.0001, ac.currentTime + t);
+          g.gain.exponentialRampToValueAtTime(0.3, ac.currentTime + t + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + t + 0.22);
+          o.connect(g).connect(ac.destination); o.start(ac.currentTime + t); o.stop(ac.currentTime + t + 0.25);
+        });
+      } catch (e) {}
+    }
+    function finish() {
+      clearInterval(tick); running = false; left = 0; drawTimer(); beep();
+      if (mode === 'focus') {
+        const today = new Date().toDateString();
+        sessions = { date: today, count: (sessions.date === today ? sessions.count : 0) + 1 };
+        store.set('sessions', sessions);
+        setMode(sessions.count % 4 === 0 ? 'long' : 'short');
+      } else setMode('focus');
+    }
+    $('timer-start').addEventListener('click', () => {
+      if (running) { clearInterval(tick); running = false; left = Math.max(0, (endAt - Date.now()) / 1000); return drawTimer(); }
+      running = true; endAt = Date.now() + left * 1000;
+      tick = setInterval(() => { left = (endAt - Date.now()) / 1000; if (left <= 0) finish(); else drawTimer(); }, 250);
+      drawTimer();
+    });
+    $('timer-reset').addEventListener('click', () => timerReset());
+    $('timer-skip').addEventListener('click', () => { if (mode === 'focus') setMode('short'); else setMode('focus'); });
+    document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+
+    // ================= Quick links =================
+    let links = store.get('links', [
+      { name: 'GitHub', url: 'https://github.com/the1miknoob' },
+      { name: 'My site', url: 'https://the1miknoob.github.io/idk/' },
+      { name: 'Music', url: 'https://the1miknoob.github.io/idk/music-player/' },
+    ]);
+    function renderLinks() {
+      const box = $('links');
+      box.innerHTML = '';
+      if (!links.length) box.innerHTML = '<p class="empty" style="grid-column:1/-1">Add your favorite sites below.</p>';
+      links.forEach((l, i) => {
+        let host = '';
+        try { host = new URL(l.url).hostname; } catch (e) {}
+        const a = document.createElement('a');
+        a.className = 'link'; a.href = l.url; a.target = '_blank'; a.rel = 'noopener';
+        a.innerHTML = `<span class="letter"></span><span class="n"></span><button class="x-btn" aria-label="Remove">✕</button>`;
+        a.querySelector('.letter').textContent = (l.name || host || '?')[0].toUpperCase();
+        a.querySelector('.n').textContent = l.name || host;
+        if (host) {
+          const img = new Image(); img.alt = '';
+          img.onload = () => a.querySelector('.letter').replaceWith(img);
+          img.src = `https://icons.duckduckgo.com/ip3/${host}.ico`;
+        }
+        a.querySelector('.x-btn').onclick = e => { e.preventDefault(); e.stopPropagation(); links.splice(i, 1); saveLinks(); };
+        box.appendChild(a);
+      });
+    }
+    function saveLinks() { store.set('links', links); renderLinks(); }
+    $('link-form').addEventListener('submit', e => {
+      e.preventDefault();
+      let url = $('link-url').value.trim(); if (!url) return;
+      if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+      try { new URL(url); } catch (err) { $('link-url').focus(); return; }
+      let name = $('link-name').value.trim();
+      if (!name) { const h = new URL(url).hostname.replace(/^www\./, ''); name = h.split('.')[0]; name = name[0].toUpperCase() + name.slice(1); }
+      links.push({ name, url }); $('link-name').value = $('link-url').value = ''; saveLinks();
+    });
+
+    // ================= Countdowns =================
+    let cds = store.get('countdowns', []);
+    function daysUntil(dateStr) {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const target = new Date(y, m - 1, d), today = new Date(); today.setHours(0, 0, 0, 0);
+      return Math.round((target - today) / 86400000);
+    }
+    function renderCds() {
+      const list = $('cd-list');
+      list.innerHTML = '';
+      const sorted = cds.map((c, i) => ({ ...c, i, n: daysUntil(c.date) })).sort((a, b) => (a.n < 0) - (b.n < 0) || Math.abs(a.n) - Math.abs(b.n));
+      if (!sorted.length) list.innerHTML = '<li class="empty" style="border:none;display:block">Add something to look forward to.</li>';
+      for (const c of sorted) {
+        const li = document.createElement('li');
+        const big = c.n === 0 ? '🎉' : Math.abs(c.n);
+        const small = c.n === 0 ? 'today!' : c.n > 0 ? (c.n === 1 ? 'day left' : 'days left') : (c.n === -1 ? 'day ago' : 'days ago');
+        const [y, m, d] = c.date.split('-').map(Number);
+        li.innerHTML = `<div class="days"><b>${big}</b><small>${small}</small></div><div class="info"><div class="t"></div>
+          <div class="when">${new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</div></div>
+          <button class="x-btn" aria-label="Delete">✕</button>`;
+        li.querySelector('.t').textContent = c.name;
+        li.querySelector('.x-btn').onclick = () => { cds.splice(c.i, 1); saveCds(); };
+        list.appendChild(li);
+      }
+    }
+    function saveCds() { store.set('countdowns', cds); renderCds(); }
+    $('cd-form').addEventListener('submit', e => {
+      e.preventDefault();
+      const name = $('cd-name').value.trim(), date = $('cd-date').value;
+      if (!name || !date) return;
+      cds.push({ name, date }); $('cd-name').value = $('cd-date').value = ''; saveCds();
+    });
+
+    // ================= Today's thought =================
+    const THOUGHTS = [
+      'Small steps every day add up to big things.',
+      'You don\'t have to be great to start, but you have to start to be great at anything.',
+      'Done is better than perfect. You can always improve it later.',
+      'Every expert was once a beginner who didn\'t quit.',
+      'Mistakes are proof that you\'re trying.',
+      'Focus on progress, not perfection.',
+      'The best time to start was yesterday. The next best time is now.',
+      'Be the kind of person who finishes what they start.',
+      'Your future self will thank you for what you do today.',
+      'Learning something new is like leveling up in real life.',
+      'Showing up is half the battle. Keep showing up.',
+      'Take a break when you need it, then come back stronger.',
+      'Curiosity is a superpower. Keep asking questions.',
+      'Build things you\'re proud of, even if they\'re small.',
+      'Consistency is more important than intensity.',
+      'If it scares you a little, it might be worth doing.',
+      'Kindness costs nothing and means everything.',
+      'Think like a beginner, work like a pro.',
+      'One page, one line, one step. That\'s how everything gets made.',
+      'Stay patient. Good things take time to build.',
+      'A bug is just a puzzle waiting to be solved.',
+      'Compare yourself to last month\'s you, not to anyone else.',
+      'Rest is part of the work, not the opposite of it.',
+      'Great ideas get better when you share them.',
+    ];
+    const dayIndex = Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);
+    let thought = dayIndex % THOUGHTS.length;
+    function renderThought() { $('quote').textContent = THOUGHTS[thought]; }
+    $('quote-next').addEventListener('click', () => { thought = (thought + 1) % THOUGHTS.length; renderThought(); });
+
+    // ================= Start =================
+    applyTheme(); applyAll(); syncControls();
+    renderTodos(); renderLinks(); renderCds(); renderThought();
+    loadWeather();
+  </script>
+</body>
+</html>
