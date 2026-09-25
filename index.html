@@ -4,7 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Mikaeel</title>
-  <meta name="description" content="Personal website of Mikaeel">
+  <meta name="description" content="Personal website of Mikaeel: projects, a music player and a personal dashboard.">
+  <meta name="theme-color" content="#5b5bd6">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Mikaeel">
+  <meta property="og:description" content="Hey, I'm Mikaeel 👋 Check out my projects: a customizable music player and a personal dashboard.">
+  <meta property="og:url" content="https://the1miknoob.github.io/idk/">
+  <meta name="twitter:card" content="summary">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👋</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
@@ -109,10 +116,57 @@
     .card h3 { margin: 8px 0 6px; font-size: 18px; }
     .card p { color: var(--muted); font-size: 15px; }
 
+    /* Typing effect */
+    .typing { color: var(--text); font-weight: 500; }
+    .typing .word { color: var(--accent); }
+    .typing .caret { display: inline-block; width: 2px; height: 1.1em; background: var(--accent); vertical-align: -3px; margin-left: 2px; animation: blink 1s steps(1) infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* Jump back in */
+    #continue { display: none; }
+    #continue.show { display: block; }
+    .cont-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+    .cont {
+      display: flex; align-items: center; gap: 14px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 14px; color: var(--text); transition: transform .15s, border-color .15s; min-width: 0;
+    }
+    .cont:hover { transform: translateY(-3px); border-color: var(--accent); text-decoration: none; }
+    .cont .art {
+      width: 56px; height: 56px; border-radius: 10px; flex: none; background: var(--accent-soft) center / cover no-repeat;
+      display: grid; place-items: center; font-size: 26px;
+    }
+    .cont .txt { min-width: 0; }
+    .cont .k { color: var(--muted); font-size: 13px; }
+    .cont .v { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cont .s { color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .eq-bars { display: inline-flex; gap: 2px; align-items: flex-end; height: 12px; margin-right: 6px; vertical-align: -1px; }
+    .eq-bars i { width: 3px; background: var(--accent); border-radius: 1px; animation: eqb 1s ease-in-out infinite; }
+    .eq-bars i:nth-child(2) { animation-delay: -.3s; } .eq-bars i:nth-child(3) { animation-delay: -.6s; }
+    @keyframes eqb { 0%, 100% { height: 30%; } 50% { height: 100%; } }
+
+    /* Scroll reveal */
+    .reveal { opacity: 0; transform: translateY(16px); transition: opacity .6s ease, transform .6s ease; }
+    .reveal.in { opacity: 1; transform: none; }
+
+    /* Back to top */
+    #to-top {
+      position: fixed; right: 18px; bottom: 18px; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--border);
+      background: var(--surface); color: var(--text); font-size: 18px; cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,.15);
+      opacity: 0; pointer-events: none; transform: translateY(10px); transition: opacity .2s, transform .2s;
+    }
+    #to-top.show { opacity: 1; pointer-events: auto; transform: none; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .reveal { opacity: 1; transform: none; transition: none; }
+      .wave, .typing .caret, .eq-bars i { animation: none; }
+      html { scroll-behavior: auto; }
+    }
+
     footer { padding: 32px 0 48px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--border); }
 
     @media (max-width: 520px) {
-      .nav-links a.hide-sm { display: none; }
+      .nav-links .hide-sm { display: none; }
+      .nav-links { gap: 14px; }
       header { padding: 56px 0 40px; }
     }
   </style>
@@ -125,7 +179,8 @@
       <div class="nav-links">
         <a href="#about" class="hide-sm">About</a>
         <a href="#projects" class="hide-sm">Projects</a>
-        <a href="#contact">Contact</a>
+        <a href="music-player/" title="Music Player">🎵<span class="hide-sm"> Music</span></a>
+        <a href="dashboard/" title="Dashboard">📊<span class="hide-sm"> Dashboard</span></a>
         <button id="theme-toggle" aria-label="Toggle dark mode">🌙</button>
       </div>
     </div>
@@ -140,14 +195,21 @@
         I'm learning to code and building cool stuff on the internet.
         This is my little corner of the web.
       </p>
+      <p class="tagline typing" aria-live="off">I build <span class="word" id="typed">music players</span><span class="caret" aria-hidden="true"></span></p>
       <div class="buttons">
         <a href="#projects" class="btn primary">See my projects</a>
         <a href="https://github.com/the1miknoob" class="btn" target="_blank" rel="noopener">GitHub</a>
       </div>
     </header>
 
+    <!-- Shows what you were last doing in your apps (only in your own browser) -->
+    <section id="continue" aria-label="Jump back in">
+      <h2>Jump back in</h2>
+      <div class="cont-grid" id="cont-grid"></div>
+    </section>
+
     <!-- ✏️ EDIT: tell people about yourself -->
-    <section id="about">
+    <section id="about" class="reveal">
       <h2>About me</h2>
       <p>
         I just started my coding journey and I'm using this site to track what I learn
@@ -166,7 +228,7 @@
     </section>
 
     <!-- ✏️ EDIT: add your projects (copy a card to add more) -->
-    <section id="projects">
+    <section id="projects" class="reveal">
       <h2>Projects</h2>
       <div class="grid">
         <a class="card" href="https://github.com/the1miknoob/idk" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">
@@ -187,7 +249,7 @@
       </div>
     </section>
 
-    <section id="contact">
+    <section id="contact" class="reveal">
       <h2>Say hi</h2>
       <p>Want to chat or work on something together? Find me on GitHub.</p>
       <div class="buttons">
@@ -196,6 +258,8 @@
     </section>
 
   </main>
+
+  <button id="to-top" aria-label="Back to top" title="Back to top">↑</button>
 
   <footer>
     <div class="wrap">© <span id="year"></span> Mikaeel · Made with HTML, CSS and a bit of JavaScript.</div>
@@ -222,6 +286,103 @@
       try { localStorage.setItem('theme', root.dataset.theme); } catch (e) {}
       setIcon();
     });
+
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // ---------- Typing effect (✏️ EDIT: change the words) ----------
+    const WORDS = ['music players', 'dashboards', 'websites', 'cool stuff', 'things I\'m proud of'];
+    const typed = document.getElementById('typed');
+    if (!reduceMotion) {
+      let w = 0, i = WORDS[0].length, deleting = true;
+      const step = () => {
+        const word = WORDS[w];
+        i += deleting ? -1 : 1;
+        typed.textContent = word.slice(0, i);
+        let delay = deleting ? 45 : 90;
+        if (!deleting && i === word.length) { deleting = true; delay = 1800; }
+        else if (deleting && i === 0) { deleting = false; w = (w + 1) % WORDS.length; delay = 300; }
+        setTimeout(step, delay);
+      };
+      setTimeout(step, 2200);
+    }
+
+    // ---------- Jump back in: last song + dashboard stuff from this browser ----------
+    (async function continueSection() {
+      const read = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
+      const grid = document.getElementById('cont-grid');
+      const cards = [];
+      const card = (href, art, k, v, sub) => {
+        const a = document.createElement('a');
+        a.className = 'cont'; a.href = href;
+        a.innerHTML = '<div class="art"></div><div class="txt"><div class="k"></div><div class="v"></div><div class="s"></div></div>';
+        a.querySelector('.art').textContent = art;
+        a.querySelector('.k').innerHTML = k;
+        a.querySelector('.v').textContent = v;
+        a.querySelector('.s').textContent = sub || '';
+        return a;
+      };
+
+      const now = read('mp-now');
+      if (now && now.name) {
+        const c = card('music-player/', '🎵', '<span class="eq-bars"><i></i><i></i><i></i></span>Last played', now.name, now.artist || 'Open your music player');
+        cards.push(c);
+        // Load the cover art straight from the music player's saved songs
+        try {
+          const req = indexedDB.open('music-player');
+          req.onsuccess = () => {
+            const dbc = req.result;
+            if (!dbc.objectStoreNames.contains('tracks')) return dbc.close();
+            const get = dbc.transaction('tracks').objectStore('tracks').get(now.id);
+            get.onsuccess = () => {
+              const t = get.result;
+              if (t && t.cover) {
+                const art = c.querySelector('.art');
+                art.style.backgroundImage = `url("${URL.createObjectURL(t.cover)}")`;
+                art.textContent = '';
+              }
+              dbc.close();
+            };
+          };
+        } catch (e) {}
+      }
+
+      const todos = read('dash-todos');
+      if (Array.isArray(todos) && todos.length) {
+        const left = todos.filter(t => !t.done);
+        cards.push(card('dashboard/', left.length ? '✅' : '🎉', 'To-do',
+          left.length ? `${left.length} task${left.length === 1 ? '' : 's'} left` : 'All done!',
+          left[0] ? 'Next: ' + left[0].text : 'Nice work.'));
+      }
+
+      const cds = read('dash-countdowns');
+      if (Array.isArray(cds) && cds.length) {
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const upcoming = cds.map(c => { const [y, m, d] = c.date.split('-').map(Number); return { ...c, n: Math.round((new Date(y, m - 1, d) - today) / 86400000) }; })
+          .filter(c => c.n >= 0).sort((a, b) => a.n - b.n)[0];
+        if (upcoming) cards.push(card('dashboard/', '📅', 'Coming up', upcoming.name,
+          upcoming.n === 0 ? 'Today! 🎉' : `in ${upcoming.n} day${upcoming.n === 1 ? '' : 's'}`));
+      }
+
+      if (cards.length) {
+        cards.forEach(c => grid.appendChild(c));
+        document.getElementById('continue').classList.add('show');
+      }
+    })();
+
+    // ---------- Reveal sections as you scroll ----------
+    if ('IntersectionObserver' in window && !reduceMotion) {
+      const io = new IntersectionObserver(entries => entries.forEach(e => {
+        if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+      }), { threshold: 0.12 });
+      document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+    } else {
+      document.querySelectorAll('.reveal').forEach(el => el.classList.add('in'));
+    }
+
+    // ---------- Back to top ----------
+    const toTop = document.getElementById('to-top');
+    addEventListener('scroll', () => toTop.classList.toggle('show', scrollY > 500), { passive: true });
+    toTop.addEventListener('click', () => scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' }));
   </script>
 </body>
 </html>
