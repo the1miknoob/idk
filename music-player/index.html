@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>My Music</title>
   <meta name="description" content="A customizable music player that plays songs from your own device">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Poppins:wght@400;500;700&family=Press+Start+2P&family=Comic+Neue:wght@400;700&family=Playfair+Display:ital,wght@0,400;0,700;1,700&family=JetBrains+Mono:wght@400;700&family=Bungee&family=Orbitron:wght@500;700;900&family=Permanent+Marker&display=swap" rel="stylesheet">
@@ -1715,6 +1716,8 @@
       updateMediaSession(t);
       updateCover();
       render();
+      // Lets the homepage show "Last played"
+      try { localStorage.setItem('mp-now', JSON.stringify({ id: t.id, name: t.name, artist: t.artist || '', at: Date.now() })); } catch (e) {}
       if (autoplay) play();
     }
 

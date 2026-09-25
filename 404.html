@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Page not found · Mikaeel</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧭</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg: #fafaf7; --surface: #fff; --text: #16161a; --muted: #5c5c66; --border: #e4e4df; --accent: #5b5bd6; }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) { --bg: #111114; --surface: #1a1a1f; --text: #ededf0; --muted: #a0a0ab; --border: #2a2a31; --accent: #8b8bf5; }
+    }
+    :root[data-theme="dark"] { --bg: #111114; --surface: #1a1a1f; --text: #ededf0; --muted: #a0a0ab; --border: #2a2a31; --accent: #8b8bf5; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Space Grotesk", system-ui, sans-serif; background: var(--bg); color: var(--text);
+      min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; text-align: center;
+    }
+    .big { font-size: clamp(90px, 22vw, 180px); font-weight: 700; line-height: 1; color: var(--accent); letter-spacing: -4px; }
+    .big span { display: inline-block; animation: spin 6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    h1 { font-size: 26px; margin: 16px 0 8px; }
+    p { color: var(--muted); max-width: 420px; margin: 0 auto; }
+    .links { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 28px; }
+    a {
+      padding: 10px 16px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface);
+      color: var(--text); text-decoration: none; font-weight: 500;
+    }
+    a.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    a:hover { transform: translateY(-1px); }
+    @media (prefers-reduced-motion: reduce) { .big span { animation: none; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="big">4<span>🧭</span>4</div>
+    <h1>This page got lost</h1>
+    <p>The page you're looking for doesn't exist or was moved. Try one of these instead:</p>
+    <div class="links">
+      <a class="primary" href="/idk/">🏠 Home</a>
+      <a href="/idk/music-player/">🎵 Music Player</a>
+      <a href="/idk/dashboard/">📊 Dashboard</a>
+    </div>
+  </main>
+  <script>
+    try { const t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+</body>
+</html>
