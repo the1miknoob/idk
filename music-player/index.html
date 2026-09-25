@@ -7,7 +7,7 @@
   <meta name="description" content="A customizable music player that plays songs from your own device">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Poppins:wght@400;500;700&family=Press+Start+2P&family=Comic+Neue:wght@400;700&family=Playfair+Display:wght@400;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Poppins:wght@400;500;700&family=Press+Start+2P&family=Comic+Neue:wght@400;700&family=Playfair+Display:ital,wght@0,400;0,700;1,700&family=JetBrains+Mono:wght@400;700&family=Bungee&family=Orbitron:wght@500;700;900&family=Permanent+Marker&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #fafaf7;
@@ -19,8 +19,18 @@
       --accent: #5b5bd6;
       --accent-soft: #ececfb;
       --on-accent: #ffffff;
+      --accent2: #d946ef;
       --radius: 20px;
       --font: "Space Grotesk";
+      --title-font: "Space Grotesk";
+      --title-size: 22px;
+      --logo-size: 28px;
+      --cover-size: 240px;
+      --ctl: 1;
+      --btn-radius: 50%;
+      --bar-h: 6px;
+      --panel-alpha: 100%;
+      --pulse: 0;
     }
     @media (prefers-color-scheme: dark) {
       :root:not([data-theme="light"]) {
@@ -54,16 +64,23 @@
       color: var(--text);
       line-height: 1.5;
       min-height: 100vh;
+      overflow-x: hidden;
     }
     a { color: var(--accent); text-decoration: none; }
-    button, input, select { font: inherit; color: inherit; }
+    button, input, select, textarea { font: inherit; color: inherit; }
 
-    /* Custom background layers */
-    #bg, #bg-dim { position: fixed; inset: 0; pointer-events: none; }
-    #bg { z-index: -2; background-size: cover; background-position: center; }
-    #bg-dim { z-index: -1; background: #000; opacity: 0; }
+    /* ---------- Background layers ---------- */
+    #bg, #bg-dim, #fx { position: fixed; inset: 0; pointer-events: none; }
+    #bg { z-index: -3; background-size: cover; background-position: center; }
+    #bg-dim { z-index: -2; background: #000; opacity: 0; }
+    #fx { z-index: -1; width: 100vw; height: 100vh; }
+    body.bg-anim:not(.bg-image) #bg { background-size: 300% 300% !important; animation: bgmove 24s ease-in-out infinite; }
+    body.bg-anim.bg-image #bg { animation: kenburns 30s ease-in-out infinite alternate; }
+    @keyframes bgmove { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+    @keyframes kenburns { from { transform: scale(1.08); } to { transform: scale(1.25) translate(-2%, -2%); } }
 
-    .wrap { max-width: 640px; margin: 0 auto; padding: 0 16px 48px; }
+    .wrap { position: relative; z-index: 1; max-width: 640px; margin: 0 auto; padding: 0 16px 48px; }
+    body.layout-showcase .wrap { max-width: 1060px; }
 
     nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 56px; }
     nav a { color: var(--muted); font-size: 15px; }
@@ -74,31 +91,134 @@
       border-radius: 8px; width: 34px; height: 34px; cursor: pointer; font-size: 16px;
       display: grid; place-items: center;
     }
-    h1.player-name { font-size: 28px; margin: 6px 0 14px; overflow-wrap: anywhere; }
+    h1.player-name { font-size: 28px; margin: 6px 0 14px; overflow-wrap: anywhere; font-family: var(--title-font), var(--font), sans-serif; }
 
     .panel {
-      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      background: color-mix(in srgb, var(--surface) var(--panel-alpha), transparent);
+      border: 1px solid var(--border); border-radius: var(--radius);
       padding: 20px; margin-bottom: 20px;
     }
-    body.has-bg .panel, body.has-bg .square-btn {
-      background: color-mix(in srgb, var(--surface) 80%, transparent);
-      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-    }
+    body.glassy .panel, body.has-bg .square-btn { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+    body.has-bg .square-btn { background: color-mix(in srgb, var(--surface) 80%, transparent); }
     body.has-bg nav a, body.has-bg h1.player-name { text-shadow: 0 1px 8px color-mix(in srgb, var(--bg) 70%, transparent); }
     body.has-bg nav a { color: var(--text); }
+    body.glow .panel { box-shadow: 0 0 calc(22px + var(--pulse) * 40px) color-mix(in srgb, var(--accent) 40%, transparent); border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
+    body.glow .icon-btn.big { box-shadow: 0 0 22px color-mix(in srgb, var(--accent) 70%, transparent); }
+    body.pulse .player-panel { transform: scale(calc(1 + var(--pulse) * .015)); }
 
-    canvas {
-      display: block; width: 100%; height: 120px;
-      background: var(--surface-2); border-radius: calc(var(--radius) * .6); margin-bottom: 18px;
+    /* ---------- Player layout ---------- */
+    .player-panel {
+      display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 16px; row-gap: 14px; align-items: center;
+      grid-template-areas: "viz viz" "cover text" "seek seek" "controls controls" "volume volume" "logo logo";
+      --cs: 76px;
     }
-    canvas.tall { height: 220px; }
-    .title { font-size: 22px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 14px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .player-panel.no-cover { grid-template-areas: "viz viz" "text text" "seek seek" "controls controls" "volume volume" "logo logo"; }
+    #viz { grid-area: viz; }
+    .cover-wrap { grid-area: cover; }
+    .now-text { grid-area: text; min-width: 0; }
+    .seek-wrap { grid-area: seek; }
+    .controls { grid-area: controls; }
+    .volume { grid-area: volume; }
+    .logo-text { grid-area: logo; }
+
+    body.layout-showcase .player-panel {
+      --cs: var(--cover-size);
+      column-gap: 44px; row-gap: 16px; padding: 36px;
+      grid-template-areas: "cover text" "cover seek" "cover viz" "cover controls" "cover volume" "cover logo";
+      align-content: center;
+    }
+    body.layout-showcase .player-panel.no-cover { grid-template-columns: minmax(0, 1fr); grid-template-areas: "text" "seek" "viz" "controls" "volume" "logo"; }
+    body.layout-showcase .cover-wrap { margin: 20px; }
+    body.layout-showcase .controls { justify-content: flex-start; }
+    @media (max-width: 760px) {
+      body.layout-showcase .player-panel, body.layout-showcase .player-panel.no-cover {
+        --cs: min(var(--cover-size), 62vw);
+        grid-template-columns: minmax(0, 1fr); padding: 24px 20px;
+        grid-template-areas: "cover" "text" "seek" "viz" "controls" "volume" "logo";
+      }
+      body.layout-showcase .cover-wrap { justify-self: center; }
+      body.layout-showcase .controls { justify-content: center; }
+    }
+
+    canvas#viz {
+      display: block; width: 100%; height: 120px;
+      background: color-mix(in srgb, var(--surface-2) calc(var(--panel-alpha) * .9), transparent);
+      border-radius: calc(var(--radius) * .6);
+    }
+    canvas#viz.tall { height: 220px; }
+    body.layout-showcase canvas#viz { background: transparent; height: 90px; }
+    body.layout-showcase canvas#viz.tall { height: 160px; }
+
+    /* ---------- Cover art ---------- */
+    .cover-wrap { position: relative; width: var(--cs); height: var(--cs); }
+    .cover {
+      position: relative; z-index: 1; width: 100%; height: 100%; border: none; padding: 0; cursor: pointer; overflow: hidden;
+      border-radius: calc(var(--radius) * .5); background: var(--accent-soft); display: grid; place-items: center;
+      transition: box-shadow .1s;
+    }
+    .cover-img {
+      width: 100%; height: 100%; display: grid; place-items: center; background: center / cover no-repeat;
+      font-size: calc(var(--cs) * .4); color: var(--accent); position: relative;
+    }
+    .cover.round { border-radius: 50%; }
+    .cover.vinyl { border-radius: 50%; background: repeating-radial-gradient(circle, #111 0 2px, #1e1e1e 2px 4px); }
+    .cover.vinyl .cover-img {
+      width: 44%; height: 44%; border-radius: 50%; background-color: var(--accent); color: var(--on-accent); font-size: calc(var(--cs) * .12);
+    }
+    .cover.vinyl .cover-img::after { content: ''; position: absolute; width: 14%; height: 14%; left: 43%; top: 43%; background: #111; border-radius: 50%; }
+    .cover.spinning { animation: spin 5s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .cover-wrap.glow .cover {
+      box-shadow: 0 0 calc(14px + var(--pulse) * 30px) var(--accent),
+                  0 0 calc(40px + var(--pulse) * 50px) color-mix(in srgb, var(--accent2) 70%, transparent);
+    }
+    .cover-wrap .ring {
+      position: absolute; inset: -20%; width: 140%; height: 140%; z-index: 0; display: none; pointer-events: none;
+      animation: spin 40s linear infinite; overflow: visible;
+    }
+    .cover-wrap.ring .ring { display: block; }
+    .cover-wrap.glow .ring { filter: drop-shadow(0 0 4px var(--accent)); }
+    .br { position: absolute; z-index: 2; width: 20%; height: 20%; border: 4px solid var(--accent2); display: none; pointer-events: none; }
+    .cover-wrap.brackets .br { display: block; }
+    .br.tl { top: -9px; left: -9px; border-right: none; border-bottom: none; border-top-left-radius: 8px; }
+    .br.tr { top: -9px; right: -9px; border-left: none; border-bottom: none; border-top-right-radius: 8px; }
+    .br.bl { bottom: -9px; left: -9px; border-right: none; border-top: none; border-bottom-left-radius: 8px; }
+    .br.brr { bottom: -9px; right: -9px; border-left: none; border-top: none; border-bottom-right-radius: 8px; }
+    .cover-wrap.glow .br { filter: drop-shadow(0 0 6px var(--accent2)); }
+
+    /* ---------- Title & text ---------- */
+    .title {
+      font-family: var(--title-font), var(--font), sans-serif; font-size: var(--title-size); font-weight: 700; line-height: 1.2;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 2px 4px 4px 0;
+    }
+    .title.t-outline { color: transparent; -webkit-text-stroke: 1.5px var(--accent); }
+    .title.t-gradient { background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .title.t-glow { color: var(--text); text-shadow: 0 0 6px var(--accent), 0 0 18px var(--accent); }
+    .title.t-retro { color: var(--accent); text-shadow: 3px 3px 0 var(--accent2); }
+    .now-text.bar { border-left: 4px solid var(--accent); padding-left: 12px; }
+    .subtitle { color: var(--muted); font-size: 14px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .artist { color: var(--text); font-weight: 500; }
     .badge { background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 0 8px; font-size: 12px; font-weight: 500; }
 
+    .logo-text {
+      justify-self: end; font-family: var(--title-font), var(--font), sans-serif; font-style: italic; font-weight: 900;
+      font-size: var(--logo-size); line-height: 1.1; transform: skew(-8deg); padding: 0 6px 6px;
+      background: linear-gradient(90deg, var(--accent2), var(--accent)); -webkit-background-clip: text; background-clip: text; color: transparent;
+      filter: drop-shadow(0 0 8px color-mix(in srgb, var(--accent2) 70%, transparent));
+      border-bottom: 3px solid var(--text); overflow-wrap: anywhere; text-align: right;
+    }
+    .logo-text:empty { display: none; }
+    .watermark {
+      position: fixed; top: 64px; right: 18px; z-index: 2; font-family: var(--title-font), var(--font), sans-serif; font-style: italic;
+      font-weight: 700; font-size: 18px; color: var(--text); opacity: .75; pointer-events: none;
+      text-shadow: 0 0 8px var(--accent2); transform: rotate(-4deg);
+    }
+    .watermark:empty { display: none; }
+
+    /* ---------- Controls ---------- */
     input[type="range"] {
       -webkit-appearance: none; appearance: none; width: 100%; height: 6px;
-      border-radius: 999px; background: var(--surface-2); cursor: pointer;
+      border-radius: 999px; background-color: var(--surface-2); cursor: pointer;
       background-image: linear-gradient(var(--accent), var(--accent));
       background-repeat: no-repeat; background-size: 0% 100%;
     }
@@ -109,19 +229,28 @@
     input[type="range"]::-moz-range-thumb {
       width: 14px; height: 14px; border-radius: 50%; background: var(--accent); border: none;
     }
+    #seek, #volume { height: var(--bar-h); }
+    #seek::-webkit-slider-thumb, #volume::-webkit-slider-thumb { width: calc(var(--bar-h) + 8px); height: calc(var(--bar-h) + 8px); }
+    #seek::-moz-range-thumb, #volume::-moz-range-thumb { width: calc(var(--bar-h) + 8px); height: calc(var(--bar-h) + 8px); }
+    body.prog-square #seek, body.prog-square #volume { border-radius: 0; outline: 2px solid var(--text); outline-offset: 2px; }
+    body.prog-square #seek::-webkit-slider-thumb, body.prog-square #volume::-webkit-slider-thumb { border-radius: 0; }
+    body.prog-square #seek::-moz-range-thumb, body.prog-square #volume::-moz-range-thumb { border-radius: 0; }
+    body.prog-glow #seek, body.prog-glow #volume { box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 70%, transparent); }
     .times { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-top: 6px; font-variant-numeric: tabular-nums; }
+    body.layout-showcase .times { font-size: 20px; font-weight: 700; color: var(--text); justify-content: flex-start; gap: 28px; margin: 0 0 8px; order: -1; }
+    .seek-wrap { display: flex; flex-direction: column; }
 
-    .controls { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 14px 0 10px; }
+    .controls { display: flex; align-items: center; justify-content: center; gap: calc(10px * var(--ctl)); }
     .icon-btn {
-      background: none; border: none; cursor: pointer; width: 44px; height: 44px;
-      border-radius: 50%; display: grid; place-items: center; color: var(--muted);
+      background: none; border: none; cursor: pointer; width: calc(44px * var(--ctl)); height: calc(44px * var(--ctl));
+      border-radius: var(--btn-radius); display: grid; place-items: center; color: var(--muted);
     }
     .icon-btn:hover { color: var(--text); background: var(--surface-2); }
     .icon-btn.active { color: var(--accent); }
-    .icon-btn svg { width: 22px; height: 22px; fill: currentColor; }
-    .icon-btn.big { width: 60px; height: 60px; background: var(--accent); color: var(--on-accent); }
+    .icon-btn svg { width: calc(22px * var(--ctl)); height: calc(22px * var(--ctl)); fill: currentColor; }
+    .icon-btn.big { width: calc(60px * var(--ctl)); height: calc(60px * var(--ctl)); background: var(--accent); color: var(--on-accent); }
     .icon-btn.big:hover { background: var(--accent); color: var(--on-accent); transform: scale(1.05); }
-    .icon-btn.big svg { width: 28px; height: 28px; }
+    .icon-btn.big svg { width: calc(28px * var(--ctl)); height: calc(28px * var(--ctl)); }
     .icon-btn:disabled { opacity: .4; cursor: default; }
     .repeat-wrap { position: relative; }
     .repeat-one {
@@ -130,12 +259,11 @@
       width: 13px; height: 13px; display: none; place-items: center;
     }
     .repeat-one.show { display: grid; }
-
     .volume { display: flex; align-items: center; gap: 10px; color: var(--muted); }
     .volume button { background: none; border: none; cursor: pointer; color: inherit; display: grid; }
     .volume svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
 
-    /* Playlist */
+    /* ---------- Playlist ---------- */
     .list-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
     .list-head h2 { font-size: 18px; }
     .btn {
@@ -152,14 +280,12 @@
     }
     .search.show { display: block; }
     .search:focus, .rename:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-
     .drop {
       border: 2px dashed var(--border); border-radius: calc(var(--radius) * .8); padding: 36px 16px; text-align: center;
       color: var(--muted); cursor: pointer; transition: border-color .15s, background .15s;
     }
     .drop.over { border-color: var(--accent); background: var(--accent-soft); }
     .drop strong { color: var(--text); display: block; font-size: 17px; margin-bottom: 4px; }
-
     ul { list-style: none; }
     li {
       display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: calc(var(--radius) * .6); cursor: pointer;
@@ -172,7 +298,14 @@
     li.drag-below { border-bottom-color: var(--accent); }
     li.dragging { opacity: .4; }
     li .num { width: 22px; text-align: right; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; flex: none; }
-    li .name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    li .thumb {
+      width: 34px; height: 34px; border-radius: 6px; flex: none; background: var(--accent-soft) center / cover no-repeat;
+      display: grid; place-items: center; color: var(--accent); font-size: 14px;
+    }
+    li .meta { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+    li .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    li .by { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    li .by:empty { display: none; }
     li .rename { flex: 1; min-width: 0; padding: 2px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
     li .dur { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; flex: none; }
     li .mini {
@@ -184,31 +317,49 @@
     li .mini.remove:hover { color: #e5484d; }
     @media (hover: none) { li .mini { opacity: 1; } }
     .empty-search { color: var(--muted); text-align: center; padding: 16px; display: none; }
-
     .hint { color: var(--muted); font-size: 13px; margin-top: 14px; text-align: center; }
     kbd { font-family: inherit; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; font-size: 12px; }
     @media (hover: none) { .hint.keys { display: none; } }
 
-    /* Compact mode */
-    body.compact canvas { display: none; }
+    body.compact canvas#viz { display: none; }
     body.compact .panel { padding: 14px 16px; }
-    body.compact .title { font-size: 18px; }
     body.compact h1.player-name { font-size: 22px; margin-bottom: 10px; }
     body.hide-keys .hint.keys { display: none; }
 
-    /* Settings dialog */
+    /* ---------- Stickers ---------- */
+    #stickers { position: fixed; inset: 0; z-index: 3; pointer-events: none; }
+    .sticker { position: absolute; transform-origin: center; user-select: none; -webkit-user-select: none; touch-action: none; }
+    .sticker img { display: block; width: 100%; height: auto; pointer-events: none; }
+    .sticker .tools { display: none; position: absolute; top: -34px; left: 50%; transform: translateX(-50%); gap: 4px; }
+    .sticker .tools button {
+      width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface);
+      cursor: pointer; font-size: 13px; display: grid; place-items: center;
+    }
+    body.sticker-edit .sticker { pointer-events: auto; cursor: grab; outline: 2px dashed var(--accent); outline-offset: 2px; }
+    body.sticker-edit .sticker:active { cursor: grabbing; }
+    body.sticker-edit .sticker .tools { display: flex; }
+    .edit-bar {
+      position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 10; display: none; align-items: center; gap: 12px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 8px 8px 8px 18px;
+      box-shadow: 0 8px 30px rgba(0,0,0,.3); white-space: nowrap;
+    }
+    body.sticker-edit .edit-bar { display: flex; }
+
+    /* ---------- Settings dialog ---------- */
     dialog {
-      margin: auto; width: min(560px, calc(100vw - 24px)); max-height: 88vh; border: 1px solid var(--border);
+      margin: auto; width: min(580px, calc(100vw - 24px)); max-height: 88vh; border: 1px solid var(--border);
       border-radius: var(--radius); background: var(--surface); color: var(--text); padding: 0;
     }
     dialog::backdrop { background: rgba(0, 0, 0, .5); backdrop-filter: blur(3px); }
     .dlg-head {
-      position: sticky; top: 0; z-index: 1; background: var(--surface); display: flex; align-items: center;
-      justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 2; background: var(--surface); display: flex; align-items: center;
+      justify-content: space-between; padding: 16px 20px 10px;
     }
     .dlg-head h2 { font-size: 20px; }
-    .tabs { display: flex; gap: 4px; padding: 12px 20px 0; overflow-x: auto; scrollbar-width: none; }
-    .tabs::-webkit-scrollbar { display: none; }
+    .tabs {
+      position: sticky; top: 58px; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--border);
+      display: flex; gap: 4px; padding: 0 20px 10px; overflow-x: auto; scrollbar-width: thin;
+    }
     .tab {
       background: none; border: 1px solid transparent; border-radius: 999px; padding: 6px 10px; cursor: pointer; color: var(--muted);
       white-space: nowrap; flex: none;
@@ -220,20 +371,15 @@
     .row { padding: 12px 0; border-bottom: 1px solid var(--border); }
     .row:last-child { border-bottom: none; }
     .row > label, .row > .label { display: flex; justify-content: space-between; font-weight: 500; margin-bottom: 8px; gap: 8px; }
-    .row > label span.val, .row > .label span.val { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
-    .row .desc { color: var(--muted); font-size: 13px; margin-top: -4px; margin-bottom: 8px; }
-    .field {
-      width: 100%; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2);
-    }
+    .val { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+    .desc { color: var(--muted); font-size: 13px; margin-top: -4px; margin-bottom: 8px; }
+    .field { width: 100%; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); }
+    textarea.field { resize: vertical; min-height: 70px; font-family: "JetBrains Mono", monospace; font-size: 12px; }
     .seg { display: flex; flex-wrap: wrap; gap: 6px; }
-    .seg button {
-      padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); cursor: pointer;
-    }
+    .seg button { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); cursor: pointer; }
     .seg button.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
     .swatches { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    .swatch {
-      width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--border); cursor: pointer; position: relative;
-    }
+    .swatch { width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--border); cursor: pointer; }
     .swatch.on { outline: 3px solid var(--text); outline-offset: 2px; }
     .swatch.default { background: conic-gradient(#5b5bd6 0 50%, #8b8bf5 0); }
     .color-input { width: 44px; height: 32px; border: 1px solid var(--border); border-radius: 8px; background: none; cursor: pointer; padding: 2px; }
@@ -244,16 +390,35 @@
       background-size: cover; background-position: center;
     }
     .bg-opt.on { outline: 3px solid var(--text); outline-offset: 2px; }
+    .skins { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+    .skin {
+      height: 84px; border-radius: 12px; border: 1px solid var(--border); cursor: pointer; padding: 10px 12px; text-align: left;
+      display: flex; flex-direction: column; justify-content: space-between; background-size: cover; position: relative; overflow: hidden;
+    }
+    .skin:hover { transform: translateY(-2px); }
+    .skin .sname { font-weight: 700; font-size: 15px; }
+    .skin .dots { display: flex; gap: 4px; }
+    .skin .dots i { width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(255,255,255,.5); }
     .toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; font-weight: 500; }
-    .toggle input { width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer; }
+    .toggle input { width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer; flex: none; }
     .eq { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
     .eq label { display: block; font-size: 13px; color: var(--muted); text-align: center; margin-top: 6px; }
     .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .sticker-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .sticker-list img { width: 56px; height: 56px; object-fit: contain; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); }
+
+    @media (prefers-reduced-motion: reduce) {
+      .cover-wrap .ring, body.bg-anim #bg { animation: none !important; }
+    }
   </style>
 </head>
 <body>
   <div id="bg"></div>
   <div id="bg-dim"></div>
+  <canvas id="fx"></canvas>
+  <div id="stickers"></div>
+  <div class="watermark" id="watermark"></div>
+  <div class="edit-bar"><span>✋ Drag stickers to move them</span><button class="btn" id="stickers-done">Done</button></div>
 
   <div class="wrap">
     <nav>
@@ -266,13 +431,24 @@
 
     <h1 class="player-name" id="player-name">My Music</h1>
 
-    <section class="panel">
+    <section class="panel player-panel" id="player">
       <canvas id="viz"></canvas>
-      <div class="title" id="title">No song playing</div>
-      <div class="subtitle"><span id="subtitle">Add some songs below to get started</span><span class="badge" id="speed-badge" hidden></span><span class="badge" id="sleep-badge" hidden></span></div>
 
-      <input type="range" id="seek" min="0" max="1000" value="0" aria-label="Seek">
-      <div class="times"><span id="cur">0:00</span><span id="dur">0:00</span></div>
+      <div class="cover-wrap" id="cover-wrap">
+        <svg class="ring" id="ring" viewBox="0 0 200 200" aria-hidden="true"></svg>
+        <button class="cover" id="cover" title="Click to change this song's cover" aria-label="Change cover"><span class="cover-img" id="cover-img">♪</span></button>
+        <span class="br tl"></span><span class="br tr"></span><span class="br bl"></span><span class="br brr"></span>
+      </div>
+
+      <div class="now-text" id="now-text">
+        <div class="title" id="title">No song playing</div>
+        <div class="subtitle"><span class="artist" id="artist"></span><span id="subtitle">Add some songs below to get started</span><span class="badge" id="speed-badge" hidden></span><span class="badge" id="sleep-badge" hidden></span></div>
+      </div>
+
+      <div class="seek-wrap">
+        <input type="range" id="seek" min="0" max="1000" value="0" aria-label="Seek">
+        <div class="times"><span id="cur">0:00</span><span id="dur">0:00</span></div>
+      </div>
 
       <div class="controls">
         <button class="icon-btn" id="shuffle" aria-label="Shuffle" title="Shuffle">
@@ -296,11 +472,11 @@
       </div>
 
       <div class="volume">
-        <button id="mute" aria-label="Mute" title="Mute">
-          <svg viewBox="0 0 24 24" id="vol-icon"></svg>
-        </button>
+        <button id="mute" aria-label="Mute" title="Mute"><svg viewBox="0 0 24 24" id="vol-icon"></svg></button>
         <input type="range" id="volume" min="0" max="100" value="80" aria-label="Volume">
       </div>
+
+      <div class="logo-text" id="logo-text"></div>
     </section>
 
     <section class="panel">
@@ -313,6 +489,7 @@
       </div>
       <input type="search" class="search" id="search" placeholder="Search your songs…" aria-label="Search songs">
       <input type="file" id="file" accept="audio/*" multiple hidden>
+      <input type="file" id="cover-file" accept="image/*" hidden>
       <div class="drop" id="drop">
         <strong>Drop your music here</strong>
         or click to pick MP3, WAV, OGG or M4A files from your device
@@ -320,7 +497,7 @@
       <ul id="list"></ul>
       <p class="empty-search" id="empty-search">No songs match your search.</p>
       <p class="hint">Songs and settings are saved in this browser only. Nothing is uploaded anywhere.</p>
-      <p class="hint" id="drag-hint" hidden>Drag songs to reorder · ✏️ to rename</p>
+      <p class="hint" id="drag-hint" hidden>Drag songs to reorder · ✏️ to rename · click the cover to change it</p>
       <p class="hint keys"><kbd>Space</kbd> play/pause · <kbd>←</kbd> <kbd>→</kbd> skip 5s · <kbd>Shift</kbd>+<kbd>←</kbd> <kbd>→</kbd> previous/next · <kbd>M</kbd> mute</p>
     </section>
   </div>
@@ -332,19 +509,45 @@
       <button class="square-btn" id="close-settings" aria-label="Close">✕</button>
     </div>
     <div class="tabs" role="tablist">
-      <button class="tab active" data-tab="look">Look</button>
+      <button class="tab active" data-tab="skins">✨ Skins</button>
+      <button class="tab" data-tab="look">Look</button>
+      <button class="tab" data-tab="layout">Layout</button>
+      <button class="tab" data-tab="cover">Cover</button>
+      <button class="tab" data-tab="text">Text</button>
       <button class="tab" data-tab="background">Background</button>
+      <button class="tab" data-tab="effects">Effects</button>
+      <button class="tab" data-tab="stickers">Stickers</button>
       <button class="tab" data-tab="visualizer">Visualizer</button>
       <button class="tab" data-tab="sound">Sound</button>
       <button class="tab" data-tab="more">More</button>
     </div>
     <div class="tab-body">
 
+      <!-- SKINS -->
+      <div class="tab-page active" data-page="skins">
+        <div class="row">
+          <div class="label">One-click styles</div>
+          <div class="desc">Changes the whole look at once. You can tweak anything after.</div>
+          <div class="skins" id="skins"></div>
+        </div>
+        <div class="row">
+          <div class="btn-row"><button class="btn" id="surprise">🎲 Surprise me</button></div>
+        </div>
+      </div>
+
       <!-- LOOK -->
-      <div class="tab-page active" data-page="look">
+      <div class="tab-page" data-page="look">
         <div class="row">
           <label for="s-name">Player name</label>
           <input class="field" id="s-name" data-setting="name" maxlength="40" placeholder="My Music">
+        </div>
+        <div class="row">
+          <div class="label">Name emoji</div>
+          <div class="seg" data-seg="emoji">
+            <button data-v="">None</button><button data-v="🎵">🎵</button><button data-v="🎧">🎧</button><button data-v="🔥">🔥</button>
+            <button data-v="💜">💜</button><button data-v="⭐">⭐</button><button data-v="🌙">🌙</button><button data-v="🎸">🎸</button>
+            <button data-v="👑">👑</button><button data-v="🌸">🌸</button><button data-v="⚡">⚡</button>
+          </div>
         </div>
         <div class="row">
           <div class="label">Theme</div>
@@ -353,26 +556,131 @@
           </div>
         </div>
         <div class="row">
-          <div class="label">Accent color</div>
+          <div class="label">Main color</div>
           <div class="swatches" id="accent-swatches"></div>
         </div>
         <div class="row">
+          <div class="label">Second color <span class="val">used for glows, brackets &amp; gradients</span></div>
+          <div class="swatches" id="accent2-swatches"></div>
+        </div>
+        <div class="row">
           <div class="label">Font</div>
-          <div class="seg" data-seg="font">
-            <button data-v="Space Grotesk" style="font-family:'Space Grotesk'">Modern</button>
-            <button data-v="Poppins" style="font-family:Poppins">Clean</button>
-            <button data-v="Comic Neue" style="font-family:'Comic Neue'">Comic</button>
-            <button data-v="Playfair Display" style="font-family:'Playfair Display'">Fancy</button>
-            <button data-v="JetBrains Mono" style="font-family:'JetBrains Mono'">Code</button>
-            <button data-v="Press Start 2P" style="font-family:'Press Start 2P';font-size:10px">Retro</button>
-          </div>
+          <div class="seg" data-seg="font" id="font-seg"></div>
         </div>
         <div class="row">
           <label for="s-radius">Corner roundness <span class="val" id="v-radius"></span></label>
           <input type="range" id="s-radius" data-setting="radius" min="0" max="32" step="1">
         </div>
+      </div>
+
+      <!-- LAYOUT -->
+      <div class="tab-page" data-page="layout">
         <div class="row">
-          <label class="toggle">Compact mode (hide visualizer, smaller player) <input type="checkbox" data-setting="compact"></label>
+          <div class="label">Layout</div>
+          <div class="seg" data-seg="layout">
+            <button data-v="classic">📱 Classic</button><button data-v="showcase">🖥️ Showcase (wide, big cover)</button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">Button size</div>
+          <div class="seg" data-seg="controlSize">
+            <button data-v="small">Small</button><button data-v="normal">Normal</button><button data-v="large">Large</button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">Button shape</div>
+          <div class="seg" data-seg="btnShape">
+            <button data-v="circle">● Circle</button><button data-v="rounded">▢ Rounded</button><button data-v="square">■ Square</button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">Progress bar style</div>
+          <div class="seg" data-seg="progressStyle">
+            <button data-v="round">Round</button><button data-v="square">Blocky</button><button data-v="glow">Glowing</button>
+          </div>
+        </div>
+        <div class="row">
+          <label for="s-barThickness">Progress bar thickness <span class="val" id="v-barThickness"></span></label>
+          <input type="range" id="s-barThickness" data-setting="barThickness" min="2" max="16" step="1">
+        </div>
+        <div class="row">
+          <label for="s-panelOpacity">Panel see-through <span class="val" id="v-panelOpacity"></span></label>
+          <div class="desc">Lower it to see your background through the player (glass effect).</div>
+          <input type="range" id="s-panelOpacity" data-setting="panelOpacity" min="0" max="100" step="1">
+        </div>
+        <div class="row">
+          <label class="toggle">Compact mode (hide visualizer) <input type="checkbox" data-setting="compact"></label>
+        </div>
+      </div>
+
+      <!-- COVER -->
+      <div class="tab-page" data-page="cover">
+        <div class="row">
+          <div class="label">Cover style</div>
+          <div class="seg" data-seg="coverStyle">
+            <button data-v="square">■ Square</button><button data-v="round">● Round</button><button data-v="vinyl">💿 Spinning vinyl</button><button data-v="off">Hidden</button>
+          </div>
+        </div>
+        <div class="row">
+          <label for="s-coverSize">Cover size (showcase layout) <span class="val" id="v-coverSize"></span></label>
+          <input type="range" id="s-coverSize" data-setting="coverSize" min="140" max="360" step="10">
+        </div>
+        <div class="row">
+          <label class="toggle">✨ Glow around cover (pulses with the beat) <input type="checkbox" data-setting="frameGlow"></label>
+        </div>
+        <div class="row">
+          <label class="toggle">⌜⌟ Corner brackets <input type="checkbox" data-setting="frameBrackets"></label>
+        </div>
+        <div class="row">
+          <label class="toggle">💫 Spinning star ring <input type="checkbox" data-setting="frameRing"></label>
+        </div>
+        <div class="row">
+          <div class="label">This song's cover</div>
+          <div class="desc">Songs with a picture built into the file show it automatically.</div>
+          <div class="btn-row">
+            <button class="btn" id="cover-change">🖼️ Change cover</button>
+            <button class="btn ghost" id="cover-remove">Remove cover</button>
+          </div>
+        </div>
+        <div class="row">
+          <label class="toggle">Show small covers in the playlist <input type="checkbox" data-setting="listCovers"></label>
+        </div>
+        <div class="row">
+          <label class="toggle">Read title, artist &amp; cover from music files <input type="checkbox" data-setting="readTags"></label>
+        </div>
+      </div>
+
+      <!-- TEXT -->
+      <div class="tab-page" data-page="text">
+        <div class="row">
+          <div class="label">Title font</div>
+          <div class="seg" data-seg="titleFont" id="title-font-seg"></div>
+        </div>
+        <div class="row">
+          <div class="label">Title style</div>
+          <div class="seg" data-seg="titleStyle">
+            <button data-v="normal">Normal</button><button data-v="outline">Outline</button><button data-v="gradient">Gradient</button>
+            <button data-v="glow">Neon glow</button><button data-v="retro">Retro shadow</button>
+          </div>
+        </div>
+        <div class="row">
+          <label for="s-titleSize">Title size <span class="val" id="v-titleSize"></span></label>
+          <input type="range" id="s-titleSize" data-setting="titleSize" min="16" max="56" step="1">
+        </div>
+        <div class="row">
+          <label class="toggle">Line next to the title <input type="checkbox" data-setting="titleBar"></label>
+        </div>
+        <div class="row">
+          <label for="s-logoText">Logo text <span class="val">shown under the controls</span></label>
+          <input class="field" id="s-logoText" data-setting="logoText" maxlength="30" placeholder="e.g. Mikaeel Music">
+        </div>
+        <div class="row">
+          <label for="s-logoSize">Logo size <span class="val" id="v-logoSize"></span></label>
+          <input type="range" id="s-logoSize" data-setting="logoSize" min="16" max="60" step="1">
+        </div>
+        <div class="row">
+          <label for="s-watermark">Corner tag <span class="val">small text in the top corner</span></label>
+          <input class="field" id="s-watermark" data-setting="watermark" maxlength="20" placeholder="e.g. ★ MK">
         </div>
       </div>
 
@@ -390,6 +698,9 @@
           </div>
         </div>
         <div class="row">
+          <label class="toggle">Slowly moving background <input type="checkbox" data-setting="bgAnimate"></label>
+        </div>
+        <div class="row">
           <label for="s-bgDim">Darken <span class="val" id="v-bgDim"></span></label>
           <input type="range" id="s-bgDim" data-setting="bgDim" min="0" max="80" step="1">
         </div>
@@ -399,19 +710,72 @@
         </div>
       </div>
 
+      <!-- EFFECTS -->
+      <div class="tab-page" data-page="effects">
+        <div class="row">
+          <div class="label">Floating particles</div>
+          <div class="seg" data-seg="particles">
+            <button data-v="none">None</button><button data-v="petals">🌸 Petals</button><button data-v="stars">✦ Stars</button>
+            <button data-v="sparkles">✨ Sparkles</button><button data-v="snow">❄️ Snow</button><button data-v="hearts">💗 Hearts</button>
+            <button data-v="bubbles">🫧 Bubbles</button><button data-v="confetti">🎉 Confetti</button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">Particle color</div>
+          <div class="seg" data-seg="particleColor">
+            <button data-v="mix">Both colors</button><button data-v="accent">Main color</button><button data-v="accent2">Second color</button>
+            <button data-v="white">White</button><button data-v="rainbow">🌈 Rainbow</button>
+          </div>
+        </div>
+        <div class="row">
+          <label for="s-particleCount">Amount <span class="val" id="v-particleCount"></span></label>
+          <input type="range" id="s-particleCount" data-setting="particleCount" min="5" max="150" step="5">
+        </div>
+        <div class="row">
+          <label for="s-particleSize">Size <span class="val" id="v-particleSize"></span></label>
+          <input type="range" id="s-particleSize" data-setting="particleSize" min="0.5" max="2.5" step="0.1">
+        </div>
+        <div class="row">
+          <label class="toggle">Particles speed up with the beat <input type="checkbox" data-setting="particleBeat"></label>
+        </div>
+        <div class="row">
+          <label class="toggle">Glowing particles <input type="checkbox" data-setting="particleGlow"></label>
+        </div>
+        <div class="row">
+          <label class="toggle">Neon glow around panels <input type="checkbox" data-setting="glow"></label>
+        </div>
+        <div class="row">
+          <label class="toggle">Player bounces to the beat <input type="checkbox" data-setting="pulse"></label>
+        </div>
+      </div>
+
+      <!-- STICKERS -->
+      <div class="tab-page" data-page="stickers">
+        <div class="row">
+          <div class="label">Stickers</div>
+          <div class="desc">Add your own pictures (PNGs with see-through backgrounds look best) and place them anywhere on the player.</div>
+          <div class="btn-row">
+            <button class="btn" id="sticker-add">＋ Add sticker</button>
+            <button class="btn ghost" id="sticker-edit">✋ Move &amp; resize stickers</button>
+            <input type="file" id="sticker-file" accept="image/*" multiple hidden>
+          </div>
+          <div class="sticker-list" id="sticker-list"></div>
+        </div>
+      </div>
+
       <!-- VISUALIZER -->
       <div class="tab-page" data-page="visualizer">
         <div class="row">
           <div class="label">Style</div>
           <div class="seg" data-seg="viz">
             <button data-v="bars">Bars</button><button data-v="mirror">Mirror</button><button data-v="wave">Wave</button>
-            <button data-v="circle">Circle</button><button data-v="dots">Dots</button><button data-v="off">Off</button>
+            <button data-v="circle">Circle</button><button data-v="dots">Dots</button><button data-v="skyline">Skyline</button><button data-v="off">Off</button>
           </div>
         </div>
         <div class="row">
           <div class="label">Colors</div>
           <div class="seg" data-seg="vizColor">
-            <button data-v="accent">Accent</button><button data-v="gradient">Gradient</button><button data-v="rainbow">🌈 Rainbow</button>
+            <button data-v="accent">Main color</button><button data-v="duo">Both colors</button><button data-v="gradient">Gradient</button><button data-v="rainbow">🌈 Rainbow</button>
           </div>
         </div>
         <div class="row" id="grad-row">
@@ -431,22 +795,25 @@
           <input type="range" id="s-vizSmooth" data-setting="vizSmooth" min="0" max="0.95" step="0.05">
         </div>
         <div class="row">
-          <label class="toggle">Big visualizer <input type="checkbox" data-setting="vizTall"></label>
+          <label for="s-vizLine">Line thickness (wave &amp; skyline) <span class="val" id="v-vizLine"></span></label>
+          <input type="range" id="s-vizLine" data-setting="vizLine" min="1" max="8" step="1">
         </div>
+        <div class="row"><label class="toggle">Glowing visualizer <input type="checkbox" data-setting="vizGlow"></label></div>
+        <div class="row"><label class="toggle">Falling peak markers (bars) <input type="checkbox" data-setting="vizPeaks"></label></div>
+        <div class="row"><label class="toggle">Big visualizer <input type="checkbox" data-setting="vizTall"></label></div>
       </div>
 
       <!-- SOUND -->
       <div class="tab-page" data-page="sound">
         <div class="row">
           <div class="label">Playback speed</div>
-          <div class="seg" data-seg="speed">
+          <div class="seg" data-seg="speed" data-num>
             <button data-v="0.5">0.5×</button><button data-v="0.75">0.75×</button><button data-v="1">1×</button>
             <button data-v="1.25">1.25×</button><button data-v="1.5">1.5×</button><button data-v="2">2×</button>
           </div>
         </div>
-        <div class="row">
-          <label class="toggle">Keep pitch when changing speed <input type="checkbox" data-setting="keepPitch"></label>
-        </div>
+        <div class="row"><label class="toggle">Keep pitch when changing speed <input type="checkbox" data-setting="keepPitch"></label></div>
+        <div class="row"><label class="toggle">Smooth fade on play &amp; pause <input type="checkbox" data-setting="fades"></label></div>
         <div class="row">
           <div class="label">Equalizer</div>
           <div class="seg" id="eq-presets" style="margin-bottom:14px">
@@ -461,6 +828,15 @@
           </div>
         </div>
         <div class="row">
+          <label for="s-balance">Left / right balance <span class="val" id="v-balance"></span></label>
+          <input type="range" id="s-balance" data-setting="balance" min="-100" max="100" step="5">
+        </div>
+        <div class="row">
+          <label for="s-boost">Volume boost <span class="val" id="v-boost"></span></label>
+          <div class="desc">Makes quiet songs louder. Careful with headphones!</div>
+          <input type="range" id="s-boost" data-setting="boost" min="100" max="200" step="10">
+        </div>
+        <div class="row">
           <div class="label">Sleep timer</div>
           <div class="desc">Stops the music after a while. Not saved when you leave.</div>
           <div class="seg" id="sleep-seg">
@@ -473,14 +849,18 @@
       <!-- MORE -->
       <div class="tab-page" data-page="more">
         <div class="row">
-          <label class="toggle">Start playing when I add songs <input type="checkbox" data-setting="autoplayOnAdd"></label>
+          <div class="label">Share your style</div>
+          <div class="desc">Copy your style code and send it to a friend. They paste it here and click Apply to get your exact look.</div>
+          <textarea class="field" id="style-code" placeholder="Paste a style code here…"></textarea>
+          <div class="btn-row" style="margin-top:8px">
+            <button class="btn" id="style-copy">📋 Copy my style</button>
+            <button class="btn ghost" id="style-apply">✅ Apply code</button>
+          </div>
+          <div class="desc" id="style-msg" style="margin-top:6px"></div>
         </div>
-        <div class="row">
-          <label class="toggle">Remember shuffle &amp; repeat <input type="checkbox" data-setting="rememberModes"></label>
-        </div>
-        <div class="row">
-          <label class="toggle">Show keyboard shortcuts <input type="checkbox" data-setting="showKeys"></label>
-        </div>
+        <div class="row"><label class="toggle">Start playing when I add songs <input type="checkbox" data-setting="autoplayOnAdd"></label></div>
+        <div class="row"><label class="toggle">Remember shuffle &amp; repeat <input type="checkbox" data-setting="rememberModes"></label></div>
+        <div class="row"><label class="toggle">Show keyboard shortcuts <input type="checkbox" data-setting="showKeys"></label></div>
         <div class="row">
           <div class="label">Reset</div>
           <div class="btn-row">
@@ -500,53 +880,104 @@
     const root = document.documentElement;
     const audio = $('audio');
 
+    // ================= Options =================
+    const FONTS = [
+      ['Space Grotesk', 'Modern'], ['Poppins', 'Clean'], ['Comic Neue', 'Comic'], ['Playfair Display', 'Fancy'],
+      ['JetBrains Mono', 'Code'], ['Press Start 2P', 'Retro'], ['Bungee', 'Blocky'], ['Orbitron', 'Sci-fi'], ['Permanent Marker', 'Marker'],
+    ];
+    const ACCENTS = ['#e5484d', '#ff8a3d', '#ffc53d', '#30a46c', '#12a594', '#0090ff', '#5b5bd6', '#8e4ec6', '#d946ef', '#d6409f', '#ffffff', '#8d8d86'];
+    const BACKGROUNDS = {
+      none:      { label: 'None', css: '' },
+      black:     { label: 'Black', css: '#050507' },
+      nightglow: { label: 'Night glow', css: 'radial-gradient(circle at 15% 35%,#4a1466 0,transparent 42%),radial-gradient(circle at 85% 85%,#5a2208 0,transparent 40%),#050507' },
+      sunset:    { label: 'Sunset', css: 'linear-gradient(135deg,#ff7e5f,#feb47b)' },
+      ocean:     { label: 'Ocean', css: 'linear-gradient(135deg,#2193b0,#6dd5ed)' },
+      aurora:    { label: 'Aurora', css: 'linear-gradient(135deg,#00c9a7,#845ec2)' },
+      candy:     { label: 'Candy', css: 'linear-gradient(135deg,#f093fb,#f5576c)' },
+      forest:    { label: 'Forest', css: 'linear-gradient(135deg,#134e5e,#71b280)' },
+      midnight:  { label: 'Midnight', css: 'linear-gradient(135deg,#0f2027,#203a43,#2c5364)' },
+      lava:      { label: 'Lava', css: 'linear-gradient(135deg,#200122,#6f0000)' },
+      peach:     { label: 'Peach', css: 'linear-gradient(135deg,#ffecd2,#fcb69f)' },
+      galaxy:    { label: 'Galaxy', css: 'radial-gradient(circle at 30% 20%,#5b2a86,transparent 50%),radial-gradient(circle at 80% 70%,#1f4e8c,transparent 50%),#0b0b1a' },
+      image:     { label: 'My picture', css: '' },
+    };
+
     // ================= Settings (saved per browser) =================
     const DEFAULTS = {
-      name: 'My Music',
-      accent: null,           // null = theme default
-      font: 'Space Grotesk',
-      radius: 20,
-      compact: false,
-      bg: 'none',
-      bgDim: 0,
-      bgBlur: 0,
-      viz: 'bars',
-      vizColor: 'accent',
-      vizColor2: '#ff5fa2',
-      vizBars: 40,
-      vizSens: 1,
-      vizSmooth: 0.8,
-      vizTall: false,
-      speed: 1,
-      keepPitch: true,
-      eqLow: 0, eqMid: 0, eqHigh: 0,
-      autoplayOnAdd: false,
-      rememberModes: true,
-      showKeys: true,
-      volume: 80,
-      shuffle: false,
-      repeat: 'off',
+      name: 'My Music', emoji: '',
+      accent: null, accent2: '#d946ef', font: 'Space Grotesk', radius: 20,
+      layout: 'classic', controlSize: 'normal', btnShape: 'circle', progressStyle: 'round', barThickness: 6, panelOpacity: 100, compact: false,
+      coverStyle: 'square', coverSize: 240, frameGlow: false, frameBrackets: false, frameRing: false, listCovers: true, readTags: true,
+      titleFont: 'same', titleStyle: 'normal', titleSize: 22, titleBar: false, logoText: '', logoSize: 28, watermark: '',
+      bg: 'none', bgDim: 0, bgBlur: 0, bgAnimate: false,
+      particles: 'none', particleColor: 'mix', particleCount: 40, particleSize: 1, particleBeat: true, particleGlow: true, glow: false, pulse: false,
+      stickers: [],
+      viz: 'bars', vizColor: 'accent', vizColor2: '#ff5fa2', vizBars: 40, vizSens: 1, vizSmooth: 0.8, vizLine: 3, vizGlow: false, vizPeaks: false, vizTall: false,
+      speed: 1, keepPitch: true, fades: true, eqLow: 0, eqMid: 0, eqHigh: 0, balance: 0, boost: 100,
+      autoplayOnAdd: false, rememberModes: true, showKeys: true, volume: 80, shuffle: false, repeat: 'off',
     };
-    let S = { ...DEFAULTS };
-    try { Object.assign(S, JSON.parse(localStorage.getItem('mp-settings') || '{}')); } catch (e) {}
-    try { const v = localStorage.getItem('mp-volume'); if (v !== null && !localStorage.getItem('mp-settings')) S.volume = +v; } catch (e) {}
+    // Settings that belong to the person, not to a "style" (skins & style codes leave these alone)
+    const PERSONAL = new Set(['name', 'emoji', 'logoText', 'watermark', 'stickers', 'listCovers', 'readTags',
+      'speed', 'keepPitch', 'fades', 'eqLow', 'eqMid', 'eqHigh', 'balance', 'boost',
+      'autoplayOnAdd', 'rememberModes', 'showKeys', 'volume', 'shuffle', 'repeat']);
+    const STYLE_KEYS = Object.keys(DEFAULTS).filter(k => !PERSONAL.has(k));
+
+    const SKINS = {
+      classic:  { label: 'Classic', theme: 'auto', s: {} },
+      showcase: { label: 'Showcase', theme: 'dark', s: {
+        accent: '#ff8a3d', accent2: '#d946ef', bg: 'nightglow', layout: 'showcase', coverSize: 260, radius: 6,
+        frameGlow: true, frameBrackets: true, frameRing: true, titleFont: 'Bungee', titleStyle: 'retro', titleSize: 34, titleBar: true,
+        particles: 'petals', particleColor: 'mix', particleCount: 45, viz: 'skyline', vizColor: 'duo', vizGlow: true,
+        progressStyle: 'square', panelOpacity: 25, pulse: true, btnShape: 'rounded' } },
+      neon:     { label: 'Neon', theme: 'dark', s: {
+        accent: '#00f5d4', accent2: '#d946ef', bg: 'galaxy', bgDim: 10, panelOpacity: 70, glow: true, pulse: true,
+        vizColor: 'rainbow', vizGlow: true, vizPeaks: true, titleStyle: 'glow', titleFont: 'Orbitron', particles: 'sparkles', progressStyle: 'glow' } },
+      retro:    { label: 'Retro Arcade', theme: 'dark', s: {
+        accent: '#ffc53d', accent2: '#e5484d', bg: 'midnight', font: 'Press Start 2P', radius: 0, btnShape: 'square', titleStyle: 'retro',
+        titleSize: 18, viz: 'dots', vizColor: 'gradient', vizColor2: '#e5484d', progressStyle: 'square', particles: 'stars' } },
+      minimal:  { label: 'Minimal', theme: 'light', s: {
+        accent: '#16161a', font: 'Poppins', radius: 10, viz: 'wave', vizLine: 2, controlSize: 'small' } },
+      sunset:   { label: 'Sunset Chill', theme: 'light', s: {
+        accent: '#ff8a3d', accent2: '#d6409f', bg: 'sunset', bgAnimate: true, panelOpacity: 75, font: 'Poppins', viz: 'mirror',
+        vizColor: 'gradient', vizColor2: '#d6409f', coverStyle: 'round', titleStyle: 'gradient' } },
+      ocean:    { label: 'Ocean', theme: 'dark', s: {
+        accent: '#0090ff', accent2: '#12a594', bg: 'ocean', bgAnimate: true, bgDim: 20, panelOpacity: 65, viz: 'wave',
+        vizColor: 'gradient', vizColor2: '#12a594', vizLine: 4, particles: 'bubbles', particleColor: 'white' } },
+      sakura:   { label: 'Sakura', theme: 'light', s: {
+        accent: '#d6409f', accent2: '#8e4ec6', bg: 'peach', font: 'Playfair Display', radius: 28, viz: 'circle', vizColor: 'gradient',
+        vizColor2: '#8e4ec6', coverStyle: 'round', panelOpacity: 78, particles: 'petals', particleColor: 'accent', frameGlow: true } },
+      hacker:   { label: 'Hacker', theme: 'dark', s: {
+        accent: '#30a46c', accent2: '#30a46c', bg: 'black', font: 'JetBrains Mono', radius: 2, btnShape: 'square', viz: 'bars',
+        vizPeaks: true, vizGlow: true, glow: true, controlSize: 'small', titleStyle: 'glow', progressStyle: 'square' } },
+      vinyl:    { label: 'Vinyl Lounge', theme: 'dark', s: {
+        accent: '#e5484d', accent2: '#ffc53d', bg: 'lava', bgDim: 20, panelOpacity: 72, font: 'Playfair Display', coverStyle: 'vinyl',
+        layout: 'showcase', coverSize: 220, viz: 'circle', vizColor: 'gradient', vizColor2: '#ffc53d', pulse: true, titleStyle: 'gradient' } },
+      candy:    { label: 'Candy Pop', theme: 'light', s: {
+        accent: '#8e4ec6', accent2: '#d6409f', bg: 'candy', bgAnimate: true, font: 'Comic Neue', radius: 32, viz: 'dots', vizColor: 'rainbow',
+        panelOpacity: 82, btnShape: 'rounded', controlSize: 'large', particles: 'hearts', particleColor: 'white' } },
+    };
+
+    let S = structuredClone(DEFAULTS);
+    try {
+      const saved = JSON.parse(localStorage.getItem('mp-settings') || '{}');
+      for (const k in saved) if (k in DEFAULTS) S[k] = saved[k];
+    } catch (e) {}
     const save = () => { try { localStorage.setItem('mp-settings', JSON.stringify(S)); } catch (e) {} };
 
-    const ACCENTS = ['#e5484d', '#f76b15', '#ffc53d', '#30a46c', '#12a594', '#0090ff', '#5b5bd6', '#8e4ec6', '#d6409f', '#8d8d86'];
-    const BACKGROUNDS = {
-      none:     { label: 'None', css: '' },
-      sunset:   { label: 'Sunset', css: 'linear-gradient(135deg,#ff7e5f,#feb47b)' },
-      ocean:    { label: 'Ocean', css: 'linear-gradient(135deg,#2193b0,#6dd5ed)' },
-      aurora:   { label: 'Aurora', css: 'linear-gradient(135deg,#00c9a7,#845ec2)' },
-      candy:    { label: 'Candy', css: 'linear-gradient(135deg,#f093fb,#f5576c)' },
-      forest:   { label: 'Forest', css: 'linear-gradient(135deg,#134e5e,#71b280)' },
-      midnight: { label: 'Midnight', css: 'linear-gradient(135deg,#0f2027,#203a43,#2c5364)' },
-      lava:     { label: 'Lava', css: 'linear-gradient(135deg,#200122,#6f0000)' },
-      peach:    { label: 'Peach', css: 'linear-gradient(135deg,#ffecd2,#fcb69f)' },
-      galaxy:   { label: 'Galaxy', css: 'radial-gradient(circle at 30% 20%,#5b2a86,transparent 50%),radial-gradient(circle at 80% 70%,#1f4e8c,transparent 50%),#0b0b1a' },
-      image:    { label: 'My picture', css: '' },
-    };
+    // ================= State =================
+    let tracks = [];          // { id, name, artist, blob, cover, duration, addedAt, order, url, coverUrl }
+    let current = -1;
+    let history = [];         // for "previous" while shuffling
+    let searchTerm = '';
     let bgImageUrl = null;
+    const stickerUrls = {};
+    let sleepMode = 0, sleepEnd = 0, sleepTick = null;
+    let audioCtx = null, analyser = null, freq = null, wave = null;
+    const nodes = {};
+    let fadeTimer = null;
+    let pulseVal = 0;
+    let parts = [], partsType = null;
+    let peaks = [];
 
     // ================= Storage (IndexedDB, stays in this browser) =================
     const db = {
@@ -577,23 +1008,92 @@
       },
       allTracks() { return this.run('tracks', 'readonly', s => s.getAll()); },
       putTrack(t) {
-        const { id, name, blob, duration, addedAt, order } = t;
-        return this.run('tracks', 'readwrite', s => s.put({ id, name, blob, duration, addedAt, order }));
+        const { id, name, artist, blob, cover, duration, addedAt, order, tagsRead } = t;
+        return this.run('tracks', 'readwrite', s => s.put({ id, name, artist, blob, cover, duration, addedAt, order, tagsRead }));
       },
       removeTrack(id) { return this.run('tracks', 'readwrite', s => s.delete(id)); },
       clearTracks() { return this.run('tracks', 'readwrite', s => s.clear()); },
       getFile(k) { return this.run('files', 'readonly', s => s.get(k)); },
       putFile(k, v) { return this.run('files', 'readwrite', s => s.put(v, k)); },
+      delFile(k) { return this.run('files', 'readwrite', s => s.delete(k)); },
     };
 
-    // ================= Applying settings =================
-    function luminance(hex) {
-      const m = /^#?([\da-f]{6})$/i.exec(hex); if (!m) return 0.5;
+    // ================= Helpers =================
+    const fmt = s => {
+      if (!isFinite(s)) return '0:00';
+      s = Math.floor(s);
+      const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = String(s % 60).padStart(2, '0');
+      return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
+    };
+    const cleanName = f => f.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').trim();
+    const urlFor = t => t.url || (t.url = URL.createObjectURL(t.blob));
+    const coverUrlFor = t => t.cover ? (t.coverUrl || (t.coverUrl = URL.createObjectURL(t.cover))) : null;
+    const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const pick = a => a[Math.floor(Math.random() * a.length)];
+
+    function hexToRgb(h) {
+      const m = /^#?([\da-f]{6})$/i.exec((h || '').trim());
+      if (!m) return null;
       const n = parseInt(m[1], 16);
-      const c = [n >> 16, (n >> 8) & 255, n & 255].map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); });
-      return .2126 * c[0] + .7152 * c[1] + .0722 * c[2];
+      return [n >> 16, (n >> 8) & 255, n & 255];
+    }
+    function luminance(hex) {
+      const c = hexToRgb(hex); if (!c) return 0.5;
+      const l = c.map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); });
+      return .2126 * l[0] + .7152 * l[1] + .0722 * l[2];
+    }
+    function hslToHex(h, s, l) {
+      s /= 100; l /= 100;
+      const f = n => { const k = (n + h / 30) % 12; const c = l - s * Math.min(l, 1 - l) * Math.max(-1, Math.min(k - 3, 9 - k, 1)); return Math.round(c * 255).toString(16).padStart(2, '0'); };
+      return `#${f(0)}${f(8)}${f(4)}`;
+    }
+    const cssVar = name => getComputedStyle(root).getPropertyValue(name).trim();
+
+    // ================= Reading song info from files (MP3 ID3 tags) =================
+    async function readTags(blob) {
+      try {
+        const head = new Uint8Array(await blob.slice(0, 10).arrayBuffer());
+        if (head[0] !== 0x49 || head[1] !== 0x44 || head[2] !== 0x33) return {};   // "ID3"
+        const ver = head[3], flags = head[5];
+        const syncsafe = (b, i) => (b[i] & 127) << 21 | (b[i + 1] & 127) << 14 | (b[i + 2] & 127) << 7 | (b[i + 3] & 127);
+        const u32 = (b, i) => ((b[i] << 24) | (b[i + 1] << 16) | (b[i + 2] << 8) | b[i + 3]) >>> 0;
+        const size = syncsafe(head, 6);
+        const buf = new Uint8Array(await blob.slice(10, 10 + size).arrayBuffer());
+        let p = 0;
+        if (flags & 0x40 && ver >= 3) p = ver === 4 ? syncsafe(buf, 0) : u32(buf, 0) + 4;   // skip extended header
+        const idLen = ver === 2 ? 3 : 4, hdrLen = ver === 2 ? 6 : 10;
+        const decode = (enc, bytes) => {
+          const label = ['iso-8859-1', 'utf-16', 'utf-16be', 'utf-8'][enc] || 'utf-8';
+          return new TextDecoder(label).decode(bytes).replace(/\0+$/, '').split('\0')[0].trim();
+        };
+        const out = {};
+        while (p + hdrLen < buf.length) {
+          const id = String.fromCharCode(...buf.subarray(p, p + idLen));
+          if (!/^[A-Z0-9]+$/.test(id)) break;
+          const fs = ver === 2 ? (buf[p + 3] << 16 | buf[p + 4] << 8 | buf[p + 5]) : ver === 4 ? syncsafe(buf, p + 4) : u32(buf, p + 4);
+          if (fs <= 0 || p + hdrLen + fs > buf.length) break;
+          const data = buf.subarray(p + hdrLen, p + hdrLen + fs);
+          p += hdrLen + fs;
+          if (id === 'TIT2' || id === 'TT2') out.title = decode(data[0], data.subarray(1));
+          else if (id === 'TPE1' || id === 'TP1') out.artist = decode(data[0], data.subarray(1));
+          else if ((id === 'APIC' || id === 'PIC') && !out.cover) {
+            const enc = data[0];
+            let i = 1, mime;
+            if (ver === 2) { mime = String.fromCharCode(...data.subarray(1, 4)); i = 4; }
+            else { while (i < data.length && data[i] !== 0) i++; mime = String.fromCharCode(...data.subarray(1, i)); i++; }
+            i++;   // picture type
+            if (enc === 1 || enc === 2) { while (i + 1 < data.length && !(data[i] === 0 && data[i + 1] === 0)) i += 2; i += 2; }
+            else { while (i < data.length && data[i] !== 0) i++; i++; }
+            mime = mime.toLowerCase();
+            if (mime === 'jpg') mime = 'image/jpeg'; else if (mime === 'png') mime = 'image/png'; else if (!mime.includes('/')) mime = 'image/' + (mime || 'jpeg');
+            if (i < data.length) out.cover = new Blob([data.slice(i)], { type: mime });
+          }
+        }
+        return out;
+      } catch (e) { return {}; }
     }
 
+    // ================= Applying settings =================
     function applyTheme() {
       let t = 'auto';
       try { t = localStorage.getItem('theme') || 'auto'; } catch (e) {}
@@ -602,17 +1102,19 @@
       $('theme-toggle').textContent = dark ? '☀️' : '🌙';
       document.querySelectorAll('[data-seg="theme"] button').forEach(b => b.classList.toggle('on', b.dataset.v === t));
     }
+    function currentTheme() { try { return localStorage.getItem('theme') || 'auto'; } catch (e) { return 'auto'; } }
     function setTheme(t) {
       try { t === 'auto' ? localStorage.removeItem('theme') : localStorage.setItem('theme', t); } catch (e) {}
       applyTheme();
     }
 
     function applyAll() {
+      const body = document.body;
       // Name
-      $('player-name').textContent = S.name || 'My Music';
+      $('player-name').textContent = (S.emoji ? S.emoji + ' ' : '') + (S.name || 'My Music');
       if (current === -1) document.title = S.name || 'My Music';
 
-      // Accent
+      // Colors
       if (S.accent) {
         root.style.setProperty('--accent', S.accent);
         root.style.setProperty('--accent-soft', `color-mix(in srgb, ${S.accent} 18%, var(--surface))`);
@@ -620,12 +1122,28 @@
       } else {
         ['--accent', '--accent-soft', '--on-accent'].forEach(p => root.style.removeProperty(p));
       }
+      root.style.setProperty('--accent2', S.accent2);
 
-      // Font & shape
+      // Fonts, sizes & shapes
       root.style.setProperty('--font', `"${S.font}"`);
+      root.style.setProperty('--title-font', `"${S.titleFont === 'same' ? S.font : S.titleFont}"`);
       root.style.setProperty('--radius', S.radius + 'px');
-      document.body.classList.toggle('compact', S.compact);
-      document.body.classList.toggle('hide-keys', !S.showKeys);
+      root.style.setProperty('--title-size', S.titleSize + 'px');
+      root.style.setProperty('--logo-size', S.logoSize + 'px');
+      root.style.setProperty('--cover-size', S.coverSize + 'px');
+      root.style.setProperty('--ctl', { small: 0.82, normal: 1, large: 1.22 }[S.controlSize] || 1);
+      root.style.setProperty('--btn-radius', { circle: '50%', rounded: '12px', square: '2px' }[S.btnShape] || '50%');
+      root.style.setProperty('--bar-h', S.barThickness + 'px');
+      root.style.setProperty('--panel-alpha', S.panelOpacity + '%');
+
+      body.classList.toggle('compact', S.compact);
+      body.classList.toggle('hide-keys', !S.showKeys);
+      body.classList.toggle('layout-showcase', S.layout === 'showcase');
+      body.classList.toggle('prog-square', S.progressStyle === 'square');
+      body.classList.toggle('prog-glow', S.progressStyle === 'glow');
+      body.classList.toggle('glow', S.glow);
+      body.classList.toggle('pulse', S.pulse);
+      body.classList.toggle('glassy', S.panelOpacity < 100);
 
       // Background
       const bgEl = $('bg');
@@ -634,7 +1152,25 @@
       bgEl.style.filter = S.bgBlur ? `blur(${S.bgBlur}px)` : '';
       bgEl.style.transform = S.bgBlur ? 'scale(1.08)' : '';
       $('bg-dim').style.opacity = bg === 'none' ? 0 : S.bgDim / 100;
-      document.body.classList.toggle('has-bg', bg !== 'none' && !(bg === 'image' && !bgImageUrl));
+      body.classList.toggle('has-bg', bg !== 'none' && !(bg === 'image' && !bgImageUrl));
+      body.classList.toggle('bg-image', bg === 'image');
+      body.classList.toggle('bg-anim', S.bgAnimate && bg !== 'none');
+
+      // Cover
+      $('player').classList.toggle('no-cover', S.coverStyle === 'off');
+      $('cover-wrap').style.display = S.coverStyle === 'off' ? 'none' : '';
+      $('cover').classList.toggle('round', S.coverStyle === 'round');
+      $('cover').classList.toggle('vinyl', S.coverStyle === 'vinyl');
+      $('cover-wrap').classList.toggle('glow', S.frameGlow);
+      $('cover-wrap').classList.toggle('brackets', S.frameBrackets);
+      $('cover-wrap').classList.toggle('ring', S.frameRing);
+      updateCover();
+
+      // Text
+      $('title').className = 'title' + (S.titleStyle !== 'normal' ? ' t-' + S.titleStyle : '');
+      $('now-text').classList.toggle('bar', S.titleBar);
+      $('logo-text').textContent = S.logoText || '';
+      $('watermark').textContent = S.watermark || '';
 
       // Visualizer
       $('viz').classList.toggle('tall', S.vizTall || S.viz === 'circle');
@@ -647,14 +1183,29 @@
       audio.preservesPitch = audio.mozPreservesPitch = audio.webkitPreservesPitch = S.keepPitch;
       $('speed-badge').hidden = S.speed === 1;
       $('speed-badge').textContent = S.speed + '×';
-      if (eq.low) { eq.low.gain.value = S.eqLow; eq.mid.gain.value = S.eqMid; eq.high.gain.value = S.eqHigh; }
+      if (nodes.low) {
+        nodes.low.gain.value = S.eqLow; nodes.mid.gain.value = S.eqMid; nodes.high.gain.value = S.eqHigh;
+        if (nodes.pan) nodes.pan.pan.value = S.balance / 100;
+        nodes.boost.gain.value = S.boost / 100;
+      }
+
+      renderStickers();
     }
+
+    const sign = v => (v > 0 ? '+' : '') + v;
+    const FORMAT = {
+      radius: v => v + 'px', bgDim: v => v + '%', bgBlur: v => v + 'px', barThickness: v => v + 'px', panelOpacity: v => (100 - v) + '%',
+      coverSize: v => v + 'px', titleSize: v => v + 'px', logoSize: v => v + 'px', particleCount: v => v, particleSize: v => (+v).toFixed(1) + '×',
+      vizBars: v => v, vizSens: v => (+v).toFixed(1) + '×', vizSmooth: v => Math.round(v * 100) + '%', vizLine: v => v + 'px',
+      eqLow: sign, eqMid: sign, eqHigh: sign, boost: v => v + '%',
+      balance: v => v == 0 ? 'Center' : v < 0 ? `${-v}% left` : `${v}% right`,
+    };
 
     // Keep the settings panel's controls in sync with S
     function syncControls() {
       document.querySelectorAll('[data-setting]').forEach(el => {
         const k = el.dataset.setting;
-        if (el.type === 'checkbox') el.checked = !!S[k]; else el.value = S[k];
+        if (el.type === 'checkbox') el.checked = !!S[k]; else if (document.activeElement !== el) el.value = S[k];
         if (el.type === 'range') paintRange(el);
       });
       document.querySelectorAll('[data-seg]').forEach(seg => {
@@ -663,20 +1214,15 @@
         seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', String(S[k]) === b.dataset.v));
       });
       document.querySelectorAll('#eq-presets button').forEach(b => b.classList.toggle('on', b.dataset.eq === `${S.eqLow},${S.eqMid},${S.eqHigh}`));
-      document.querySelectorAll('.swatch').forEach(s => s.classList.toggle('on', (s.dataset.c || null) === S.accent));
-      $('custom-accent').value = S.accent || getComputedStyle(root).getPropertyValue('--accent').trim();
+      document.querySelectorAll('#accent-swatches .swatch').forEach(s => s.classList.toggle('on', (s.dataset.c || null) === S.accent));
+      document.querySelectorAll('#accent2-swatches .swatch').forEach(s => s.classList.toggle('on', s.dataset.c === S.accent2));
+      $('custom-accent').value = S.accent || cssVar('--accent');
+      $('custom-accent2').value = S.accent2;
       document.querySelectorAll('.bg-opt').forEach(o => o.classList.toggle('on', o.dataset.bg === S.bg));
-      const sign = v => (v > 0 ? '+' : '') + v;
-      $('v-radius').textContent = S.radius + 'px';
-      $('v-bgDim').textContent = S.bgDim + '%';
-      $('v-bgBlur').textContent = S.bgBlur + 'px';
-      $('v-vizBars').textContent = S.vizBars;
-      $('v-vizSens').textContent = (+S.vizSens).toFixed(1) + '×';
-      $('v-vizSmooth').textContent = Math.round(S.vizSmooth * 100) + '%';
-      $('v-eqLow').textContent = sign(S.eqLow);
-      $('v-eqMid').textContent = sign(S.eqMid);
-      $('v-eqHigh').textContent = sign(S.eqHigh);
+      for (const k in FORMAT) { const el = $('v-' + k); if (el) el.textContent = FORMAT[k](S[k]); }
       document.querySelectorAll('#sleep-seg button').forEach(b => b.classList.toggle('on', b.dataset.sleep === String(sleepMode)));
+      $('cover-change').disabled = $('cover-remove').disabled = current === -1;
+      renderStickerList();
       applyTheme();
     }
 
@@ -689,12 +1235,18 @@
     const dlg = $('settings');
     $('open-settings').addEventListener('click', () => { syncControls(); dlg.showModal(); });
     $('close-settings').addEventListener('click', () => dlg.close());
-    dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });   // click outside to close
+    dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
 
     document.querySelectorAll('.tab').forEach(tab => tab.addEventListener('click', () => {
       document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === tab));
       document.querySelectorAll('.tab-page').forEach(p => p.classList.toggle('active', p.dataset.page === tab.dataset.tab));
     }));
+
+    // Build font pickers
+    $('font-seg').innerHTML = FONTS.map(([f, label]) =>
+      `<button data-v="${f}" style="font-family:'${f}';${f === 'Press Start 2P' ? 'font-size:10px' : ''}">${label}</button>`).join('');
+    $('title-font-seg').innerHTML = `<button data-v="same">Same as main</button>` + FONTS.map(([f, label]) =>
+      `<button data-v="${f}" style="font-family:'${f}';${f === 'Press Start 2P' ? 'font-size:10px' : ''}">${label}</button>`).join('');
 
     document.querySelectorAll('[data-setting]').forEach(el => {
       el.addEventListener('input', () => {
@@ -703,24 +1255,23 @@
         set(k, v);
       });
     });
-
     document.querySelectorAll('[data-seg]').forEach(seg => seg.addEventListener('click', e => {
       const b = e.target.closest('button'); if (!b) return;
       const k = seg.dataset.seg;
       if (k === 'theme') return setTheme(b.dataset.v);
-      set(k, k === 'speed' ? +b.dataset.v : b.dataset.v);
+      set(k, seg.hasAttribute('data-num') ? +b.dataset.v : b.dataset.v);
     }));
 
-    // Accent swatches
-    const sw = $('accent-swatches');
-    sw.innerHTML = `<button class="swatch default" title="Default" aria-label="Default color"></button>` +
+    // Color swatches
+    $('accent-swatches').innerHTML = `<button class="swatch default" title="Default" aria-label="Default color"></button>` +
       ACCENTS.map(c => `<button class="swatch" data-c="${c}" style="background:${c}" title="${c}" aria-label="${c}"></button>`).join('') +
-      `<input type="color" class="color-input" id="custom-accent" title="Pick any color" aria-label="Custom color">`;
-    sw.addEventListener('click', e => {
-      const b = e.target.closest('.swatch'); if (!b) return;
-      set('accent', b.dataset.c || null);
-    });
+      `<input type="color" class="color-input" id="custom-accent" title="Pick any color" aria-label="Custom main color">`;
+    $('accent-swatches').addEventListener('click', e => { const b = e.target.closest('.swatch'); if (b) set('accent', b.dataset.c || null); });
     $('custom-accent').addEventListener('input', e => set('accent', e.target.value));
+    $('accent2-swatches').innerHTML = ACCENTS.map(c => `<button class="swatch" data-c="${c}" style="background:${c}" title="${c}" aria-label="${c}"></button>`).join('') +
+      `<input type="color" class="color-input" id="custom-accent2" title="Pick any color" aria-label="Custom second color">`;
+    $('accent2-swatches').addEventListener('click', e => { const b = e.target.closest('.swatch'); if (b) set('accent2', b.dataset.c); });
+    $('custom-accent2').addEventListener('input', e => set('accent2', e.target.value));
 
     // Background options
     $('bg-grid').innerHTML = Object.entries(BACKGROUNDS).filter(([k]) => k !== 'image').map(([k, b]) =>
@@ -729,7 +1280,7 @@
     $('bg-grid').addEventListener('click', e => {
       const b = e.target.closest('.bg-opt'); if (!b) return;
       if (b.dataset.bg === 'image' && !bgImageUrl) return $('bg-file').click();
-      if (b.dataset.bg !== 'none' && S.bgDim === 0 && S.bg === 'none') S.bgDim = 15;
+      if (b.dataset.bg !== 'none' && S.bg === 'none') { if (S.bgDim === 0) S.bgDim = 15; if (S.panelOpacity === 100) S.panelOpacity = 82; }
       set('bg', b.dataset.bg);
     });
     $('bg-upload').addEventListener('click', () => $('bg-file').click());
@@ -741,12 +1292,77 @@
       await db.putFile('bg', f);
       updateBgThumb();
       if (S.bgDim === 0) S.bgDim = 25;
+      if (S.panelOpacity === 100) S.panelOpacity = 82;
       set('bg', 'image');
     });
     function updateBgThumb() {
       const o = $('bg-image-opt');
       if (bgImageUrl) { o.style.background = `center / cover url("${bgImageUrl}")`; o.style.color = '#fff'; o.style.textShadow = ''; }
     }
+
+    // Skins
+    $('skins').innerHTML = Object.entries(SKINS).map(([k, sk]) => {
+      const s = { ...DEFAULTS, ...sk.s };
+      const dark = sk.theme === 'dark';
+      const bgCss = BACKGROUNDS[s.bg]?.css || (dark ? '#1a1a1f' : '#f2f2ee');
+      const fg = dark || (s.bg !== 'none' && s.bg !== 'peach') ? '#fff' : '#16161a';
+      const font = s.titleFont === 'same' ? s.font : s.titleFont;
+      const a = s.accent || (dark ? '#8b8bf5' : '#5b5bd6');
+      return `<button class="skin" data-skin="${k}" style="background:${bgCss};color:${fg}">
+        <span class="sname" style="font-family:'${font}';${font === 'Press Start 2P' ? 'font-size:10px' : ''}">${sk.label}</span>
+        <span class="dots"><i style="background:${a}"></i><i style="background:${s.accent2}"></i></span></button>`;
+    }).join('');
+    $('skins').addEventListener('click', e => { const b = e.target.closest('.skin'); if (b) applySkin(SKINS[b.dataset.skin]); });
+    function applyStyle(obj, theme) {
+      for (const k of STYLE_KEYS) S[k] = structuredClone(k in obj ? obj[k] : DEFAULTS[k]);
+      if (S.bg === 'image' && !bgImageUrl) S.bg = 'none';
+      if (theme) setTheme(theme);
+      parts = [];
+      save(); applyAll(); syncControls();
+    }
+    const applySkin = sk => applyStyle(sk.s, sk.theme);
+
+    $('surprise').addEventListener('click', () => {
+      const bgs = Object.keys(BACKGROUNDS).filter(k => k !== 'image');
+      const hue = Math.floor(Math.random() * 360);
+      applyStyle({
+        accent: hslToHex(hue, 80, 58), accent2: hslToHex((hue + 120 + Math.random() * 120) % 360, 80, 60),
+        font: pick(FONTS)[0], titleFont: pick(['same', ...FONTS.map(f => f[0])]), titleStyle: pick(['normal', 'outline', 'gradient', 'glow', 'retro']),
+        titleSize: 20 + Math.floor(Math.random() * 16), titleBar: Math.random() < .5,
+        radius: Math.floor(Math.random() * 33), bg: pick(bgs), bgAnimate: Math.random() < .5, bgDim: Math.floor(Math.random() * 30),
+        panelOpacity: 40 + Math.floor(Math.random() * 61), layout: pick(['classic', 'showcase']),
+        btnShape: pick(['circle', 'rounded', 'square']), progressStyle: pick(['round', 'square', 'glow']),
+        coverStyle: pick(['square', 'round', 'vinyl']), frameGlow: Math.random() < .5, frameBrackets: Math.random() < .4, frameRing: Math.random() < .4,
+        particles: pick(['none', 'petals', 'stars', 'sparkles', 'snow', 'hearts', 'bubbles', 'confetti']), particleColor: pick(['mix', 'accent', 'accent2', 'white', 'rainbow']),
+        glow: Math.random() < .4, pulse: Math.random() < .5,
+        viz: pick(['bars', 'mirror', 'wave', 'circle', 'dots', 'skyline']), vizColor: pick(['accent', 'duo', 'gradient', 'rainbow']),
+        vizColor2: hslToHex(Math.floor(Math.random() * 360), 80, 60), vizGlow: Math.random() < .5, vizPeaks: Math.random() < .5,
+      }, pick(['light', 'dark']));
+    });
+
+    // Style codes (share your look)
+    $('style-copy').addEventListener('click', async () => {
+      const obj = { theme: currentTheme(), name: S.name, emoji: S.emoji, logoText: S.logoText, watermark: S.watermark };
+      for (const k of STYLE_KEYS) obj[k] = S[k];
+      if (obj.bg === 'image') obj.bg = 'none';   // pictures stay on your device
+      const code = 'MP1:' + btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
+      $('style-code').value = code;
+      $('style-code').select();
+      try { await navigator.clipboard.writeText(code); $('style-msg').textContent = '✅ Copied! Send it to a friend.'; }
+      catch (e) { $('style-msg').textContent = 'Select the code above and copy it.'; }
+    });
+    $('style-apply').addEventListener('click', () => {
+      try {
+        const raw = $('style-code').value.trim().replace(/^MP1:/, '');
+        const obj = JSON.parse(decodeURIComponent(escape(atob(raw))));
+        if (typeof obj !== 'object' || !obj) throw 0;
+        const clean = {};
+        for (const k of STYLE_KEYS) if (k in obj && typeof obj[k] === typeof DEFAULTS[k] || (k === 'accent' && (obj[k] === null || typeof obj[k] === 'string'))) clean[k] = obj[k];
+        for (const k of ['name', 'emoji', 'logoText', 'watermark']) if (typeof obj[k] === 'string') S[k] = obj[k].slice(0, 40);
+        applyStyle({ ...Object.fromEntries(STYLE_KEYS.map(k => [k, S[k]])), ...clean }, ['auto', 'light', 'dark'].includes(obj.theme) ? obj.theme : null);
+        $('style-msg').textContent = '✅ Style applied!';
+      } catch (e) { $('style-msg').textContent = '❌ That code doesn\'t look right. Check you copied all of it.'; }
+    });
 
     // EQ presets
     $('eq-presets').addEventListener('click', e => {
@@ -757,7 +1373,6 @@
     });
 
     // Sleep timer (not saved)
-    let sleepMode = 0, sleepEnd = 0, sleepTick = null;
     $('sleep-seg').addEventListener('click', e => {
       const b = e.target.closest('button'); if (!b) return;
       clearInterval(sleepTick);
@@ -775,40 +1390,147 @@
       const left = Math.max(0, sleepEnd - Date.now());
       badge.hidden = false;
       badge.textContent = '💤 ' + fmt(left / 1000);
-      if (left === 0) { audio.pause(); cancelSleep(); }
+      if (left === 0) { pause(); cancelSleep(); }
     }
     function cancelSleep() { clearInterval(sleepTick); sleepMode = 0; updateSleep(); syncControls(); }
 
     $('reset-settings').addEventListener('click', () => {
-      if (!confirm('Reset all your customizations back to the defaults? Your songs will stay.')) return;
-      S = { ...DEFAULTS, volume: S.volume };
+      if (!confirm('Reset all your customizations back to the defaults? Your songs and stickers will stay.')) return;
+      const keep = { volume: S.volume, stickers: S.stickers };
+      S = { ...structuredClone(DEFAULTS), ...keep };
       setTheme('auto');
+      parts = [];
       save(); applyAll(); syncControls(); applyModes(); applyVolume();
     });
     $('clear-songs').addEventListener('click', async () => {
       if (!tracks.length || !confirm(`Remove all ${tracks.length} songs from this player?`)) return;
       audio.pause(); audio.removeAttribute('src');
-      tracks.forEach(t => t.url && URL.revokeObjectURL(t.url));
+      tracks.forEach(t => { t.url && URL.revokeObjectURL(t.url); t.coverUrl && URL.revokeObjectURL(t.coverUrl); });
       tracks = []; current = -1; history = [];
       await db.clearTracks();
-      showEmpty(); render();
+      showEmpty(); render(); syncControls();
     });
 
-    // ================= Playback state =================
-    let tracks = [];          // { id, name, blob, duration, addedAt, order, url }
-    let current = -1;
-    let history = [];         // for "previous" while shuffling
-    let searchTerm = '';
+    // ================= Cover art =================
+    function updateCover() {
+      const t = tracks[current];
+      const img = $('cover-img');
+      const url = t ? coverUrlFor(t) : null;
+      img.style.backgroundImage = url ? `url("${url}")` : '';
+      img.textContent = url ? '' : '♪';
+      $('cover').classList.toggle('spinning', S.coverStyle === 'vinyl' && !audio.paused);
+    }
+    async function setCover(i, blob) {
+      const t = tracks[i]; if (!t) return;
+      if (t.coverUrl) URL.revokeObjectURL(t.coverUrl);
+      t.coverUrl = null;
+      t.cover = blob || null;
+      await db.putTrack(t);
+      updateCover(); render();
+      if (i === current) updateMediaSession(t);
+    }
+    $('cover').addEventListener('click', () => { if (current !== -1) $('cover-file').click(); else $('file').click(); });
+    $('cover-change').addEventListener('click', () => { if (current !== -1) $('cover-file').click(); });
+    $('cover-remove').addEventListener('click', () => { if (current !== -1) setCover(current, null); });
+    $('cover-file').addEventListener('change', () => {
+      const f = $('cover-file').files[0]; $('cover-file').value = '';
+      if (f && current !== -1) setCover(current, f);
+    });
 
-    const fmt = s => {
-      if (!isFinite(s)) return '0:00';
-      s = Math.floor(s);
-      const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = String(s % 60).padStart(2, '0');
-      return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
-    };
-    const cleanName = f => f.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').trim();
-    const urlFor = t => t.url || (t.url = URL.createObjectURL(t.blob));
+    // Decorative star ring around the cover
+    (function buildRing() {
+      let s = `<circle cx="100" cy="100" r="93" fill="none" stroke="var(--accent)" stroke-width="1.2" stroke-dasharray="2 5" opacity=".8"/>
+               <circle cx="100" cy="100" r="86" fill="none" stroke="var(--accent)" stroke-width="0.8" opacity=".6"/>
+               <circle cx="100" cy="100" r="98" fill="none" stroke="var(--accent2)" stroke-width="0.8" opacity=".5"/>`;
+      for (let k = 0; k < 12; k++) {
+        const a = k / 12 * Math.PI * 2, x = 100 + Math.cos(a) * 93, y = 100 + Math.sin(a) * 93, r = k % 3 === 0 ? 7 : 4;
+        s += `<path d="M${x} ${y - r}Q${x} ${y} ${x + r} ${y}Q${x} ${y} ${x} ${y + r}Q${x} ${y} ${x - r} ${y}Q${x} ${y} ${x} ${y - r}Z" fill="${k % 3 === 0 ? 'var(--accent2)' : 'var(--accent)'}"/>`;
+      }
+      $('ring').innerHTML = s;
+    })();
 
+    // ================= Stickers =================
+    function renderStickers() {
+      const box = $('stickers');
+      const want = S.stickers.filter(s => stickerUrls[s.id]);
+      box.querySelectorAll('.sticker').forEach(el => { if (!want.find(s => s.id === el.dataset.id)) el.remove(); });
+      for (const s of want) {
+        let el = box.querySelector(`[data-id="${s.id}"]`);
+        if (!el) {
+          el = document.createElement('div');
+          el.className = 'sticker'; el.dataset.id = s.id;
+          el.innerHTML = `<img alt=""><div class="tools">
+            <button data-act="smaller" title="Smaller">➖</button><button data-act="bigger" title="Bigger">➕</button>
+            <button data-act="rotate" title="Rotate">↻</button><button data-act="flip" title="Flip">⇋</button>
+            <button data-act="delete" title="Delete">🗑️</button></div>`;
+          el.querySelector('img').src = stickerUrls[s.id];
+          wireSticker(el);
+          box.appendChild(el);
+        }
+        el.style.left = s.x + '%';
+        el.style.top = s.y + '%';
+        el.style.width = s.w + 'px';
+        el.style.transform = `translate(-50%, -50%) rotate(${s.rot || 0}deg) scaleX(${s.flip ? -1 : 1})`;
+      }
+    }
+    function wireSticker(el) {
+      const find = () => S.stickers.find(s => s.id === el.dataset.id);
+      el.addEventListener('click', async e => {
+        const b = e.target.closest('button'); if (!b) return;
+        const s = find(); if (!s) return;
+        if (b.dataset.act === 'smaller') s.w = Math.max(30, s.w - 20);
+        if (b.dataset.act === 'bigger') s.w = Math.min(900, s.w + 20);
+        if (b.dataset.act === 'rotate') s.rot = ((s.rot || 0) + 15) % 360;
+        if (b.dataset.act === 'flip') s.flip = !s.flip;
+        if (b.dataset.act === 'delete') {
+          S.stickers = S.stickers.filter(x => x !== s);
+          await db.delFile('sticker:' + s.id);
+          URL.revokeObjectURL(stickerUrls[s.id]); delete stickerUrls[s.id];
+        }
+        save(); renderStickers(); renderStickerList();
+      });
+      el.addEventListener('pointerdown', e => {
+        if (!document.body.classList.contains('sticker-edit') || e.target.closest('button')) return;
+        e.preventDefault();
+        el.setPointerCapture(e.pointerId);
+        const s = find();
+        const move = ev => {
+          s.x = Math.max(0, Math.min(100, ev.clientX / innerWidth * 100));
+          s.y = Math.max(0, Math.min(100, ev.clientY / innerHeight * 100));
+          renderStickers();
+        };
+        const up = () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); save(); };
+        el.addEventListener('pointermove', move);
+        el.addEventListener('pointerup', up);
+      });
+      el.addEventListener('wheel', e => {
+        if (!document.body.classList.contains('sticker-edit')) return;
+        e.preventDefault();
+        const s = find(); s.w = Math.max(30, Math.min(900, s.w - Math.sign(e.deltaY) * 10));
+        renderStickers(); save();
+      }, { passive: false });
+    }
+    function renderStickerList() {
+      $('sticker-list').innerHTML = S.stickers.filter(s => stickerUrls[s.id]).map(s => `<img src="${stickerUrls[s.id]}" alt="Sticker">`).join('')
+        || '<span class="desc">No stickers yet.</span>';
+      $('sticker-edit').disabled = !S.stickers.length;
+    }
+    $('sticker-add').addEventListener('click', () => $('sticker-file').click());
+    $('sticker-file').addEventListener('change', async () => {
+      const files = [...$('sticker-file').files]; $('sticker-file').value = '';
+      for (const f of files.slice(0, 12)) {
+        if (S.stickers.length >= 12) { alert('You can have up to 12 stickers.'); break; }
+        const id = newId();
+        await db.putFile('sticker:' + id, f);
+        stickerUrls[id] = URL.createObjectURL(f);
+        S.stickers.push({ id, x: 30 + Math.random() * 40, y: 25 + Math.random() * 30, w: 150, rot: 0, flip: false });
+      }
+      save(); renderStickers(); renderStickerList();
+    });
+    $('sticker-edit').addEventListener('click', () => { dlg.close(); document.body.classList.add('sticker-edit'); });
+    $('stickers-done').addEventListener('click', () => document.body.classList.remove('sticker-edit'));
+
+    // ================= Adding / removing / reordering songs =================
     function getDuration(blob) {
       return new Promise(resolve => {
         const a = new Audio();
@@ -820,19 +1542,22 @@
       });
     }
 
-    // ================= Adding / removing / reordering songs =================
     async function addFiles(files) {
       const audioFiles = [...files].filter(f => f.type.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|aac|flac|opus|webm)$/i.test(f.name));
       const firstNew = tracks.length;
       let order = tracks.reduce((m, t) => Math.max(m, t.order ?? 0), 0);
       for (const f of audioFiles) {
+        const tags = S.readTags ? await readTags(f) : {};
         const t = {
-          id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
-          name: cleanName(f.name),
+          id: newId(),
+          name: tags.title || cleanName(f.name),
+          artist: tags.artist || '',
+          cover: tags.cover || null,
           blob: f,
           duration: await getDuration(f),
           addedAt: Date.now(),
           order: ++order,
+          tagsRead: true,
         };
         tracks.push(t);
         await db.putTrack(t);
@@ -846,6 +1571,7 @@
     async function removeTrack(i) {
       const [t] = tracks.splice(i, 1);
       if (t.url) URL.revokeObjectURL(t.url);
+      if (t.coverUrl) URL.revokeObjectURL(t.coverUrl);
       await db.removeTrack(t.id);
       history = [];
       if (i === current) {
@@ -887,7 +1613,10 @@
     // ================= Playback =================
     function updateMediaSession(t) {
       if ('mediaSession' in navigator && window.MediaMetadata) {
-        navigator.mediaSession.metadata = new MediaMetadata({ title: t.name, artist: S.name || 'My Music' });
+        const art = coverUrlFor(t);
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: t.name, artist: t.artist || S.name || 'My Music', artwork: art ? [{ src: art, sizes: '512x512' }] : [],
+        });
       }
     }
 
@@ -895,13 +1624,24 @@
       if (i < 0 || i >= tracks.length) return;
       current = i;
       const t = tracks[i];
+      clearTimeout(fadeTimer); fadeTimer = null;
       audio.src = urlFor(t);
       audio.playbackRate = S.speed;
       $('title').textContent = t.name;
+      $('artist').textContent = t.artist || '';
       document.title = `${t.name} · ${S.name || 'My Music'}`;
       updateMediaSession(t);
+      updateCover();
       render();
       if (autoplay) play();
+    }
+
+    function fadeTo(value, secs) {
+      if (!nodes.fade || !audioCtx) return;
+      const g = nodes.fade.gain, now = audioCtx.currentTime;
+      g.cancelScheduledValues(now);
+      g.setValueAtTime(g.value, now);
+      g.linearRampToValueAtTime(value, now + secs);
     }
 
     function play() {
@@ -910,9 +1650,24 @@
         return load(S.shuffle ? randomIndex() : 0);
       }
       setupAudioGraph();
+      const wasFadingOut = fadeTimer !== null;
+      clearTimeout(fadeTimer); fadeTimer = null;
+      if (nodes.fade) {
+        if (S.fades) { if (audio.paused && !wasFadingOut) nodes.fade.gain.value = 0; fadeTo(1, 0.4); }
+        else { nodes.fade.gain.cancelScheduledValues(0); nodes.fade.gain.value = 1; }
+      }
       audio.play().catch(() => {});
     }
-    function togglePlay() { audio.paused ? play() : audio.pause(); }
+
+    function pause() {
+      if (audio.paused) return;
+      if (S.fades && nodes.fade && audioCtx && audioCtx.state === 'running') {
+        if (fadeTimer) return;
+        fadeTo(0, 0.3);
+        fadeTimer = setTimeout(() => { fadeTimer = null; audio.pause(); }, 300);
+      } else audio.pause();
+    }
+    function togglePlay() { (audio.paused || fadeTimer) ? play() : pause(); }
 
     function randomIndex() {
       if (tracks.length < 2) return 0;
@@ -943,7 +1698,7 @@
       else next(true);
     });
 
-    // ================= Play/pause & volume icons =================
+    // ================= Icons =================
     const PLAY = '<path d="M8 5v14l11-7L8 5Z"/>';
     const PAUSE = '<path d="M6 5h4v14H6V5Zm8 0h4v14h-4V5Z"/>';
     function updatePlayIcon() {
@@ -951,11 +1706,11 @@
       $('play-icon').innerHTML = playing ? PAUSE : PLAY;
       $('play').setAttribute('aria-label', playing ? 'Pause' : 'Play');
       $('play').title = playing ? 'Pause' : 'Play';
+      $('cover').classList.toggle('spinning', S.coverStyle === 'vinyl' && playing);
       if ('mediaSession' in navigator) navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
     }
     audio.addEventListener('play', updatePlayIcon);
     audio.addEventListener('pause', updatePlayIcon);
-
     const VOL_ON = '<path d="M3 9v6h4l5 5V4L7 9H3Zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4Z"/>';
     const VOL_OFF = '<path d="M3 9v6h4l5 5V4L7 9H3Zm18.6 1.4-1.4-1.4L18 11.2 15.8 9l-1.4 1.4 2.2 2.2-2.2 2.2 1.4 1.4 2.2-2.2 2.2 2.2 1.4-1.4-2.2-2.2 2.2-2.2Z"/>';
 
@@ -1024,16 +1779,19 @@
       const q = searchTerm.toLowerCase();
       let shown = 0;
       tracks.forEach((t, i) => {
-        if (q && !t.name.toLowerCase().includes(q)) return;
+        if (q && !(t.name + ' ' + (t.artist || '')).toLowerCase().includes(q)) return;
         shown++;
         const li = document.createElement('li');
         if (i === current) li.className = 'playing';
         li.draggable = !q;
-        li.innerHTML = `<span class="num">${i === current && !audio.paused ? '♪' : i + 1}</span>
-          <span class="name"></span><span class="dur">${fmt(t.duration)}</span>
+        const thumb = S.listCovers ? `<span class="thumb">${coverUrlFor(t) ? '' : '♪'}</span>` : '';
+        li.innerHTML = `<span class="num">${i === current && !audio.paused ? '♪' : i + 1}</span>${thumb}
+          <span class="meta"><span class="name"></span><span class="by"></span></span><span class="dur">${fmt(t.duration)}</span>
           <button class="mini edit" aria-label="Rename" title="Rename">✏️</button>
           <button class="mini remove" aria-label="Remove" title="Remove">✕</button>`;
         li.querySelector('.name').textContent = t.name;
+        li.querySelector('.by').textContent = t.artist || '';
+        if (S.listCovers && coverUrlFor(t)) li.querySelector('.thumb').style.backgroundImage = `url("${coverUrlFor(t)}")`;
 
         li.addEventListener('click', e => {
           if (e.target.closest('.remove')) return removeTrack(i);
@@ -1043,7 +1801,6 @@
         });
         li.addEventListener('dblclick', e => { if (!e.target.closest('button, .rename')) startRename(li, i); });
 
-        // Drag to reorder
         li.addEventListener('dragstart', e => {
           dragFrom = i; li.classList.add('dragging');
           e.dataTransfer.effectAllowed = 'move';
@@ -1053,7 +1810,8 @@
         li.addEventListener('dragover', e => {
           if (dragFrom === null) return;
           e.preventDefault();
-          const below = e.offsetY > li.clientHeight / 2;
+          const r = li.getBoundingClientRect();
+          const below = e.clientY > r.top + r.height / 2;
           clearDragMarks();
           li.classList.add(below ? 'drag-below' : 'drag-above');
         });
@@ -1074,14 +1832,16 @@
       $('drag-hint').hidden = tracks.length < 1;
       $('empty-search').style.display = q && tracks.length && !shown ? 'block' : 'none';
       ['prev', 'next'].forEach(id => $(id).disabled = !tracks.length);
-      $('subtitle').textContent = current !== -1 ? `Song ${current + 1} of ${tracks.length}` : (tracks.length ? `${tracks.length} songs ready` : 'Add some songs below to get started');
+      $('subtitle').textContent = current !== -1
+        ? `${tracks[current]?.artist ? '· ' : ''}Song ${current + 1} of ${tracks.length}`
+        : (tracks.length ? `${tracks.length} songs ready` : 'Add some songs below to get started');
     }
     const clearDragMarks = () => document.querySelectorAll('.drag-above, .drag-below').forEach(el => el.classList.remove('drag-above', 'drag-below'));
     audio.addEventListener('play', render);
     audio.addEventListener('pause', render);
 
     function startRename(li, i) {
-      const nameEl = li.querySelector('.name');
+      const nameEl = li.querySelector('.meta');
       const input = document.createElement('input');
       input.className = 'rename';
       input.value = tracks[i].name;
@@ -1101,12 +1861,13 @@
 
     function showEmpty() {
       $('title').textContent = 'No song playing';
+      $('artist').textContent = '';
       $('cur').textContent = $('dur').textContent = '0:00';
       seek.value = 0; paintRange(seek);
       document.title = S.name || 'My Music';
+      updateCover();
     }
 
-    // Search
     $('toggle-search').addEventListener('click', () => {
       const s = $('search');
       s.classList.toggle('show');
@@ -1134,6 +1895,7 @@
     // ================= Keyboard shortcuts =================
     document.addEventListener('keydown', e => {
       if (dlg.open) return;
+      if (e.key === 'Escape' && document.body.classList.contains('sticker-edit')) return document.body.classList.remove('sticker-edit');
       if (e.target.matches('textarea, input:not([type="range"])')) return;
       if (e.code === 'Space' && e.target.closest('button')) return;  // the button handles its own click
       if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
@@ -1142,47 +1904,42 @@
       else if (e.key === 'm' || e.key === 'M') toggleMute();
     });
 
-    // ================= Lock screen / media keys =================
     if ('mediaSession' in navigator) {
       navigator.mediaSession.setActionHandler('play', play);
-      navigator.mediaSession.setActionHandler('pause', () => audio.pause());
+      navigator.mediaSession.setActionHandler('pause', pause);
       navigator.mediaSession.setActionHandler('nexttrack', () => next());
       navigator.mediaSession.setActionHandler('previoustrack', prev);
     }
 
-    // ================= Audio graph: equalizer + visualizer =================
-    let audioCtx, analyser, freq, wave;
-    const eq = {};
+    // ================= Audio graph: EQ, fades, balance, boost, analyser =================
     function setupAudioGraph() {
       if (audioCtx) { if (audioCtx.state === 'suspended') audioCtx.resume(); return; }
       try {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const src = audioCtx.createMediaElementSource(audio);
-        eq.low = audioCtx.createBiquadFilter();  eq.low.type = 'lowshelf';  eq.low.frequency.value = 200;
-        eq.mid = audioCtx.createBiquadFilter();  eq.mid.type = 'peaking';   eq.mid.frequency.value = 1200; eq.mid.Q.value = 0.9;
-        eq.high = audioCtx.createBiquadFilter(); eq.high.type = 'highshelf'; eq.high.frequency.value = 4500;
+        nodes.low = audioCtx.createBiquadFilter();  nodes.low.type = 'lowshelf';  nodes.low.frequency.value = 200;
+        nodes.mid = audioCtx.createBiquadFilter();  nodes.mid.type = 'peaking';   nodes.mid.frequency.value = 1200; nodes.mid.Q.value = 0.9;
+        nodes.high = audioCtx.createBiquadFilter(); nodes.high.type = 'highshelf'; nodes.high.frequency.value = 4500;
+        nodes.fade = audioCtx.createGain();
+        nodes.pan = audioCtx.createStereoPanner ? audioCtx.createStereoPanner() : null;
+        nodes.boost = audioCtx.createGain();
         analyser = audioCtx.createAnalyser();
         analyser.fftSize = 512;
         freq = new Uint8Array(analyser.frequencyBinCount);
         wave = new Uint8Array(analyser.fftSize);
-        src.connect(eq.low); eq.low.connect(eq.mid); eq.mid.connect(eq.high); eq.high.connect(analyser);
-        analyser.connect(audioCtx.destination);
+        const chain = [src, nodes.low, nodes.mid, nodes.high, nodes.fade, nodes.pan, nodes.boost, analyser, audioCtx.destination].filter(Boolean);
+        for (let i = 0; i < chain.length - 1; i++) chain[i].connect(chain[i + 1]);
         applyAll();
       } catch (e) { analyser = null; }
     }
 
-    // ================= Visualizer drawing =================
+    // ================= Visualizer =================
     const canvas = $('viz');
     const ctx = canvas.getContext('2d');
 
-    function hexToRgb(h) {
-      const m = /^#?([\da-f]{6})$/i.exec((h || '').trim());
-      if (!m) return null;
-      const n = parseInt(m[1], 16);
-      return [n >> 16, (n >> 8) & 255, n & 255];
-    }
     function colorAt(i, n, accent) {
       if (S.vizColor === 'rainbow') return `hsl(${(i / n) * 330 + (performance.now() / 50) % 360}, 85%, 60%)`;
+      if (S.vizColor === 'duo') return i % 2 ? S.accent2 : accent;
       if (S.vizColor === 'gradient') {
         const a = hexToRgb(accent), b = hexToRgb(S.vizColor2);
         if (a && b) {
@@ -1192,10 +1949,28 @@
       }
       return accent;
     }
+    function lineGradient(w, accent) {
+      const g = ctx.createLinearGradient(0, 0, w, 0);
+      if (S.vizColor === 'rainbow') for (let k = 0; k <= 6; k++) g.addColorStop(k / 6, `hsl(${k * 55 + (performance.now() / 50) % 360},85%,60%)`);
+      else { g.addColorStop(0, accent); g.addColorStop(1, S.vizColor === 'gradient' ? S.vizColor2 : S.vizColor === 'duo' ? S.accent2 : accent); }
+      return g;
+    }
 
     function draw() {
       requestAnimationFrame(draw);
+      const live = analyser && !audio.paused;
+      if (live) analyser.getByteFrequencyData(freq);
+
+      // Beat detection for pulse, glow & particles
+      let bass = 0;
+      if (live) { for (let i = 0; i < 6; i++) bass += freq[i]; bass /= 6 * 255; }
+      const target = live ? Math.pow(bass, 2) * 1.2 : 0;
+      pulseVal = Math.max(target, pulseVal * 0.9);
+      root.style.setProperty('--pulse', pulseVal.toFixed(3));
+
+      drawParticles(live);
       if (S.viz === 'off' || S.compact) return;
+
       const dpr = window.devicePixelRatio || 1;
       const w = canvas.clientWidth, h = canvas.clientHeight;
       if (!w || !h) return;
@@ -1204,20 +1979,43 @@
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
+      ctx.shadowBlur = 0;
 
-      const live = analyser && !audio.paused;
-      const accent = getComputedStyle(root).getPropertyValue('--accent').trim();
+      const accent = cssVar('--accent');
       const n = S.viz === 'dots' ? Math.round(S.vizBars / 2) : S.vizBars;
       const t = performance.now() / 1000;
 
       if (S.viz === 'wave') return drawWave(w, h, live, accent, t);
 
-      if (live) analyser.getByteFrequencyData(freq);
       const vals = [];
       for (let i = 0; i < n; i++) {
         vals.push(live
           ? Math.min(1, freq[Math.floor(Math.pow(i / n, 1.25) * freq.length * 0.7)] / 255 * S.vizSens)
           : 0.05 + 0.03 * Math.sin(t * 1.5 + i * 0.4));
+      }
+      const glowOn = c => { if (S.vizGlow) { ctx.shadowBlur = 12; ctx.shadowColor = c; } };
+
+      if (S.viz === 'skyline') {
+        const top = 6, step = 4, maxH = h - 28;
+        const segW = w / n;
+        const hs = vals.map(v => Math.max(step, Math.round(v * maxH / step) * step));
+        const text = cssVar('--text');
+        // Solid stepped block hanging from the top
+        ctx.fillStyle = text;
+        ctx.fillRect(0, top, w, 3);
+        ctx.beginPath(); ctx.moveTo(0, top);
+        hs.forEach((hh, i) => { ctx.lineTo(i * segW, top + hh); ctx.lineTo((i + 1) * segW, top + hh); });
+        ctx.lineTo(w, top); ctx.closePath();
+        ctx.globalAlpha = 0.92; ctx.fill(); ctx.globalAlpha = 1;
+        // Colored stepped line underneath
+        ctx.strokeStyle = lineGradient(w, S.vizColor === 'accent' ? accent : S.vizColor === 'duo' ? S.accent2 : accent);
+        glowOn(S.vizColor === 'duo' ? S.accent2 : accent);
+        ctx.lineWidth = S.vizLine + 1; ctx.lineJoin = 'miter';
+        ctx.beginPath();
+        hs.forEach((hh, i) => { const y = top + hh + 8; i ? ctx.lineTo(i * segW, y) : ctx.moveTo(0, y); ctx.lineTo((i + 1) * segW, y); });
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        return;
       }
 
       if (S.viz === 'circle') {
@@ -1227,14 +2025,15 @@
         vals.forEach((v, i) => {
           const a = (i / n) * Math.PI * 2 - Math.PI / 2;
           const len = 3 + v * maxLen;
-          ctx.strokeStyle = colorAt(i, n, accent);
+          const c = colorAt(i, n, accent);
+          ctx.strokeStyle = c; glowOn(c);
           ctx.globalAlpha = 0.45 + v * 0.55;
           ctx.beginPath();
           ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
           ctx.lineTo(cx + Math.cos(a) * (r0 + len), cy + Math.sin(a) * (r0 + len));
           ctx.stroke();
         });
-        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
         const avg = vals.reduce((s, v) => s + v, 0) / n;
         ctx.fillStyle = colorAt(0, n, accent);
         ctx.globalAlpha = 0.25 + avg * 0.5;
@@ -1243,11 +2042,13 @@
         return;
       }
 
+      if (peaks.length !== n) peaks = new Array(n).fill(0);
       const gap = S.viz === 'dots' ? 6 : 4;
       const bw = Math.max(1, (w - gap * (n + 1)) / n);
       vals.forEach((v, i) => {
         const x = gap + i * (bw + gap);
-        ctx.fillStyle = colorAt(i, n, accent);
+        const c = colorAt(i, n, accent);
+        ctx.fillStyle = c; glowOn(c);
         ctx.globalAlpha = 0.35 + v * 0.65;
         if (S.viz === 'dots') {
           const r = Math.min(bw / 2, 7);
@@ -1258,27 +2059,29 @@
           }
           return;
         }
-        const bh = Math.max(4, v * (h - 16));
+        const bh = Math.max(4, v * (h - 20));
         const y = S.viz === 'mirror' ? (h - bh) / 2 : h - 8 - bh;
         ctx.beginPath();
         if (ctx.roundRect) ctx.roundRect(x, y, bw, bh, Math.min(3, bw / 2)); else ctx.rect(x, y, bw, bh);
         ctx.fill();
+        if (S.vizPeaks) {
+          peaks[i] = Math.max(v, peaks[i] - 0.008);
+          const ph = Math.max(4, peaks[i] * (h - 20));
+          ctx.globalAlpha = 1;
+          if (S.viz === 'mirror') { ctx.fillRect(x, (h - ph) / 2 - 5, bw, 3); ctx.fillRect(x, (h + ph) / 2 + 2, bw, 3); }
+          else ctx.fillRect(x, h - 8 - ph - 5, bw, 3);
+        }
       });
       ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
     }
 
     function drawWave(w, h, live, accent, t) {
       if (live) analyser.getByteTimeDomainData(wave);
       const points = 128;
-      const g = ctx.createLinearGradient(0, 0, w, 0);
-      if (S.vizColor === 'rainbow') {
-        for (let k = 0; k <= 6; k++) g.addColorStop(k / 6, `hsl(${k * 55 + (performance.now() / 50) % 360},85%,60%)`);
-      } else {
-        g.addColorStop(0, accent);
-        g.addColorStop(1, S.vizColor === 'gradient' ? S.vizColor2 : accent);
-      }
-      ctx.strokeStyle = g;
-      ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.strokeStyle = lineGradient(w, accent);
+      if (S.vizGlow) { ctx.shadowBlur = 14; ctx.shadowColor = accent; }
+      ctx.lineWidth = S.vizLine; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
       ctx.beginPath();
       for (let i = 0; i <= points; i++) {
         let v;
@@ -1289,6 +2092,104 @@
         i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
       }
       ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    // ================= Floating particles =================
+    const fx = $('fx');
+    const fctx = fx.getContext('2d');
+    const RISING = new Set(['sparkles', 'hearts', 'bubbles']);
+    function makeParticle(initial) {
+      const W = innerWidth, H = innerHeight;
+      const rising = RISING.has(S.particles);
+      return {
+        x: Math.random() * W,
+        y: initial ? Math.random() * H : (rising ? H + 20 : -20),
+        vx: (Math.random() - .5) * 0.5,
+        vy: (rising ? -1 : 1) * (0.35 + Math.random() * 0.9),
+        r: (5 + Math.random() * 7) * S.particleSize,
+        rot: Math.random() * Math.PI * 2, vr: (Math.random() - .5) * 0.04,
+        phase: Math.random() * Math.PI * 2, hue: Math.random() * 360, alt: Math.random() < .5,
+      };
+    }
+    function particleColor(p, t) {
+      switch (S.particleColor) {
+        case 'accent': return cssVar('--accent');
+        case 'accent2': return S.accent2;
+        case 'white': return '#ffffff';
+        case 'rainbow': return `hsl(${(p.hue + t * 30) % 360},90%,65%)`;
+        default: return p.alt ? cssVar('--accent') : S.accent2;
+      }
+    }
+    function drawShape(c, p, t) {
+      const r = p.r;
+      c.save();
+      c.translate(p.x, p.y);
+      c.rotate(p.rot);
+      c.beginPath();
+      switch (S.particles) {
+        case 'petals':
+          for (let k = 0; k < 5; k++) { c.rotate(Math.PI * 2 / 5); c.moveTo(0, 0); c.ellipse(0, -r * 0.55, r * 0.32, r * 0.55, 0, 0, Math.PI * 2); }
+          c.fill();
+          c.beginPath(); c.fillStyle = 'rgba(255,255,255,.85)'; c.arc(0, 0, r * 0.18, 0, Math.PI * 2); c.fill();
+          break;
+        case 'stars': {
+          c.globalAlpha *= 0.55 + 0.45 * Math.sin(t * 3 + p.phase);
+          c.moveTo(0, -r); c.quadraticCurveTo(0, 0, r, 0); c.quadraticCurveTo(0, 0, 0, r);
+          c.quadraticCurveTo(0, 0, -r, 0); c.quadraticCurveTo(0, 0, 0, -r); c.fill();
+          break;
+        }
+        case 'sparkles':
+          c.globalAlpha *= 0.5 + 0.5 * Math.sin(t * 4 + p.phase);
+          c.arc(0, 0, r * 0.28, 0, Math.PI * 2); c.fill();
+          break;
+        case 'snow':
+          c.arc(0, 0, r * 0.4, 0, Math.PI * 2); c.fill();
+          break;
+        case 'hearts': {
+          const s = r / 10;
+          c.moveTo(0, 3 * s);
+          c.bezierCurveTo(-10 * s, -4 * s, -5 * s, -11 * s, 0, -5 * s);
+          c.bezierCurveTo(5 * s, -11 * s, 10 * s, -4 * s, 0, 3 * s);
+          c.fill();
+          break;
+        }
+        case 'bubbles':
+          c.lineWidth = 1.5; c.arc(0, 0, r * 0.7, 0, Math.PI * 2); c.stroke();
+          c.beginPath(); c.globalAlpha *= 0.6; c.arc(-r * 0.25, -r * 0.25, r * 0.15, 0, Math.PI * 2); c.fill();
+          break;
+        case 'confetti':
+          c.fillRect(-r * 0.6, -r * 0.25, r * 1.2, r * 0.5);
+          break;
+      }
+      c.restore();
+    }
+    function drawParticles(live) {
+      const dpr = window.devicePixelRatio || 1;
+      const W = innerWidth, H = innerHeight;
+      if (fx.width !== Math.round(W * dpr) || fx.height !== Math.round(H * dpr)) { fx.width = Math.round(W * dpr); fx.height = Math.round(H * dpr); }
+      fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      fctx.clearRect(0, 0, W, H);
+      if (S.particles === 'none') { parts = []; return; }
+      if (partsType !== S.particles) { parts = []; partsType = S.particles; }
+      while (parts.length < S.particleCount) parts.push(makeParticle(true));
+      if (parts.length > S.particleCount) parts.length = S.particleCount;
+      const t = performance.now() / 1000;
+      const speed = S.particleBeat && live ? 1 + pulseVal * 4 : 1;
+      for (let i = 0; i < parts.length; i++) {
+        const p = parts[i];
+        p.x += (p.vx + Math.sin(t * 0.8 + p.phase) * 0.35) * speed;
+        p.y += p.vy * speed;
+        p.rot += p.vr * speed;
+        if (p.y > H + 30 || p.y < -30 || p.x < -30 || p.x > W + 30) { parts[i] = makeParticle(false); continue; }
+        const col = particleColor(p, t);
+        fctx.fillStyle = col; fctx.strokeStyle = col;
+        fctx.globalAlpha = 0.85;
+        if (S.particleGlow) { fctx.shadowBlur = 10; fctx.shadowColor = col; } else fctx.shadowBlur = 0;
+        drawShape(fctx, p, t);
+      }
+      fctx.globalAlpha = 1;
+      fctx.shadowBlur = 0;
     }
 
     // ================= Start =================
@@ -1304,13 +2205,33 @@
     (async () => {
       await db.open();
       const img = await db.getFile('bg');
-      if (img) { bgImageUrl = URL.createObjectURL(img); updateBgThumb(); applyAll(); }
+      if (img) { bgImageUrl = URL.createObjectURL(img); updateBgThumb(); }
+      for (const s of S.stickers) {
+        const f = await db.getFile('sticker:' + s.id);
+        if (f) stickerUrls[s.id] = URL.createObjectURL(f);
+      }
+      S.stickers = S.stickers.filter(s => stickerUrls[s.id]);
+      applyAll(); syncControls();
+
       const saved = (await db.allTracks()) || [];
       tracks = saved.sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity) || a.addedAt - b.addedAt);
-      // Songs saved by the older version of the player have no order yet
+      // Songs saved by older versions have no order yet
       for (const [i, t] of tracks.entries()) if (t.order !== i + 1) { t.order = i + 1; await db.putTrack(t); }
       render();
       if (tracks.length) load(0, false);
+
+      // Fill in artist & cover for songs added before tag reading existed
+      if (S.readTags) {
+        for (const t of tracks) {
+          if (t.tagsRead) continue;
+          const tags = await readTags(t.blob);
+          if (tags.artist && !t.artist) t.artist = tags.artist;
+          if (tags.cover && !t.cover) t.cover = tags.cover;
+          t.tagsRead = true;
+          await db.putTrack(t);
+        }
+        render(); if (current !== -1) { $('artist').textContent = tracks[current].artist || ''; updateCover(); }
+      }
     })();
   </script>
 </body>
