@@ -404,6 +404,13 @@
     .eq { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
     .eq label { display: block; font-size: 13px; color: var(--muted); text-align: center; margin-top: 6px; }
     .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .sticker-library { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 8px; }
+    .sticker-library button {
+      aspect-ratio: 1; border-radius: 12px; border: 1px solid var(--border); background: var(--surface-2); cursor: pointer; padding: 6px;
+      display: grid; place-items: center; transition: transform .12s;
+    }
+    .sticker-library button:hover { transform: scale(1.08); border-color: var(--accent); }
+    .sticker-library img { width: 100%; height: 100%; object-fit: contain; }
     .sticker-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     .sticker-list img { width: 56px; height: 56px; object-fit: contain; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); }
 
@@ -752,12 +759,24 @@
       <!-- STICKERS -->
       <div class="tab-page" data-page="stickers">
         <div class="row">
-          <div class="label">Stickers</div>
-          <div class="desc">Add your own pictures (PNGs with see-through backgrounds look best) and place them anywhere on the player.</div>
+          <div class="label">Sticker library</div>
+          <div class="desc">Tap a sticker to add it. Tap again to add another one.</div>
+          <div class="sticker-library" id="sticker-library"></div>
+        </div>
+        <div class="row">
+          <div class="label">Your own stickers</div>
+          <div class="desc">Upload your own pictures. PNGs with see-through backgrounds look best.</div>
           <div class="btn-row">
-            <button class="btn" id="sticker-add">＋ Add sticker</button>
-            <button class="btn ghost" id="sticker-edit">✋ Move &amp; resize stickers</button>
+            <button class="btn" id="sticker-add">＋ Upload a picture</button>
             <input type="file" id="sticker-file" accept="image/*" multiple hidden>
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">On your player</div>
+          <div class="desc">Click "Move &amp; edit" to drag stickers around. Use the buttons above each one to resize, rotate, flip, recolor 🎨, make it glow ✨ or delete it.</div>
+          <div class="btn-row">
+            <button class="btn" id="sticker-edit">✋ Move &amp; edit stickers</button>
+            <button class="btn ghost" id="sticker-clear">Remove all stickers</button>
           </div>
           <div class="sticker-list" id="sticker-list"></div>
         </div>
@@ -1450,6 +1469,54 @@
     })();
 
     // ================= Stickers =================
+    // Built-in sticker library (original drawings). Each gets a white sticker outline automatically.
+    const STICKER_LIBRARY = {
+      star: ['Star', `<path d="M50 8 61 37 92 38 68 57 76 89 50 71 24 89 32 57 8 38 39 37Z" fill="#ffd23f" stroke="#f4a300" stroke-width="2.5" stroke-linejoin="round"/><ellipse cx="44" cy="38" rx="6" ry="3.5" fill="#fff" opacity=".7"/>`],
+      sparkle: ['Sparkle', `<path d="M45 8Q49 41 82 45 49 49 45 82 41 49 8 45 41 41 45 8Z" fill="#7df9ff" stroke="#20c3d0" stroke-width="2"/><path d="M78 62Q80 76 92 78 80 80 78 92 76 80 64 78 76 76 78 62Z" fill="#ff9bf5" stroke="#d946ef" stroke-width="1.5"/>`],
+      heart: ['Heart', `<path d="M50 86C20 66 8 48 12 32 16 16 36 12 50 28 64 12 84 16 88 32 92 48 80 66 50 86Z" fill="#ff4f9a" stroke="#d62b78" stroke-width="2.5"/><ellipse cx="30" cy="33" rx="8" ry="4.5" transform="rotate(-35 30 33)" fill="#fff" opacity=".7"/>`],
+      note: ['Music note', `<path d="M34 72V24L80 12V62" fill="none" stroke="#8e4ec6" stroke-width="7" stroke-linejoin="round"/><path d="M34 22 80 10V24L34 36Z" fill="#8e4ec6"/><ellipse cx="24" cy="74" rx="13" ry="9.5" transform="rotate(-20 24 74)" fill="#8e4ec6"/><ellipse cx="70" cy="64" rx="13" ry="9.5" transform="rotate(-20 70 64)" fill="#8e4ec6"/><ellipse cx="20" cy="71" rx="4" ry="2" transform="rotate(-20 20 71)" fill="#fff" opacity=".6"/>`],
+      headphones: ['Headphones', `<path d="M20 60V48a30 30 0 0 1 60 0v12" fill="none" stroke="#2b2b35" stroke-width="8" stroke-linecap="round"/><rect x="10" y="54" width="22" height="34" rx="9" fill="#ff5c8a"/><rect x="68" y="54" width="22" height="34" rx="9" fill="#ff5c8a"/><rect x="26" y="60" width="9" height="22" rx="3" fill="#2b2b35"/><rect x="65" y="60" width="9" height="22" rx="3" fill="#2b2b35"/>`],
+      bolt: ['Lightning', `<path d="M58 6 20 56H46L38 94 80 40H54L66 6Z" fill="#ffe14d" stroke="#f0a500" stroke-width="2.5" stroke-linejoin="round"/>`],
+      crown: ['Crown', `<path d="M12 72 16 30 34 50 50 22 66 50 84 30 88 72Z" fill="#ffc53d" stroke="#d99400" stroke-width="2.5" stroke-linejoin="round"/><rect x="12" y="68" width="76" height="16" rx="3" fill="#ffb000" stroke="#d99400" stroke-width="2.5"/><circle cx="30" cy="76" r="4.5" fill="#e5484d"/><circle cx="50" cy="76" r="4.5" fill="#0090ff"/><circle cx="70" cy="76" r="4.5" fill="#30a46c"/><circle cx="16" cy="30" r="4" fill="#fff3b0"/><circle cx="50" cy="22" r="4" fill="#fff3b0"/><circle cx="84" cy="30" r="4" fill="#fff3b0"/>`],
+      moon: ['Moon', `<path d="M60 10A40 40 0 1 0 90 62 30 30 0 0 1 60 10Z" fill="#ffe9a8" stroke="#f2c14e" stroke-width="2.5"/><path d="M78 18Q79 25 86 26 79 27 78 34 77 27 70 26 77 25 78 18Z" fill="#fff"/><circle cx="36" cy="46" r="4" fill="#f2c14e" opacity=".5"/><circle cx="46" cy="70" r="3" fill="#f2c14e" opacity=".5"/>`],
+      flower: ['Flower', `<g fill="#ff8fc7" stroke="#e05a9e" stroke-width="2">${[0, 72, 144, 216, 288].map(a => `<ellipse cx="50" cy="28" rx="14" ry="20" transform="rotate(${a} 50 50)"/>`).join('')}</g><circle cx="50" cy="50" r="11" fill="#ffd23f" stroke="#f4a300" stroke-width="2"/>`],
+      fire: ['Fire', `<path d="M50 92C26 92 16 74 20 58 24 44 36 38 34 20 48 30 52 42 50 52 56 46 58 38 56 30 72 42 84 58 80 72 76 86 64 92 50 92Z" fill="#ff6b2c" stroke="#e5484d" stroke-width="2.5"/><path d="M50 90C40 90 34 82 36 72 38 64 46 60 46 52 54 58 58 64 56 70 60 68 62 64 62 60 68 68 68 78 64 84 60 88 56 90 50 90Z" fill="#ffd23f"/>`],
+      cassette: ['Cassette', `<rect x="8" y="22" width="84" height="58" rx="7" fill="#2b2b35"/><rect x="16" y="28" width="68" height="22" rx="3" fill="#ff8a3d"/><rect x="22" y="34" width="40" height="3" rx="1.5" fill="#fff" opacity=".8"/><rect x="22" y="41" width="28" height="3" rx="1.5" fill="#fff" opacity=".6"/><rect x="26" y="54" width="48" height="15" rx="7.5" fill="#eee"/><circle cx="37" cy="61.5" r="5" fill="#2b2b35"/><circle cx="63" cy="61.5" r="5" fill="#2b2b35"/><path d="M24 80 30 72H70L76 80Z" fill="#44444f"/>`],
+      vinyl: ['Record', `<circle cx="50" cy="50" r="42" fill="#15151a"/><circle cx="50" cy="50" r="34" fill="none" stroke="#33333d" stroke-width="1.5"/><circle cx="50" cy="50" r="26" fill="none" stroke="#33333d" stroke-width="1.5"/><circle cx="50" cy="50" r="15" fill="#e5484d"/><circle cx="50" cy="50" r="3" fill="#15151a"/><path d="M22 34A34 34 0 0 1 40 18" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".35"/>`],
+      cloud: ['Cloud', `<path d="M28 74H74A16 16 0 0 0 72 42 22 22 0 0 0 30 38 18 18 0 0 0 28 74Z" fill="#fff" stroke="#9ecbff" stroke-width="3"/><circle cx="42" cy="57" r="2.8" fill="#2b2b35"/><circle cx="58" cy="57" r="2.8" fill="#2b2b35"/><path d="M46 63Q50 67 54 63" fill="none" stroke="#2b2b35" stroke-width="2" stroke-linecap="round"/><circle cx="36" cy="63" r="3.5" fill="#ffb3c7"/><circle cx="64" cy="63" r="3.5" fill="#ffb3c7"/>`],
+      planet: ['Planet', `<circle cx="50" cy="50" r="24" fill="#8e4ec6" stroke="#6b2fa3" stroke-width="2"/><circle cx="42" cy="42" r="5" fill="#a86ee0"/><circle cx="58" cy="58" r="3.5" fill="#a86ee0"/><ellipse cx="50" cy="52" rx="44" ry="11" transform="rotate(-18 50 50)" fill="none" stroke="#ffc53d" stroke-width="5"/><path d="M30 42A24 24 0 0 1 74 44" fill="none" stroke="#8e4ec6" stroke-width="6" transform="rotate(-18 50 50)"/>`],
+      vibes: ['VIBES', `<rect x="6" y="24" width="88" height="44" rx="22" fill="#d946ef"/><path d="M30 64 22 84 46 66Z" fill="#d946ef"/><text x="50" y="54.5" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="21" fill="#fff">VIBES</text>`],
+      nowplaying: ['Now playing', `<rect x="4" y="34" width="92" height="32" rx="7" fill="#111" stroke="#ff8a3d" stroke-width="3"/><circle cx="16" cy="50" r="5" fill="#e5484d"/><text x="25" y="54.5" font-family="Arial, sans-serif" font-weight="700" font-size="12" textLength="64" lengthAdjust="spacingAndGlyphs" fill="#fff">NOW PLAYING</text>`],
+      ghost: ['Ghost', `<path d="M22 88V44A28 28 0 0 1 78 44V88L68 80 59 88 50 80 41 88 32 80Z" fill="#fff" stroke="#b8b8d0" stroke-width="3" stroke-linejoin="round"/><ellipse cx="40" cy="48" rx="4.5" ry="6.5" fill="#2b2b35"/><ellipse cx="60" cy="48" rx="4.5" ry="6.5" fill="#2b2b35"/><ellipse cx="50" cy="62" rx="4" ry="5" fill="#2b2b35"/><circle cx="33" cy="58" r="4" fill="#ffb3c7"/><circle cx="67" cy="58" r="4" fill="#ffb3c7"/>`],
+      cat: ['Cat', `<path d="M18 40 22 12 42 30ZM82 40 78 12 58 30Z" fill="#ffb86b" stroke="#e08a3a" stroke-width="2.5" stroke-linejoin="round"/><path d="M24 34 25 20 36 30ZM76 34 75 20 64 30Z" fill="#ffc7d6"/><ellipse cx="50" cy="56" rx="36" ry="30" fill="#ffb86b" stroke="#e08a3a" stroke-width="2.5"/><circle cx="38" cy="52" r="4.5" fill="#2b2b35"/><circle cx="62" cy="52" r="4.5" fill="#2b2b35"/><path d="M47 62H53L50 66Z" fill="#ff7a9a"/><path d="M50 66Q46 71 42 68M50 66Q54 71 58 68" fill="none" stroke="#2b2b35" stroke-width="1.8" stroke-linecap="round"/><path d="M14 58H30M16 66 30 62M86 58H70M84 66 70 62" stroke="#e08a3a" stroke-width="1.8" stroke-linecap="round"/>`],
+      butterfly: ['Butterfly', `<ellipse cx="30" cy="36" rx="20" ry="22" transform="rotate(-25 30 36)" fill="#12a594" stroke="#0b7c70" stroke-width="2"/><ellipse cx="70" cy="36" rx="20" ry="22" transform="rotate(25 70 36)" fill="#12a594" stroke="#0b7c70" stroke-width="2"/><ellipse cx="33" cy="68" rx="14" ry="16" transform="rotate(20 33 68)" fill="#8e4ec6" stroke="#6b2fa3" stroke-width="2"/><ellipse cx="67" cy="68" rx="14" ry="16" transform="rotate(-20 67 68)" fill="#8e4ec6" stroke="#6b2fa3" stroke-width="2"/><circle cx="28" cy="34" r="5" fill="#7df9ff"/><circle cx="72" cy="34" r="5" fill="#7df9ff"/><rect x="46" y="24" width="8" height="58" rx="4" fill="#2b2b35"/><path d="M48 26Q42 12 36 10M52 26Q58 12 64 10" fill="none" stroke="#2b2b35" stroke-width="2.2" stroke-linecap="round"/>`],
+      mic: ['Microphone', `<rect x="36" y="8" width="28" height="44" rx="14" fill="#c7c7d4" stroke="#8d8d9c" stroke-width="2.5"/><path d="M40 20H60M40 28H60M40 36H60" stroke="#8d8d9c" stroke-width="2"/><path d="M28 42A22 22 0 0 0 72 42" fill="none" stroke="#2b2b35" stroke-width="5" stroke-linecap="round"/><path d="M50 64V82" stroke="#2b2b35" stroke-width="5"/><rect x="34" y="82" width="32" height="8" rx="4" fill="#2b2b35"/>`],
+      gem: ['Gem', `<path d="M20 36 34 16H66L80 36 50 86Z" fill="#7df9ff" stroke="#1aa5c0" stroke-width="2.5" stroke-linejoin="round"/><path d="M20 36H80M34 16 42 36 50 86 58 36 66 16M42 36 50 16 58 36" fill="none" stroke="#1aa5c0" stroke-width="1.8" stroke-linejoin="round"/><path d="M36 20 30 32" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".8"/>`],
+      rainbow: ['Rainbow', `${['#e5484d', '#ff8a3d', '#ffd23f', '#30a46c', '#0090ff', '#8e4ec6'].map((c, i) => `<path d="M${12 + i * 5} 70A${38 - i * 5} ${38 - i * 5} 0 0 1 ${88 - i * 5} 70" fill="none" stroke="${c}" stroke-width="5.5"/>`).join('')}<circle cx="16" cy="72" r="9" fill="#fff"/><circle cx="26" cy="74" r="8" fill="#fff"/><circle cx="84" cy="72" r="9" fill="#fff"/><circle cx="74" cy="74" r="8" fill="#fff"/>`],
+    };
+    const stickerSvgUrl = key => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><filter id="o" x="-10%" y="-10%" width="120%" height="120%">` +
+      `<feMorphology in="SourceAlpha" operator="dilate" radius="3.5" result="d"/><feFlood flood-color="#fff"/><feComposite in2="d" operator="in" result="w"/>` +
+      `<feDropShadow in="w" dx="0" dy="1.5" stdDeviation="1.5" flood-opacity=".35" result="s"/><feMerge><feMergeNode in="s"/><feMergeNode in="SourceGraphic"/></feMerge>` +
+      `</filter></defs><g filter="url(#o)">${STICKER_LIBRARY[key][1]}</g></svg>`);
+    const MAX_STICKERS = 20;
+
+    function addStickerEntry(extra) {
+      if (S.stickers.length >= MAX_STICKERS) { alert(`You can have up to ${MAX_STICKERS} stickers.`); return false; }
+      S.stickers.push({ x: 30 + Math.random() * 40, y: 25 + Math.random() * 30, w: 130, rot: 0, flip: false, hue: 0, glow: false, ...extra });
+      return true;
+    }
+    $('sticker-library').innerHTML = Object.entries(STICKER_LIBRARY).map(([k, [label]]) =>
+      `<button data-sticker="${k}" title="${label}" aria-label="Add ${label} sticker"><img src="${stickerSvgUrl(k)}" alt=""></button>`).join('');
+    $('sticker-library').addEventListener('click', e => {
+      const b = e.target.closest('[data-sticker]'); if (!b) return;
+      const id = newId();
+      if (!addStickerEntry({ id, builtin: b.dataset.sticker })) return;
+      stickerUrls[id] = stickerSvgUrl(b.dataset.sticker);
+      save(); renderStickers(); renderStickerList();
+      b.animate([{ transform: 'scale(1.25)' }, { transform: 'scale(1)' }], 250);
+    });
+
     function renderStickers() {
       const box = $('stickers');
       const want = S.stickers.filter(s => stickerUrls[s.id]);
@@ -1462,7 +1529,8 @@
           el.innerHTML = `<img alt=""><div class="tools">
             <button data-act="smaller" title="Smaller">➖</button><button data-act="bigger" title="Bigger">➕</button>
             <button data-act="rotate" title="Rotate">↻</button><button data-act="flip" title="Flip">⇋</button>
-            <button data-act="delete" title="Delete">🗑️</button></div>`;
+            <button data-act="hue" title="Change color">🎨</button><button data-act="glow" title="Glow">✨</button>
+            <button data-act="front" title="Bring to front">⬆️</button><button data-act="delete" title="Delete">🗑️</button></div>`;
           el.querySelector('img').src = stickerUrls[s.id];
           wireSticker(el);
           box.appendChild(el);
@@ -1471,6 +1539,11 @@
         el.style.top = s.y + '%';
         el.style.width = s.w + 'px';
         el.style.transform = `translate(-50%, -50%) rotate(${s.rot || 0}deg) scaleX(${s.flip ? -1 : 1})`;
+        el.querySelector('img').style.filter = [
+          s.hue ? `hue-rotate(${s.hue}deg)` : '',
+          s.glow ? 'drop-shadow(0 0 6px var(--accent2)) drop-shadow(0 0 14px var(--accent))' : '',
+        ].join(' ').trim();
+        box.appendChild(el);   // keeps the stacking order the same as the list
       }
     }
     function wireSticker(el) {
@@ -1482,10 +1555,13 @@
         if (b.dataset.act === 'bigger') s.w = Math.min(900, s.w + 20);
         if (b.dataset.act === 'rotate') s.rot = ((s.rot || 0) + 15) % 360;
         if (b.dataset.act === 'flip') s.flip = !s.flip;
+        if (b.dataset.act === 'hue') s.hue = ((s.hue || 0) + 40) % 360;
+        if (b.dataset.act === 'glow') s.glow = !s.glow;
+        if (b.dataset.act === 'front') S.stickers = [...S.stickers.filter(x => x !== s), s];
         if (b.dataset.act === 'delete') {
           S.stickers = S.stickers.filter(x => x !== s);
-          await db.delFile('sticker:' + s.id);
-          URL.revokeObjectURL(stickerUrls[s.id]); delete stickerUrls[s.id];
+          if (!s.builtin) { await db.delFile('sticker:' + s.id); URL.revokeObjectURL(stickerUrls[s.id]); }
+          delete stickerUrls[s.id];
         }
         save(); renderStickers(); renderStickerList();
       });
@@ -1513,21 +1589,27 @@
     function renderStickerList() {
       $('sticker-list').innerHTML = S.stickers.filter(s => stickerUrls[s.id]).map(s => `<img src="${stickerUrls[s.id]}" alt="Sticker">`).join('')
         || '<span class="desc">No stickers yet.</span>';
-      $('sticker-edit').disabled = !S.stickers.length;
+      $('sticker-edit').disabled = $('sticker-clear').disabled = !S.stickers.length;
     }
     $('sticker-add').addEventListener('click', () => $('sticker-file').click());
     $('sticker-file').addEventListener('change', async () => {
       const files = [...$('sticker-file').files]; $('sticker-file').value = '';
-      for (const f of files.slice(0, 12)) {
-        if (S.stickers.length >= 12) { alert('You can have up to 12 stickers.'); break; }
+      for (const f of files) {
         const id = newId();
+        if (!addStickerEntry({ id, w: 150 })) break;
         await db.putFile('sticker:' + id, f);
         stickerUrls[id] = URL.createObjectURL(f);
-        S.stickers.push({ id, x: 30 + Math.random() * 40, y: 25 + Math.random() * 30, w: 150, rot: 0, flip: false });
       }
       save(); renderStickers(); renderStickerList();
     });
     $('sticker-edit').addEventListener('click', () => { dlg.close(); document.body.classList.add('sticker-edit'); });
+    $('sticker-clear').addEventListener('click', async () => {
+      if (!confirm('Remove all stickers from your player?')) return;
+      for (const s of S.stickers) if (!s.builtin) { await db.delFile('sticker:' + s.id); URL.revokeObjectURL(stickerUrls[s.id]); }
+      for (const k in stickerUrls) delete stickerUrls[k];
+      S.stickers = [];
+      save(); renderStickers(); renderStickerList();
+    });
     $('stickers-done').addEventListener('click', () => document.body.classList.remove('sticker-edit'));
 
     // ================= Adding / removing / reordering songs =================
@@ -2207,6 +2289,7 @@
       const img = await db.getFile('bg');
       if (img) { bgImageUrl = URL.createObjectURL(img); updateBgThumb(); }
       for (const s of S.stickers) {
+        if (s.builtin) { if (STICKER_LIBRARY[s.builtin]) stickerUrls[s.id] = stickerSvgUrl(s.builtin); continue; }
         const f = await db.getFile('sticker:' + s.id);
         if (f) stickerUrls[s.id] = URL.createObjectURL(f);
       }
