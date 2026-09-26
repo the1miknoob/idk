@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Games · Mikaeel</title>
+  <meta name="description" content="Games made by Mikaeel">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg: #fafaf7; --surface: #fff; --surface-2: #f2f2ee; --text: #16161a; --muted: #5c5c66; --border: #e4e4df; --accent: #5b5bd6; --accent-soft: #ececfb; }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) { --bg: #111114; --surface: #1a1a1f; --surface-2: #232329; --text: #ededf0; --muted: #a0a0ab; --border: #2a2a31; --accent: #8b8bf5; --accent-soft: #23233a; }
+    }
+    :root[data-theme="dark"] { --bg: #111114; --surface: #1a1a1f; --surface-2: #232329; --text: #ededf0; --muted: #a0a0ab; --border: #2a2a31; --accent: #8b8bf5; --accent-soft: #23233a; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Space Grotesk", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; min-height: 100vh; }
+    a { color: var(--accent); text-decoration: none; }
+    .wrap { max-width: 900px; margin: 0 auto; padding: 0 16px 48px; }
+    nav { display: flex; align-items: center; justify-content: space-between; height: 56px; }
+    nav a { color: var(--muted); font-size: 15px; }
+    nav a:hover { color: var(--text); }
+    .square-btn { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; width: 34px; height: 34px; cursor: pointer; font-size: 16px; }
+    header { padding: 36px 0 28px; }
+    h1 { font-size: clamp(34px, 6vw, 48px); line-height: 1.1; }
+    header p { color: var(--muted); font-size: 18px; margin-top: 8px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; }
+    .game {
+      display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
+      overflow: hidden; color: var(--text); transition: transform .15s, border-color .15s, box-shadow .15s;
+    }
+    .game:hover { transform: translateY(-4px); border-color: var(--accent); box-shadow: 0 14px 30px rgba(0,0,0,.12); }
+    .art { height: 150px; display: grid; place-items: center; font-size: 72px; }
+    .art.chess { background: conic-gradient(#769656 0 25%, #eeeed2 0 50%, #769656 0 75%, #eeeed2 0) 0 0 / 50px 50px; }
+    .art.chess span { background: var(--surface); border-radius: 50%; width: 110px; height: 110px; display: grid; place-items: center; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+    .body { padding: 16px 18px 18px; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+    .body h2 { font-size: 20px; }
+    .body p { color: var(--muted); font-size: 15px; }
+    .meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; padding-top: 8px; }
+    .pill { background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: 500; }
+    .pill.muted { background: var(--surface-2); color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav>
+      <a href="../">← Back to Mikaeel's site</a>
+      <button class="square-btn" id="theme-toggle" aria-label="Toggle dark mode">🌙</button>
+    </nav>
+    <header>
+      <h1>🎮 Games</h1>
+      <p>Games I've built. They run right in your browser and save your progress.</p>
+    </header>
+
+    <!-- ✏️ EDIT: copy a card to add a new game -->
+    <main class="grid">
+      <a class="game" href="chess/">
+        <div class="art chess"><span>♟️</span></div>
+        <div class="body">
+          <h2>Chess</h2>
+          <p>Play against the computer on four levels, or with a friend on the same device. Hints, undo, move history and board themes.</p>
+          <div class="meta" id="chess-meta"><span class="pill muted">1–2 players</span></div>
+        </div>
+      </a>
+    </main>
+  </div>
+  <script>
+    const root = document.documentElement, btn = document.getElementById('theme-toggle');
+    const isDark = () => root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    try { const t = localStorage.getItem('theme'); if (t) root.dataset.theme = t; } catch (e) {}
+    btn.textContent = isDark() ? '☀️' : '🌙';
+    btn.addEventListener('click', () => {
+      root.dataset.theme = isDark() ? 'light' : 'dark';
+      try { localStorage.setItem('theme', root.dataset.theme); } catch (e) {}
+      btn.textContent = isDark() ? '☀️' : '🌙';
+    });
+
+    // Show your chess progress on the card
+    const read = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
+    const meta = document.getElementById('chess-meta');
+    const g = read('chess-game');
+    if (g && g.moves && g.moves.length && !g.over) meta.insertAdjacentHTML('afterbegin', `<span class="pill">▶ Game in progress · move ${Math.ceil(g.moves.length / 2)}</span>`);
+    const st = read('chess-stats');
+    if (st) {
+      const w = Object.values(st).reduce((s, x) => s + (x.w || 0), 0);
+      const total = Object.values(st).reduce((s, x) => s + (x.w || 0) + (x.l || 0) + (x.d || 0), 0);
+      if (total) meta.insertAdjacentHTML('beforeend', `<span class="pill muted">🏆 ${w} win${w === 1 ? '' : 's'} vs computer</span>`);
+    }
+  </script>
+</body>
+</html>
