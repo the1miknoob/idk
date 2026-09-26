@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#5b5bd6">
   <meta property="og:type" content="website">
   <meta property="og:title" content="Mikaeel">
-  <meta property="og:description" content="Hey, I'm Mikaeel 👋 Check out my projects: a customizable music player and a personal dashboard.">
+  <meta property="og:description" content="Hey, I'm Mikaeel 👋 Check out my projects: a customizable music player, a personal dashboard and a chess game.">
   <meta property="og:url" content="https://the1miknoob.github.io/idk/">
   <meta name="twitter:card" content="summary">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👋</text></svg>">
@@ -181,6 +181,7 @@
         <a href="#projects" class="hide-sm">Projects</a>
         <a href="music-player/" title="Music Player">🎵<span class="hide-sm"> Music</span></a>
         <a href="dashboard/" title="Dashboard">📊<span class="hide-sm"> Dashboard</span></a>
+        <a href="games/" title="Games">🎮<span class="hide-sm"> Games</span></a>
         <button id="theme-toggle" aria-label="Toggle dark mode">🌙</button>
       </div>
     </div>
@@ -246,6 +247,11 @@
           <h3>Personal Dashboard</h3>
           <p>Clock, weather, to-dos, notes, a focus timer, quick links and countdowns, all in one customizable page.</p>
         </a>
+        <a class="card" href="games/chess/" style="color:inherit;text-decoration:none">
+          <div class="emoji">♟️</div>
+          <h3>Chess</h3>
+          <p>Play chess against a computer I programmed (four levels) or with a friend. Has hints, undo and board themes.</p>
+        </a>
       </div>
     </section>
 
@@ -290,7 +296,7 @@
     const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     // ---------- Typing effect (✏️ EDIT: change the words) ----------
-    const WORDS = ['music players', 'dashboards', 'websites', 'cool stuff', 'things I\'m proud of'];
+    const WORDS = ['music players', 'dashboards', 'chess games', 'websites', 'cool stuff', 'things I\'m proud of'];
     const typed = document.getElementById('typed');
     if (!reduceMotion) {
       let w = 0, i = WORDS[0].length, deleting = true;
@@ -361,6 +367,13 @@
           .filter(c => c.n >= 0).sort((a, b) => a.n - b.n)[0];
         if (upcoming) cards.push(card('dashboard/', '📅', 'Coming up', upcoming.name,
           upcoming.n === 0 ? 'Today! 🎉' : `in ${upcoming.n} day${upcoming.n === 1 ? '' : 's'}`));
+      }
+
+      const chess = read('chess-game');
+      if (chess && Array.isArray(chess.moves) && chess.moves.length && !chess.over) {
+        const n = Math.ceil(chess.moves.length / 2);
+        const vs = chess.mode === 'ai' ? `vs computer (${chess.level})` : 'vs a friend';
+        cards.push(card('games/chess/', '♟️', 'Chess game in progress', `Move ${n} ${vs}`, chess.status || 'Tap to keep playing'));
       }
 
       if (cards.length) {
