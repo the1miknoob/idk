@@ -74,6 +74,76 @@
     .letters .pc.b { background: #1c1c22; color: #fbfbfb; box-shadow: 0 2px 4px rgba(0,0,0,.4), inset 0 0 0 2px #fbfbfb; }
     .sq.sel .pc { transform: scale(1.08); }
 
+    /* Drawn (SVG) pieces */
+    svg.pc {
+      width: 88%; height: 88%; overflow: visible; fill: var(--pf); stroke: var(--ps); stroke-width: 3.2;
+      stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 2px 2px rgba(0,0,0,.35));
+    }
+    svg.pc .d { fill: none; stroke: var(--pd); stroke-width: 2.4; }
+    svg.pc .f { fill: var(--pd); stroke: none; }
+    .pset-classic svg.pc.w { --pf: url(#gw); --ps: #23232b; --pd: #23232b; }
+    .pset-classic svg.pc.b { --pf: url(#gb); --ps: #0b0b0e; --pd: #cfcfd6; }
+    .pset-flat svg.pc.w { --pf: #f6f6f4; --ps: #2b2b33; --pd: #2b2b33; }
+    .pset-flat svg.pc.b { --pf: #33333d; --ps: #111115; --pd: #ececf0; }
+    .pset-flat svg.pc { filter: none; }
+    .pset-wood svg.pc.w { --pf: url(#gww); --ps: #5a3a1c; --pd: #5a3a1c; }
+    .pset-wood svg.pc.b { --pf: url(#gwb); --ps: #24140a; --pd: #e9cf9f; }
+    .pset-neon svg.pc.w { --pf: rgba(255,255,255,.14); --ps: #ffffff; --pd: #ffffff; filter: drop-shadow(0 0 3px #fff) drop-shadow(0 0 6px rgba(255,255,255,.6)); }
+    .pset-neon svg.pc.b { --pf: rgba(0,245,212,.14); --ps: #00f5d4; --pd: #00f5d4; filter: drop-shadow(0 0 3px #00f5d4) drop-shadow(0 0 6px rgba(0,245,212,.6)); }
+    .caps svg.pc { width: 18px; height: 18px; margin-right: -5px; filter: none; stroke-width: 4; }
+
+    /* Board row: evaluation bar + board + arrows */
+    .board-row { display: flex; gap: 8px; }
+    .board-box { position: relative; flex: 1; min-width: 0; }
+    .arrows { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 6; }
+    .evalbar {
+      position: relative; width: 24px; flex: none; border-radius: 6px; overflow: hidden; background: #26262e;
+      box-shadow: 0 10px 30px rgba(0,0,0,.18);
+    }
+    .evalbar[hidden] { display: none; }
+    .evalbar .fill { position: absolute; left: 0; right: 0; bottom: 0; height: 50%; background: #f4f4f4; transition: height .45s ease; }
+    .evalbar.flip .fill { bottom: auto; top: 0; }
+    .evalbar .ev {
+      position: absolute; left: 0; right: 0; font-size: 10px; font-weight: 700; text-align: center; z-index: 1;
+      writing-mode: horizontal-tb; letter-spacing: -.3px;
+    }
+    .evalbar .ev.bottom { bottom: 4px; color: #26262e; }
+    .evalbar .ev.top { top: 4px; color: #f4f4f4; }
+    @media (max-width: 520px) { .evalbar { width: 16px; } .evalbar .ev { font-size: 8px; } }
+
+    /* Review / analysis */
+    .review-banner {
+      display: none; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; padding: 8px 10px;
+      border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-size: 14px; font-weight: 500;
+    }
+    .review-banner.show { display: flex; }
+    .review-banner button { border: none; background: var(--accent); color: var(--on-accent); border-radius: 8px; padding: 4px 10px; cursor: pointer; font-weight: 500; }
+    .nav-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
+    .nav-row button { padding: 6px 0; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); cursor: pointer; font-size: 15px; }
+    .nav-row button:disabled { opacity: .4; cursor: default; }
+    .moves span[data-ply] { cursor: pointer; display: flex; align-items: center; gap: 4px; }
+    .moves span[data-ply]:hover { background: var(--surface-2); }
+    .moves span.viewing { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .cls { display: inline-grid; place-items: center; min-width: 18px; height: 16px; padding: 0 3px; border-radius: 5px; font-size: 10px; font-weight: 700; color: #fff; line-height: 1; }
+    .progress { height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden; margin: 8px 0 4px; }
+    .progress > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+    .acc { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
+    .acc div { border-radius: 12px; padding: 8px; text-align: center; }
+    .acc .aw { background: #f4f4f4; color: #1c1c22; border: 1px solid var(--border); }
+    .acc .ab { background: #26262e; color: #f4f4f4; }
+    .acc b { display: block; font-size: 26px; line-height: 1.1; }
+    .acc small { font-size: 12px; opacity: .8; }
+    .graph { width: 100%; height: 90px; display: block; border-radius: 10px; cursor: pointer; margin: 6px 0 4px; }
+    .cls-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 6px; }
+    .cls-table td { padding: 3px 4px; }
+    .cls-table td:first-child, .cls-table td:last-child { text-align: center; width: 44px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .moments { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+    .moment { text-align: left; border: 1px solid var(--border); background: var(--surface-2); border-radius: 10px; padding: 8px 10px; cursor: pointer; font-size: 14px; }
+    .moment:hover { border-color: var(--accent); }
+    .moment b { font-variant-numeric: tabular-nums; }
+    .explain { font-size: 14px; margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); display: none; }
+    .explain.show { display: block; }
+
     .overlay {
       position: absolute; inset: 40px 0; z-index: 10; display: none; place-items: center; background: rgba(0,0,0,.45);
       border-radius: 10px; backdrop-filter: blur(2px);
@@ -132,7 +202,13 @@
     <div class="layout">
       <div class="board-wrap" id="board-wrap">
         <div class="player-bar"><div class="who" id="top-who"></div><div class="caps" id="top-caps"></div></div>
-        <div class="board" id="board" role="grid" aria-label="Chess board"></div>
+        <div class="board-row">
+          <div class="evalbar" id="evalbar" hidden title="Who's winning"><div class="fill" id="eval-fill"></div><span class="ev" id="eval-txt"></span></div>
+          <div class="board-box">
+            <div class="board" id="board" role="grid" aria-label="Chess board"></div>
+            <svg class="arrows" id="arrows" viewBox="0 0 8 8" aria-hidden="true"></svg>
+          </div>
+        </div>
         <div class="player-bar"><div class="who" id="bottom-who"></div><div class="caps" id="bottom-caps"></div></div>
         <div class="overlay" id="overlay"><div class="box" id="overlay-box"></div></div>
       </div>
@@ -161,8 +237,37 @@
         </div>
 
         <div class="panel">
-          <div class="label" style="margin-top:0">Moves</div>
+          <div class="label" style="margin-top:0">Moves <span style="font-weight:400">(click one to look back)</span></div>
           <div class="moves" id="moves"></div>
+          <div class="nav-row">
+            <button id="nav-first" title="Start" aria-label="Go to start">⏮</button>
+            <button id="nav-prev" title="Previous move (←)" aria-label="Previous move">◀</button>
+            <button id="nav-next" title="Next move (→)" aria-label="Next move">▶</button>
+            <button id="nav-last" title="Current position" aria-label="Go to current position">⏭</button>
+          </div>
+          <div class="review-banner" id="review-banner"><span id="review-text">Looking back</span><button id="back-live">Back to game</button></div>
+          <div class="explain" id="explain"></div>
+        </div>
+
+        <div class="panel">
+          <div class="label" style="margin-top:0">📈 Game analysis</div>
+          <div id="an-start">
+            <p class="moves-empty" style="margin-bottom:10px">The computer checks every move and shows your best moves, mistakes and blunders.</p>
+            <button class="btn primary" id="analyze" style="width:100%">🔍 Analyze this game</button>
+          </div>
+          <div id="an-progress" hidden>
+            <div class="progress"><div id="an-bar"></div></div>
+            <div class="moves-empty" id="an-progress-text">Analyzing…</div>
+            <button class="btn" id="an-cancel" style="width:100%;margin-top:6px">Cancel</button>
+          </div>
+          <div id="an-result" hidden>
+            <div class="acc"><div class="aw"><b id="acc-w">–</b><small>White accuracy</small></div><div class="ab"><b id="acc-b">–</b><small>Black accuracy</small></div></div>
+            <svg class="graph" id="graph" preserveAspectRatio="none" aria-label="Evaluation graph"></svg>
+            <table class="cls-table" id="cls-table"></table>
+            <div class="label">Key moments</div>
+            <div class="moments" id="moments"></div>
+            <button class="btn" id="analyze-again" style="width:100%;margin-top:10px">↻ Analyze again</button>
+          </div>
         </div>
 
         <div class="panel">
@@ -176,9 +281,11 @@
             <div class="label">Board colors</div>
             <div class="themes" id="themes"></div>
             <div class="label">Pieces</div>
-            <div class="seg" data-seg="pieces"><button data-v="classic">♞ Classic</button><button data-v="letters">Ⓝ Letters</button></div>
+            <div class="seg" data-seg="pieces"><button data-v="classic">Classic</button><button data-v="flat">Flat</button><button data-v="wood">Wood</button><button data-v="neon">Neon</button><button data-v="glyph">Symbols</button><button data-v="letters">Letters</button></div>
             <div class="label">Options</div>
             <label class="toggle">Show possible moves <input type="checkbox" data-opt="showMoves"></label>
+            <label class="toggle">Show who's winning bar while playing <input type="checkbox" data-opt="evalBar"></label>
+            <label class="toggle">Show best-move arrows when looking back <input type="checkbox" data-opt="arrows"></label>
             <label class="toggle">Show a–h / 1–8 labels <input type="checkbox" data-opt="coords"></label>
             <label class="toggle">Sounds <input type="checkbox" data-opt="sound"></label>
             <label class="toggle">Flip board each turn (friend mode) <input type="checkbox" data-opt="autoFlip"></label>
@@ -448,13 +555,27 @@
       classic: ['#f0d9b5', '#b58863'], green: ['#eeeed2', '#769656'], blue: ['#dee3e6', '#8ca2ad'], purple: ['#e8e0f5', '#8e6fc1'],
       coffee: ['#e3d0b0', '#7a5a3a'], pink: ['#ffe4ef', '#e58fb4'], ice: ['#e8f7ff', '#6fb3d9'], night: ['#4a4a5e', '#2a2a38'],
     };
-    const DEF = { mode: 'ai', level: 'easy', side: 'w', theme: 'green', pieces: 'classic', showMoves: true, coords: true, sound: true, autoFlip: false };
+    const DEF = { mode: 'ai', level: 'easy', side: 'w', theme: 'green', pieces: 'classic', showMoves: true, coords: true, sound: true, autoFlip: false, evalBar: false, arrows: true };
     let S = { ...DEF, ...store.get('chess-settings', {}) };
     const saveS = () => store.set('chess-settings', S);
     let stats = store.get('chess-stats', {});
 
     let game;          // { positions, moves: [{m, san}], mode, level, human, over, result }
     let selected = -1, targets = [], hintMove = null, thinking = false, flipped = false;
+    let viewIndex = null;         // null = live position, otherwise the ply being looked at
+    let review = null;            // results of "Analyze this game"
+    let analysisRun = 0;          // bumps to cancel a running analysis
+    const evalCache = new Map();  // position key -> { score (white's view), best }
+
+    // Original piece drawings (viewBox 0 0 100 100): body uses --pf, outline --ps, details --pd
+    const PIECE_SVG = {"p": "<path d=\"M24 88h52a4 4 0 0 0 4-4v-3a4 4 0 0 0-4-4H24a4 4 0 0 0-4 4v3a4 4 0 0 0 4 4Z\"/><path d=\"M50 14a13 13 0 0 1 8.2 23.1C63 40 64 43 62.5 46H37.5C36 43 37 40 41.8 37.1A13 13 0 0 1 50 14Z\"/><path d=\"M39 49h22c0 9 6 17 11 28H28c5-11 11-19 11-28Z\"/>", "n": "<path d=\"M24 88h52a4 4 0 0 0 4-4v-3a4 4 0 0 0-4-4H24a4 4 0 0 0-4 4v3a4 4 0 0 0 4 4Z\"/><path d=\"M69 77H31c0-11 5-17 12-23-5-1-10 1-15 4-4 2-8-1-7-5 3-9 10-16 15-22l-1-11 7 5 4-8 4 9c13 3 22 16 21 32-.5 8-2 13-2 19Z\"/><circle cx=\"42\" cy=\"33\" r=\"2.6\" class=\"f\"/><path d=\"M52 30c7 3 11 10 11 19\" class=\"d\"/>", "b": "<path d=\"M24 88h52a4 4 0 0 0 4-4v-3a4 4 0 0 0-4-4H24a4 4 0 0 0-4 4v3a4 4 0 0 0 4 4Z\"/><circle cx=\"50\" cy=\"11\" r=\"5\"/><path d=\"M50 17c11 9 17 19 15 30-1 4-3 6-5 7H40c-2-1-4-3-5-7-2-11 4-21 15-30Z\"/><path d=\"M55 28 45 42\" class=\"d\"/><path d=\"M40 57h20c0 8 5 13 10 20H30c5-7 10-12 10-20Z\"/>", "r": "<path d=\"M24 88h52a4 4 0 0 0 4-4v-3a4 4 0 0 0-4-4H24a4 4 0 0 0-4 4v3a4 4 0 0 0 4 4Z\"/><path d=\"M27 16h10v7h7v-7h12v7h7v-7h10v17l-6 6H33l-6-6Z\"/><path d=\"M34 42h32l-3 35H37Z\"/><path d=\"M31 39h38\" class=\"d\"/>", "q": "<path d=\"M24 88h52a4 4 0 0 0 4-4v-3a4 4 0 0 0-4-4H24a4 4 0 0 0-4 4v3a4 4 0 0 0 4 4Z\"/><circle cx=\"23\" cy=\"27\" r=\"4.5\"/><circle cx=\"38\" cy=\"19\" r=\"4.5\"/><circle cx=\"50\" cy=\"15\" r=\"4.5\"/><circle cx=\"62\" cy=\"19\" r=\"4.5\"/><circle cx=\"77\" cy=\"27\" r=\"4.5\"/><path d=\"M24 31l11 25 3-32 12 29 12-29 3 32 11-25-6 34H30Z\"/><path d=\"M30 65h40l-3 12H33Z\"/><path d=\"M31 71h38\" class=\"d\"/>", "k": "<path d=\"M24 88h52a4 4 0 0 0 4-4v-3a4 4 0 0 0-4-4H24a4 4 0 0 0-4 4v3a4 4 0 0 0 4 4Z\"/><path d=\"M46.5 7h7v7h6v6h-6v9h-7v-9h-6v-6h6Z\"/><path d=\"M50 33c4-7 11-10 17-8 9 3 10 14 5 22-3 5-6 9-7 17H35c-1-8-4-12-7-17-5-8-4-19 5-22 6-2 13 1 17 8Z\"/><path d=\"M50 33v31\" class=\"d\"/><path d=\"M33 64h34l-2 13H35Z\"/><path d=\"M34 70h32\" class=\"d\"/>"};
+    document.body.insertAdjacentHTML('afterbegin', `<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+      <linearGradient id="gw" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d4d4da"/></linearGradient>
+      <linearGradient id="gb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a4a55"/><stop offset="1" stop-color="#15151a"/></linearGradient>
+      <linearGradient id="gww" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbe9c6"/><stop offset="1" stop-color="#d9b27a"/></linearGradient>
+      <linearGradient id="gwb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a5a30"/><stop offset="1" stop-color="#4a2a12"/></linearGradient>
+      ${Object.entries(PIECE_SVG).map(([t, d]) => `<symbol id="p-${t}" viewBox="0 0 100 100">${d}</symbol>`).join('')}
+    </defs></svg>`);
 
     function newGame(fromSave) {
       const human = S.side === 'random' ? (Math.random() < .5 ? 'w' : 'b') : S.side;
@@ -471,6 +592,7 @@
         }
       }
       selected = -1; targets = []; hintMove = null; thinking = false;
+      viewIndex = null; review = null; analysisRun++;
       flipped = game.mode === 'ai' ? game.human === 'b' : false;
       $('overlay').classList.remove('show');
       checkEnd(true);
@@ -495,7 +617,7 @@
       const san = toSAN(pos, m, legal);
       game.moves.push({ m, san });
       game.positions.push(makeMove(pos, m));
-      selected = -1; targets = []; hintMove = null;
+      selected = -1; targets = []; hintMove = null; viewIndex = null;
       sound(m.captured ? 'capture' : 'move', san.includes('+') || san.includes('#'));
       checkEnd(false);
       if (game.mode === 'friend' && S.autoFlip && !game.over) flipped = cur().turn === 'b';
@@ -563,20 +685,26 @@
     }
 
     // ---------- Rendering ----------
+    const drawnPieces = () => !['glyph', 'letters'].includes(S.pieces);
     function pieceHTML(p) {
       const c = colorOf(p), t = p.toLowerCase();
-      const txt = S.pieces === 'letters' ? (t === 'n' ? 'N' : t.toUpperCase()) : GLYPH[t] + '︎';
+      if (drawnPieces()) return `<svg class="pc ${c}" viewBox="0 0 100 100"><use href="#p-${t}"/></svg>`;
+      const txt = S.pieces === 'letters' ? (t === 'n' ? 'N' : t.toUpperCase()) : GLYPH[t] + '\uFE0E';
       return `<span class="pc ${c}">${txt}</span>`;
     }
 
+    const shownPly = () => viewIndex === null ? game.positions.length - 1 : viewIndex;
+    const reviewing = () => viewIndex !== null && viewIndex !== game.positions.length - 1;
+
     function render() {
-      const pos = cur(), board = $('board');
+      const ply = shownPly(), pos = game.positions[ply], board = $('board');
+      document.body.className = 'pset-' + S.pieces;
       const [light, dark] = THEMES[S.theme] || THEMES.green;
       root.style.setProperty('--light', light);
       root.style.setProperty('--dark', dark);
       board.classList.toggle('hide-coords', !S.coords);
       board.classList.toggle('letters', S.pieces === 'letters');
-      const lm = lastMove();
+      const lm = ply > 0 ? game.moves[ply - 1].m : null;
       const checkSq = inCheck(pos) ? kingSq(pos.b, pos.turn) : -1;
       let html = '';
       for (let v = 0; v < 64; v++) {
@@ -603,12 +731,13 @@
       const nameFor = col => game.mode === 'ai' ? (col === game.human ? 'You' : `Computer (${game.level})`) : (col === 'w' ? 'White' : 'Black');
       for (const [id, col] of [['top', topColor], ['bottom', bottomColor]]) {
         $(id + '-who').innerHTML = `<span class="dot" style="background:${col === 'w' ? '#fbfbfb' : '#1c1c22'}"></span>${nameFor(col)}${pos.turn === col && !game.over ? ' ●' : ''}`;
-        $(id + '-caps').innerHTML = capturedHTML(col);
+        $(id + '-caps').innerHTML = capturedHTML(col, pos);
       }
 
       // Status
       let status;
-      if (game.over) {
+      if (reviewing()) status = `Looking at move ${Math.ceil(ply / 2)}${ply % 2 ? '' : '…'}${ply ? ' · ' + game.moves[ply - 1].san : ' · start'}`;
+      else if (game.over) {
         const r = game.result;
         status = r.winner === 'draw' ? `Draw · ${r.why}` : `${r.winner === 'w' ? 'White' : 'Black'} wins · ${r.why}`;
       } else if (thinking) status = 'Computer is thinking…';
@@ -623,17 +752,31 @@
       const mv = $('moves');
       if (!game.moves.length) mv.innerHTML = '<span class="moves-empty" style="grid-column:1/-1">No moves yet. White goes first.</span>';
       else {
+        const cell = k => {
+          if (!game.moves[k]) return '<span></span>';
+          const cls = ['cur'].filter(() => k === game.moves.length - 1);
+          if (reviewing() && k + 1 === ply) cls.push('viewing');
+          const r = reviewFor(k);
+          const badge = r ? `<span class="cls" style="background:${CLASSES[r.cls].color}" title="${CLASSES[r.cls].label}">${CLASSES[r.cls].icon}</span>` : '';
+          return `<span class="${cls.join(' ')}" data-ply="${k + 1}">${game.moves[k].san}${badge}</span>`;
+        };
         let h = '';
-        for (let k = 0; k < game.moves.length; k += 2) {
-          h += `<span class="n">${k / 2 + 1}.</span><span class="${k === game.moves.length - 1 ? 'cur' : ''}">${game.moves[k].san}</span>`;
-          h += `<span class="${k + 1 === game.moves.length - 1 ? 'cur' : ''}">${game.moves[k + 1] ? game.moves[k + 1].san : ''}</span>`;
-        }
+        for (let k = 0; k < game.moves.length; k += 2) h += `<span class="n">${k / 2 + 1}.</span>${cell(k)}${cell(k + 1)}`;
         mv.innerHTML = h;
-        mv.scrollTop = mv.scrollHeight;
+        const target = mv.querySelector('.viewing') || mv.lastElementChild;
+        if (target) { const top = target.offsetTop - mv.offsetTop; if (top < mv.scrollTop || top > mv.scrollTop + mv.clientHeight - 24) mv.scrollTop = top - mv.clientHeight / 2; }
       }
 
       $('undo').disabled = !game.moves.length || thinking;
-      $('hint').disabled = !humanTurn();
+      $('hint').disabled = !humanTurn() || reviewing();
+      $('nav-first').disabled = $('nav-prev').disabled = ply === 0;
+      $('nav-next').disabled = $('nav-last').disabled = !reviewing();
+      $('review-banner').classList.toggle('show', reviewing());
+      $('review-text').textContent = reviewing() ? `Looking back · move ${Math.ceil(ply / 2) || 'start'}` : '';
+      renderExplain(ply);
+      renderArrows(ply);
+      renderEvalBar(ply);
+      renderAnalysisPanel();
       $('ai-opts').style.display = S.mode === 'ai' ? '' : 'none';
       document.querySelectorAll('[data-seg]').forEach(seg => seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', String(S[seg.dataset.seg]) === b.dataset.v)));
       document.querySelectorAll('[data-opt]').forEach(el => el.checked = !!S[el.dataset.opt]);
@@ -644,15 +787,15 @@
     }
     const pieceName = p => ({ k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' })[p.toLowerCase()] + (colorOf(p) === 'w' ? ' (white)' : ' (black)');
 
-    function capturedHTML(col) {
+    function capturedHTML(col, pos) {
       // pieces this side has captured = opponent pieces missing from the board
       const start = { p: 8, n: 2, b: 2, r: 2, q: 1 };
-      const b = cur().b, opp = other(col);
+      const b = pos.b, opp = other(col);
       const count = t => b.filter(p => p && colorOf(p) === opp && p.toLowerCase() === t).length;
       let out = '';
       for (const t of ['q', 'r', 'b', 'n', 'p']) {
         const missing = Math.max(0, start[t] - count(t));
-        for (let k = 0; k < missing; k++) out += GLYPH[t] + '︎';
+        for (let k = 0; k < missing; k++) out += drawnPieces() ? `<svg class="pc ${opp}" viewBox="0 0 100 100"><use href="#p-${t}"/></svg>` : GLYPH[t] + '\uFE0E';
       }
       const mat = c => b.reduce((s, p) => s + (p && colorOf(p) === c ? VALUE[p.toLowerCase()] : 0), 0);
       const diff = Math.round((mat(col) - mat(opp)) / 100);
@@ -663,6 +806,7 @@
     $('board').addEventListener('click', e => {
       const sq = e.target.closest('.sq'); if (!sq) return;
       const i = +sq.dataset.i;
+      if (reviewing()) { goTo(null); return; }
       if (!humanTurn()) return;
       const pos = cur();
       const chosen = targets.filter(m => m.to === i);
@@ -691,7 +835,7 @@
         if (game.moves.length < n) n = game.moves.length;
       }
       for (let k = 0; k < n; k++) { game.moves.pop(); game.positions.pop(); }
-      game.over = false; game.result = null;
+      game.over = false; game.result = null; viewIndex = null;
       selected = -1; targets = []; hintMove = null;
       $('overlay').classList.remove('show');
       checkEnd(true);
@@ -702,6 +846,7 @@
       if (!humanTurn()) return;
       $('thinking').classList.add('on');
       setTimeout(() => { hintMove = bestMove(cur(), 'medium'); selected = -1; targets = []; render(); }, 30);
+      // (the hint square highlight and arrow both clear on your next move)
     });
     $('flip').addEventListener('click', () => { flipped = !flipped; render(); });
 
@@ -713,6 +858,234 @@
     $('themes').innerHTML = Object.entries(THEMES).map(([k, [l, d]]) =>
       `<button class="theme" data-t="${k}" title="${k}" aria-label="${k} board" style="background-image:conic-gradient(${d} 0 25%, ${l} 0 50%, ${d} 0 75%, ${l} 0)"></button>`).join('');
     $('themes').addEventListener('click', e => { const b = e.target.closest('.theme'); if (b) { S.theme = b.dataset.t; saveS(); render(); } });
+
+    // ======================================================================
+    //  Analysis
+    // ======================================================================
+    const CLASSES = {
+      best:       { icon: '★',  label: 'Best move',  color: '#1f9d63' },
+      excellent:  { icon: '!',  label: 'Excellent',  color: '#3fae6f' },
+      good:       { icon: '✓',  label: 'Good',       color: '#86b35a' },
+      forced:     { icon: '□',  label: 'Only move',  color: '#8d8d99' },
+      inaccuracy: { icon: '?!', label: 'Inaccuracy', color: '#d9a326' },
+      mistake:    { icon: '?',  label: 'Mistake',    color: '#ec7d1e' },
+      blunder:    { icon: '??', label: 'Blunder',    color: '#e5484d' },
+    };
+    const ANALYSIS_DEPTH = 3, ANALYSIS_Q = 4;
+    const isMate = s => Math.abs(s) > MATE - 1000;
+    const winPct = cp => isMate(cp) ? (cp > 0 ? 100 : 0) : 50 + 50 * (2 / (1 + Math.exp(-0.00368208 * cp)) - 1);
+    function fmtEval(s) {
+      if (isMate(s)) { const n = Math.ceil((MATE - Math.abs(s)) / 2); return n === 0 ? '#' : `${s < 0 ? '-' : ''}M${n}`; }
+      const v = s / 100;
+      return (v > 0 ? '+' : '') + v.toFixed(1);
+    }
+
+    // Best move + score for a position. Score is from White's point of view (+ = White is better).
+    function analyzePos(pos) {
+      const key = posKey(pos);
+      if (evalCache.has(key)) return evalCache.get(key);
+      const moves = legalMoves(pos);
+      let res;
+      if (!moves.length) res = { score: inCheck(pos) ? (pos.turn === 'w' ? -MATE : MATE) : 0, best: null };
+      else {
+        moves.sort((a, b) => moveOrder(b) - moveOrder(a));
+        let best = moves[0], bestScore = -Infinity;
+        for (const m of moves) {
+          const sc = -search(makeMove(pos, m), ANALYSIS_DEPTH - 1, -Infinity, -bestScore, 1, ANALYSIS_Q);
+          if (sc > bestScore) { bestScore = sc; best = m; }
+        }
+        res = { score: pos.turn === 'w' ? bestScore : -bestScore, best, san: toSAN(pos, best, moves) };
+      }
+      evalCache.set(key, res);
+      return res;
+    }
+
+    const sameMove = (a, b) => a && b && a.from === b.from && a.to === b.to && (a.promo || null) === (b.promo || null);
+    const reviewFor = k => review && review.sig === gameSig() && review.moves[k] ? review.moves[k] : null;
+    const gameSig = () => game.moves.map(x => x.san).join(' ');
+
+    function classifyMove(k) {
+      const before = game.positions[k], after = game.positions[k + 1], played = game.moves[k].m;
+      const mover = before.turn, sign = mover === 'w' ? 1 : -1;
+      const a = analyzePos(before), b = analyzePos(after);
+      const legalCount = legalMoves(before).length;
+      const bestScore = a.score * sign, playedScore = b.score * sign;
+      const isBest = sameMove(played, a.best);
+      const loss = isBest ? 0 : Math.max(0, winPct(bestScore) - winPct(playedScore));
+      let cls;
+      if (legalCount === 1) cls = 'forced';
+      else if (isBest) cls = 'best';
+      else if (loss <= 2) cls = 'excellent';
+      else if (loss <= 5) cls = 'good';
+      else if (loss <= 10) cls = 'inaccuracy';
+      else if (loss <= 20) cls = 'mistake';
+      else cls = 'blunder';
+      const acc = cls === 'forced' ? 100 : Math.max(0, Math.min(100, 103.1668 * Math.exp(-0.04354 * loss) - 3.1669));
+      return { cls, loss, acc, mover, best: a.best, bestSan: a.san, bestScore: a.score, after: b.score, missedMate: isMate(bestScore) && bestScore > 0 && !(isMate(playedScore) && playedScore > 0) };
+    }
+
+    function runAnalysis() {
+      if (!game.moves.length) return;
+      const run = ++analysisRun, n = game.moves.length, sig = gameSig();
+      const results = [];
+      $('an-start').hidden = true; $('an-result').hidden = true; $('an-progress').hidden = false;
+      let k = 0;
+      const step = () => {
+        if (run !== analysisRun) return;
+        const t0 = performance.now();
+        // do a few moves per step, then let the page breathe
+        while (k < n && performance.now() - t0 < 60) { results.push(classifyMove(k)); k++; }
+        $('an-bar').style.width = (k / n * 100) + '%';
+        $('an-progress-text').textContent = `Analyzing move ${Math.min(n, k + 1)} of ${n}…`;
+        if (k < n) return setTimeout(step, 0);
+        const acc = c => { const xs = results.filter(r => r.mover === c).map(r => r.acc); return xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : null; };
+        review = { sig, moves: results, acc: { w: acc('w'), b: acc('b') } };
+        $('an-progress').hidden = true;
+        render();
+        if (!S.evalBar) $('evalbar').hidden = false;
+      };
+      setTimeout(step, 30);
+    }
+
+    function renderAnalysisPanel() {
+      if (!$('an-progress').hidden) return;
+      const ok = review && review.sig === gameSig();
+      $('an-start').hidden = !!ok; $('an-result').hidden = !ok;
+      $('analyze').disabled = !game.moves.length || thinking;
+      if (!ok) return;
+      $('acc-w').textContent = review.acc.w == null ? '–' : review.acc.w.toFixed(1) + '%';
+      $('acc-b').textContent = review.acc.b == null ? '–' : review.acc.b.toFixed(1) + '%';
+      // counts
+      const order = ['best', 'excellent', 'good', 'forced', 'inaccuracy', 'mistake', 'blunder'];
+      $('cls-table').innerHTML = `<tr><td>⚪</td><td></td><td>⚫</td></tr>` + order.map(c => {
+        const w = review.moves.filter(r => r.cls === c && r.mover === 'w').length, b = review.moves.filter(r => r.cls === c && r.mover === 'b').length;
+        if (!w && !b && c === 'forced') return '';
+        return `<tr><td>${w}</td><td><span class="cls" style="background:${CLASSES[c].color}">${CLASSES[c].icon}</span> ${CLASSES[c].label}</td><td>${b}</td></tr>`;
+      }).join('');
+      // graph
+      drawGraph();
+      // key moments
+      const moments = review.moves.map((r, k) => ({ r, k })).filter(({ r }) => ['mistake', 'blunder'].includes(r.cls) || r.missedMate);
+      $('moments').innerHTML = moments.length ? moments.slice(0, 12).map(({ r, k }) => {
+        const num = `${Math.floor(k / 2) + 1}${k % 2 ? '…' : '.'}`;
+        return `<button class="moment" data-ply="${k + 1}"><span class="cls" style="background:${CLASSES[r.cls].color}">${CLASSES[r.cls].icon}</span>
+          <b>${num} ${game.moves[k].san}</b> · ${r.missedMate ? 'missed a checkmate!' : CLASSES[r.cls].label.toLowerCase()}. Better: <b>${r.bestSan || '–'}</b></button>`;
+      }).join('') : '<p class="moves-empty">No big mistakes. Well played! 🎉</p>';
+    }
+
+    function drawGraph() {
+      const svg = $('graph'), n = game.positions.length - 1;
+      const W = 300, H = 90;
+      svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+      const scores = [analyzePos(game.positions[0]).score, ...review.moves.map(r => r.after)];
+      const pts = scores.map((s, i) => [n ? i / n * W : 0, H - winPct(s) / 100 * H]);
+      const line = pts.map(p => p.map(v => v.toFixed(1)).join(',')).join(' ');
+      const marks = review.moves.map((r, k) => ['mistake', 'blunder'].includes(r.cls)
+        ? `<circle cx="${pts[k + 1][0].toFixed(1)}" cy="${pts[k + 1][1].toFixed(1)}" r="3.5" fill="${CLASSES[r.cls].color}" stroke="#fff" stroke-width="1"/>` : '').join('');
+      const vx = n ? shownPly() / n * W : 0;
+      svg.innerHTML = `<rect width="${W}" height="${H}" fill="#26262e"/>
+        <polygon points="0,${H} ${line} ${W},${H}" fill="#f4f4f4"/>
+        <line x1="0" y1="${H / 2}" x2="${W}" y2="${H / 2}" stroke="#8d8d99" stroke-width="1" stroke-dasharray="3 3"/>
+        <line x1="${vx}" y1="0" x2="${vx}" y2="${H}" stroke="var(--accent)" stroke-width="2"/>${marks}`;
+    }
+    $('graph').addEventListener('click', e => {
+      const r = $('graph').getBoundingClientRect(), n = game.positions.length - 1;
+      goTo(Math.round((e.clientX - r.left) / r.width * n));
+    });
+
+    function renderExplain(ply) {
+      const el = $('explain');
+      const r = ply > 0 ? reviewFor(ply - 1) : null;
+      if (!r) { el.classList.remove('show'); return; }
+      const num = `${Math.floor((ply - 1) / 2) + 1}${(ply - 1) % 2 ? '…' : '.'}`;
+      let txt = `<span class="cls" style="background:${CLASSES[r.cls].color}">${CLASSES[r.cls].icon}</span> <b>${num} ${game.moves[ply - 1].san}</b> is ${r.cls === 'excellent' || r.cls === 'inaccuracy' ? 'an' : 'a'} ${CLASSES[r.cls].label.toLowerCase()}.`;
+      if (r.cls !== 'best' && r.cls !== 'forced' && r.bestSan) txt += ` The best move was <b>${r.bestSan}</b> (${fmtEval(r.bestScore)}).`;
+      if (r.missedMate) txt += ' There was a checkmate available! 😮';
+      txt += ` Position after this move: <b>${fmtEval(r.after)}</b>`;
+      el.innerHTML = txt;
+      el.classList.add('show');
+    }
+
+    function renderArrows(ply) {
+      const svg = $('arrows');
+      const sqXY = i => { const v = flipped ? 63 - i : i; return [(v & 7) + 0.5, (v >> 3) + 0.5]; };
+      const arrow = (m, color) => {
+        const [x1, y1] = sqXY(m.from), [x2, y2] = sqXY(m.to);
+        const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy), ux = dx / len, uy = dy / len;
+        // shaft + a triangle head (drawn by hand so it works in every browser)
+        const hx = x2 - ux * 0.12, hy = y2 - uy * 0.12, bx = hx - ux * 0.42, by = hy - uy * 0.42, px = -uy * 0.26, py = ux * 0.26;
+        return `<g opacity=".85" fill="${color}"><line x1="${x1 + ux * 0.22}" y1="${y1 + uy * 0.22}" x2="${bx + ux * 0.05}" y2="${by + uy * 0.05}" stroke="${color}" stroke-width="0.17" stroke-linecap="round"/>` +
+          `<polygon points="${hx},${hy} ${bx + px},${by + py} ${bx - px},${by - py}"/></g>`;
+      };
+      let out = '';
+      if (hintMove) out += arrow(hintMove, '#1f9d63');
+      if (S.arrows && reviewing()) {
+        const prev = ply > 0 ? reviewFor(ply - 1) : null;
+        if (prev && ['inaccuracy', 'mistake', 'blunder'].includes(prev.cls)) {
+          // You're looking at a weak move: show what was played (colored) and what was better (green)
+          out += arrow(game.moves[ply - 1].m, CLASSES[prev.cls].color);
+          if (prev.best) out += arrow(prev.best, '#1f9d63');
+        } else {
+          // Otherwise show the best move from this position (if it wasn't the move that was played)
+          const r = reviewFor(ply);
+          const best = r ? r.best : (evalCache.get(posKey(game.positions[ply])) || {}).best;
+          const next = game.moves[ply] && game.moves[ply].m;
+          if (best && !(next && sameMove(next, best))) out += arrow(best, '#1f9d63');
+        }
+      }
+      svg.innerHTML = out;
+    }
+
+    let evalTimer = null;
+    function renderEvalBar(ply) {
+      const bar = $('evalbar');
+      const show = S.evalBar || (review && review.sig === gameSig()) || reviewing();
+      bar.hidden = !show;
+      if (!show) return;
+      bar.classList.toggle('flip', flipped);
+      const pos = game.positions[ply];
+      const cached = evalCache.get(posKey(pos));
+      if (cached) return paintEval(cached.score);
+      clearTimeout(evalTimer);
+      // work it out a moment later so the board updates first
+      evalTimer = setTimeout(() => { if (thinking) return renderEvalBar(ply); paintEval(analyzePos(pos).score); if (reviewing()) renderArrows(shownPly()); }, 60);
+    }
+    function paintEval(score) {
+      const pct = winPct(score);
+      $('eval-fill').style.height = pct + '%';
+      const txt = $('eval-txt');
+      txt.textContent = fmtEval(score).replace('+', '');
+      const whiteAhead = score >= 0;
+      // put the number on the side that's ahead
+      const atBottom = flipped ? !whiteAhead : whiteAhead;
+      txt.className = 'ev ' + (atBottom ? 'bottom' : 'top');
+      txt.style.color = whiteAhead ? '#26262e' : '#f4f4f4';
+    }
+
+    function goTo(ply) {
+      const last = game.positions.length - 1;
+      if (ply === null || ply >= last) viewIndex = null;
+      else viewIndex = Math.max(0, ply);
+      selected = -1; targets = []; hintMove = null;
+      render();
+    }
+    $('moves').addEventListener('click', e => { const s = e.target.closest('[data-ply]'); if (s) goTo(+s.dataset.ply); });
+    $('moments').addEventListener('click', e => { const s = e.target.closest('[data-ply]'); if (s) goTo(+s.dataset.ply); });
+    $('nav-first').addEventListener('click', () => goTo(0));
+    $('nav-prev').addEventListener('click', () => goTo(shownPly() - 1));
+    $('nav-next').addEventListener('click', () => goTo(shownPly() + 1));
+    $('nav-last').addEventListener('click', () => goTo(null));
+    $('back-live').addEventListener('click', () => goTo(null));
+    $('analyze').addEventListener('click', runAnalysis);
+    $('analyze-again').addEventListener('click', () => { evalCache.clear(); runAnalysis(); });
+    $('an-cancel').addEventListener('click', () => { analysisRun++; $('an-progress').hidden = true; render(); });
+    document.addEventListener('keydown', e => {
+      if (e.target.closest('input, textarea, select') || $('overlay').classList.contains('show')) return;
+      if (e.key === 'ArrowLeft') { e.preventDefault(); goTo(shownPly() - 1); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); goTo(shownPly() + 1); }
+      if (e.key === 'Home') goTo(0);
+      if (e.key === 'End') goTo(null);
+    });
 
     // ---------- Sounds ----------
     let ac;
