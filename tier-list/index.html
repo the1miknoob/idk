@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tier List Maker · Mikaeel</title>
+  <meta name="description" content="Make your own tier list: drag things from S to F and save it as a picture.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../games/shared.css">
+  <style>
+    :root { --tile: 72px; }
+    @media (max-width: 560px) { :root { --tile: 58px; } }
+    .title-input { font-size: 26px; font-weight: 700; border: none; background: transparent; width: 100%; padding: 4px 0; border-bottom: 2px dashed transparent; }
+    .title-input:hover, .title-input:focus { border-bottom-color: var(--border); outline: none; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 16px; }
+    .board { border-radius: 14px; overflow: hidden; border: 1px solid var(--border); background: #1a1a1f; }
+    .tier { display: flex; min-height: calc(var(--tile) + 8px); border-bottom: 2px solid #111; }
+    .tier:last-child { border-bottom: none; }
+    .label {
+      width: calc(var(--tile) + 24px); flex: none; display: grid; place-items: center; text-align: center; font-weight: 700; font-size: 22px;
+      color: #1c1c22; padding: 4px; cursor: pointer; overflow-wrap: anywhere; line-height: 1.1; position: relative;
+    }
+    .label:hover::after { content: '⚙️'; position: absolute; right: 3px; top: 2px; font-size: 12px; }
+    .items { flex: 1; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 4px; padding: 4px; min-width: 0; }
+    .items.over { background: rgba(255,255,255,.07); }
+    .item {
+      width: var(--tile); height: var(--tile); border-radius: 8px; display: grid; place-items: center; text-align: center; overflow: hidden;
+      font-weight: 700; font-size: 12px; line-height: 1.1; padding: 3px; color: #1c1c22; cursor: grab; touch-action: none; user-select: none;
+      background-size: cover; background-position: center; box-shadow: 0 2px 4px rgba(0,0,0,.25); position: relative;
+    }
+    .item .emo { font-size: calc(var(--tile) * .45); line-height: 1; display: block; }
+    .item.img { color: transparent; }
+    .item.placeholder { background: rgba(255,255,255,.18) !important; box-shadow: inset 0 0 0 2px rgba(255,255,255,.5); }
+    .item.placeholder > * { visibility: hidden; }
+    .ghost { position: fixed; z-index: 100; pointer-events: none; transform: rotate(4deg) scale(1.08); box-shadow: 0 12px 24px rgba(0,0,0,.4); }
+    .pool-wrap { margin-top: 16px; }
+    .pool { background: var(--surface); border: 2px dashed var(--border); border-radius: 14px; min-height: calc(var(--tile) + 16px); padding: 8px; }
+    .pool.over { border-color: var(--accent); }
+    .pool .empty { color: var(--muted); font-size: 14px; padding: 18px; width: 100%; text-align: center; }
+    .add { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .add .field { flex: 1; min-width: 180px; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); }
+    .trash { display: grid; place-items: center; width: 64px; border-radius: 12px; border: 2px dashed var(--border); font-size: 24px; }
+    .trash.over { border-color: var(--bad); background: #e5484d22; }
+    dialog { margin: auto; width: min(360px, calc(100vw - 24px)); border: 1px solid var(--border); border-radius: 16px; background: var(--surface); color: var(--text); padding: 18px; }
+    dialog::backdrop { background: rgba(0,0,0,.5); }
+    dialog h2 { font-size: 18px; margin-bottom: 10px; }
+    dialog .field { width: 100%; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); margin-bottom: 10px; }
+    .swatches { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .swatches button { width: 30px; height: 30px; border-radius: 8px; border: 2px solid var(--border); cursor: pointer; }
+    .tpl-list { display: grid; gap: 6px; }
+    .tpl-list button { text-align: left; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); cursor: pointer; }
+    .tpl-list button:hover { border-color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="wrap wide" style="max-width:960px">
+    <nav class="g-nav">
+      <a href="../">← Back to Mikaeel's site</a>
+      <div class="right"><button class="icon-btn" data-theme-toggle aria-label="Light or dark">🌙</button></div>
+    </nav>
+    <input class="title-input" id="title" maxlength="60" aria-label="Tier list title">
+    <div class="toolbar">
+      <button class="btn" id="templates">✨ Templates</button>
+      <button class="btn" id="add-tier">＋ Add tier</button>
+      <button class="btn primary" id="download">⬇️ Save as picture</button>
+      <button class="btn" id="unrank">↩ Unrank all</button>
+      <button class="btn" id="clear">🗑️ New list</button>
+    </div>
+
+    <div class="board" id="board"></div>
+
+    <div class="pool-wrap">
+      <div class="row" style="gap:8px;align-items:stretch">
+        <div class="items pool" id="pool" data-zone="pool" style="flex:1"></div>
+        <div class="trash" id="trash" data-zone="trash" title="Drag here to delete">🗑️</div>
+      </div>
+      <form class="add" id="add-form">
+        <input class="field" id="add-text" maxlength="40" placeholder="Add something to rank (you can use emoji 🍕)…" aria-label="New item">
+        <button class="btn primary" type="submit">＋ Add</button>
+        <button class="btn" type="button" id="add-img">🖼️ Add pictures</button>
+        <input type="file" id="img-file" accept="image/*" multiple hidden>
+      </form>
+      <p class="help">Drag items into the tiers. Click a tier label to rename it, change its color or move it. Double-click a text item to edit it.</p>
+    </div>
+  </div>
+
+  <dialog id="tier-dlg">
+    <h2>Edit tier</h2>
+    <input class="field" id="tier-name" maxlength="20" aria-label="Tier name">
+    <div class="swatches" id="tier-colors"></div>
+    <div class="row">
+      <button class="btn" id="tier-up">↑ Up</button><button class="btn" id="tier-down">↓ Down</button>
+      <button class="btn" id="tier-del">🗑️ Delete</button>
+      <button class="btn primary" id="tier-done" style="margin-left:auto">Done</button>
+    </div>
+  </dialog>
+  <dialog id="tpl-dlg">
+    <h2>Start from a template</h2>
+    <div class="tpl-list" id="tpl-list"></div>
+    <div class="row" style="margin-top:10px"><button class="btn" onclick="this.closest('dialog').close()">Cancel</button></div>
+  </dialog>
+
+  <script src="../games/shared.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    const TIER_COLORS = ['#ff7f7f', '#ffbf7f', '#ffdf7f', '#ffff7f', '#bfff7f', '#7fff7f', '#7fffff', '#7fbfff', '#bf7fff', '#ff7fbf', '#cfcfcf'];
+    const TILE_COLORS = ['#ffd6a5', '#fdffb6', '#caffbf', '#9bf6ff', '#a0c4ff', '#bdb2ff', '#ffc6ff', '#ffadad'];
+    const TEMPLATES = {
+      'Fruits 🍎': ['🍎 Apple', '🍌 Banana', '🍇 Grapes', '🍉 Watermelon', '🍓 Strawberry', '🍍 Pineapple', '🥭 Mango', '🍒 Cherry', '🍑 Peach', '🥝 Kiwi', '🍋 Lemon', '🍐 Pear'],
+      'Pets 🐶': ['🐶 Dog', '🐱 Cat', '🐰 Rabbit', '🐹 Hamster', '🐠 Fish', '🐢 Turtle', '🦜 Parrot', '🐍 Snake', '🦎 Lizard', '🐴 Horse'],
+      'Snacks 🍿': ['🍕 Pizza', '🍔 Burger', '🍟 Fries', '🌮 Taco', '🍿 Popcorn', '🍩 Donut', '🍪 Cookie', '🍦 Ice cream', '🥨 Pretzel', '🌭 Hot dog', '🍫 Chocolate', '🧁 Cupcake'],
+      'Sports ⚽': ['⚽ Soccer', '🏀 Basketball', '🏈 Football', '⚾ Baseball', '🎾 Tennis', '🏐 Volleyball', '🏊 Swimming', '🥊 Boxing', '⛳ Golf', '🏒 Hockey', '🛹 Skateboarding'],
+      'Seasons & holidays 🎃': ['🌸 Spring', '☀️ Summer', '🍂 Fall', '❄️ Winter', '🎃 Halloween', '🎄 Winter holidays', '🎆 New Year', '🎂 My birthday'],
+      'School subjects 📚': ['➗ Math', '🔬 Science', '📖 English', '🌍 Geography', '🏛️ History', '🎨 Art', '🎵 Music', '⚽ P.E.', '💻 Computers', '🗣️ Languages'],
+      'Mikaeel\'s games 🎮': ['🧩 Block Pop', '🪐 Merge Drop', '🔤 Word Hunt', '🌙 Night Swarm', '🎈 Sky Hop', '🐍 Snake', '🔢 2048', '♟️ Chess'],
+    };
+    const DEFAULT_TIERS = [['S', '#ff7f7f'], ['A', '#ffbf7f'], ['B', '#ffdf7f'], ['C', '#ffff7f'], ['D', '#bfff7f'], ['F', '#7fbfff']];
+
+    let L;   // the list: { title, tiers: [{id,label,color,items:[]}], pool: [], items: {id: {text, img, bg}} }
+    const newId = () => Math.random().toString(36).slice(2, 9);
+    function blank(title = 'My Tier List') {
+      return { title, tiers: DEFAULT_TIERS.map(([label, color]) => ({ id: newId(), label, color, items: [] })), pool: [], items: {} };
+    }
+    function save() { try { localStorage.setItem('tierlist', JSON.stringify(L)); } catch (e) { GS.toast('Too many pictures to save! Try smaller ones.'); } }
+    function addItem(data) {
+      const id = newId();
+      L.items[id] = { bg: TILE_COLORS[Object.keys(L.items).length % TILE_COLORS.length], ...data };
+      L.pool.push(id);
+      return id;
+    }
+
+    // ---------- Rendering ----------
+    function itemEl(id) {
+      const it = L.items[id];
+      const el = document.createElement('div');
+      el.className = 'item' + (it.img ? ' img' : '');
+      el.dataset.id = id;
+      if (it.img) { el.style.backgroundImage = `url("${it.img}")`; el.title = it.text || ''; el.textContent = it.text || ''; }
+      else {
+        el.style.background = it.bg;
+        const m = it.text.match(/^(\p{Extended_Pictographic}[\u{FE0F}\u{200D}\p{Extended_Pictographic}]*)\s*(.*)$/u);
+        if (m) { el.innerHTML = `<span class="emo"></span><span></span>`; el.children[0].textContent = m[1]; el.children[1].textContent = m[2]; }
+        else el.textContent = it.text;
+      }
+      return el;
+    }
+    function render() {
+      $('title').value = L.title;
+      const board = $('board');
+      board.innerHTML = '';
+      L.tiers.forEach(t => {
+        const row = document.createElement('div');
+        row.className = 'tier';
+        row.innerHTML = `<div class="label" data-tier="${t.id}" style="background:${t.color}" tabindex="0" role="button" aria-label="Edit tier ${t.label}"></div><div class="items" data-zone="${t.id}"></div>`;
+        row.firstChild.textContent = t.label;
+        t.items.forEach(id => row.lastChild.appendChild(itemEl(id)));
+        board.appendChild(row);
+      });
+      const pool = $('pool');
+      pool.innerHTML = '';
+      L.pool.forEach(id => pool.appendChild(itemEl(id)));
+      if (!L.pool.length) pool.innerHTML = `<div class="empty">${Object.keys(L.items).length ? '🎉 Everything is ranked!' : 'Add things below, or pick a template ✨'}</div>`;
+    }
+    const listFor = zone => zone === 'pool' ? L.pool : L.tiers.find(t => t.id === zone)?.items;
+
+    // ---------- Drag & drop (mouse and touch) ----------
+    let drag = null;
+    document.addEventListener('pointerdown', e => {
+      const el = e.target.closest('.item'); if (!el || el.classList.contains('placeholder') || e.button > 0) return;
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      drag = { id: el.dataset.id, el, ghost: null, dx: e.clientX - r.left, dy: e.clientY - r.top, sx: e.clientX, sy: e.clientY, started: false, zone: null };
+    });
+    document.addEventListener('pointermove', e => {
+      if (!drag) return;
+      if (!drag.started) {
+        if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 5) return;
+        drag.started = true;
+        drag.ghost = drag.el.cloneNode(true); drag.ghost.classList.add('ghost');
+        drag.ghost.style.width = drag.el.offsetWidth + 'px'; drag.ghost.style.height = drag.el.offsetHeight + 'px';
+        document.body.appendChild(drag.ghost);
+        drag.el.classList.add('placeholder');
+      }
+      drag.ghost.style.left = e.clientX - drag.dx + 'px'; drag.ghost.style.top = e.clientY - drag.dy + 'px';
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      const zoneEl = under && under.closest('[data-zone]');
+      document.querySelectorAll('.over').forEach(z => z.classList.remove('over'));
+      if (!zoneEl) return;
+      zoneEl.classList.add('over');
+      if (zoneEl.dataset.zone === 'trash') { drag.zone = 'trash'; return; }
+      drag.zone = zoneEl.dataset.zone;
+      // move the placeholder to where it would land
+      const kids = [...zoneEl.querySelectorAll('.item:not(.placeholder)')];
+      const before = kids.find(k => { const r = k.getBoundingClientRect(); return e.clientY < r.top + r.height && (e.clientY < r.top || e.clientX < r.left + r.width / 2); });
+      zoneEl.querySelector('.empty')?.remove();
+      if (before) zoneEl.insertBefore(drag.el, before); else zoneEl.appendChild(drag.el);
+    });
+    document.addEventListener('pointerup', () => {
+      if (!drag) return;
+      const d = drag; drag = null;
+      document.querySelectorAll('.over').forEach(z => z.classList.remove('over'));
+      if (!d.started) return;
+      d.ghost.remove();
+      // take it out of wherever it was
+      [L.pool, ...L.tiers.map(t => t.items)].forEach(list => { const i = list.indexOf(d.id); if (i >= 0) list.splice(i, 1); });
+      if (d.zone === 'trash') { delete L.items[d.id]; GS.sfx('pop'); }
+      else {
+        const zoneEl = d.el.parentElement, list = listFor(zoneEl?.dataset.zone) || L.pool;
+        const index = [...zoneEl.querySelectorAll('.item')].indexOf(d.el);
+        list.splice(Math.max(0, index), 0, d.id);
+        GS.sfx('place');
+      }
+      save(); render();
+    });
+
+    // ---------- Adding items ----------
+    $('add-form').addEventListener('submit', e => {
+      e.preventDefault();
+      const v = $('add-text').value.trim(); if (!v) return;
+      addItem({ text: v }); $('add-text').value = ''; save(); render();
+    });
+    $('add-img').addEventListener('click', () => $('img-file').click());
+    $('img-file').addEventListener('change', async () => {
+      const files = [...$('img-file').files]; $('img-file').value = '';
+      for (const f of files) {
+        const src = await shrink(f, 160);
+        addItem({ img: src, text: f.name.replace(/\.[^.]+$/, '') });
+      }
+      save(); render();
+    });
+    function shrink(file, size) {
+      return new Promise(res => {
+        const img = new Image();
+        img.onload = () => {
+          const c = document.createElement('canvas'); c.width = c.height = size;
+          const s = Math.min(img.width, img.height);
+          c.getContext('2d').drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, size, size);
+          URL.revokeObjectURL(img.src); res(c.toDataURL('image/jpeg', 0.8));
+        };
+        img.src = URL.createObjectURL(file);
+      });
+    }
+    document.addEventListener('dblclick', e => {
+      const el = e.target.closest('.item'); if (!el) return;
+      const it = L.items[el.dataset.id];
+      const v = prompt('Edit item', it.text || ''); if (v === null) return;
+      it.text = v.trim() || it.text; save(); render();
+    });
+
+    // ---------- Tiers ----------
+    let editing = null;
+    $('board').addEventListener('click', e => { const l = e.target.closest('.label'); if (l) openTier(l.dataset.tier); });
+    $('board').addEventListener('keydown', e => { const l = e.target.closest('.label'); if (l && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openTier(l.dataset.tier); } });
+    function openTier(id) {
+      editing = L.tiers.find(t => t.id === id);
+      $('tier-name').value = editing.label;
+      $('tier-colors').innerHTML = TIER_COLORS.map(c => `<button data-c="${c}" style="background:${c};${c === editing.color ? 'outline:3px solid var(--text)' : ''}" aria-label="${c}"></button>`).join('') +
+        `<input type="color" value="${editing.color}" id="tier-custom" aria-label="Any color" style="width:36px;height:30px;border:none;background:none">`;
+      $('tier-dlg').showModal();
+    }
+    $('tier-name').addEventListener('input', e => { editing.label = e.target.value || ' '; save(); render(); });
+    $('tier-colors').addEventListener('click', e => { const b = e.target.closest('[data-c]'); if (b) { editing.color = b.dataset.c; save(); render(); openTier(editing.id); } });
+    $('tier-colors').addEventListener('input', e => { if (e.target.id === 'tier-custom') { editing.color = e.target.value; save(); render(); } });
+    const moveTier = dir => { const i = L.tiers.indexOf(editing), j = i + dir; if (j < 0 || j >= L.tiers.length) return; [L.tiers[i], L.tiers[j]] = [L.tiers[j], L.tiers[i]]; save(); render(); };
+    $('tier-up').addEventListener('click', () => moveTier(-1));
+    $('tier-down').addEventListener('click', () => moveTier(1));
+    $('tier-del').addEventListener('click', () => {
+      if (L.tiers.length <= 1) return GS.toast('You need at least one tier');
+      L.pool.push(...editing.items); L.tiers = L.tiers.filter(t => t !== editing);
+      $('tier-dlg').close(); save(); render();
+    });
+    $('tier-done').addEventListener('click', () => $('tier-dlg').close());
+    $('add-tier').addEventListener('click', () => {
+      const t = { id: newId(), label: 'New', color: TIER_COLORS[L.tiers.length % TIER_COLORS.length], items: [] };
+      L.tiers.push(t); save(); render(); openTier(t.id);
+    });
+
+    // ---------- Toolbar ----------
+    $('title').addEventListener('input', e => { L.title = e.target.value; save(); });
+    $('unrank').addEventListener('click', () => { L.tiers.forEach(t => { L.pool.push(...t.items); t.items = []; }); save(); render(); });
+    $('clear').addEventListener('click', () => { if (!Object.keys(L.items).length || confirm('Start a new, empty tier list?')) { L = blank(); save(); render(); } });
+    $('templates').addEventListener('click', () => {
+      $('tpl-list').innerHTML = Object.keys(TEMPLATES).map(k => `<button data-t="${k}">${k}</button>`).join('');
+      $('tpl-dlg').showModal();
+    });
+    $('tpl-list').addEventListener('click', e => {
+      const b = e.target.closest('[data-t]'); if (!b) return;
+      if (Object.keys(L.items).length && !confirm('Replace your current list with this template?')) return;
+      L = blank(b.dataset.t.replace(/\s*\p{Extended_Pictographic}.*$/u, '') + ' tier list');
+      TEMPLATES[b.dataset.t].forEach(text => addItem({ text }));
+      $('tpl-dlg').close(); save(); render();
+    });
+
+    // ---------- Save as picture ----------
+    $('download').addEventListener('click', async () => {
+      const T = 90, LW = 120, W = 1000, PAD = 6;
+      const perRow = Math.floor((W - LW - PAD) / (T + PAD));
+      const rows = L.tiers.map(t => Math.max(1, Math.ceil(t.items.length / perRow)));
+      const H = 80 + rows.reduce((s, r) => s + r * (T + PAD) + PAD, 0) + 40;
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      const x = c.getContext('2d');
+      x.fillStyle = '#1a1a1f'; x.fillRect(0, 0, W, H);
+      x.fillStyle = '#fff'; x.font = '700 34px "Space Grotesk", sans-serif'; x.textBaseline = 'middle';
+      x.fillText(L.title || 'My Tier List', 20, 42);
+      const imgs = {};
+      await Promise.all(Object.entries(L.items).filter(([, it]) => it.img).map(([id, it]) => new Promise(r => { const im = new Image(); im.onload = () => { imgs[id] = im; r(); }; im.onerror = r; im.src = it.img; })));
+      let y = 80;
+      L.tiers.forEach((t, ti) => {
+        const h = rows[ti] * (T + PAD) + PAD;
+        x.fillStyle = t.color; x.fillRect(0, y, LW, h);
+        x.fillStyle = '#1c1c22'; x.font = '700 30px "Space Grotesk", sans-serif'; x.textAlign = 'center';
+        x.fillText(t.label.slice(0, 8), LW / 2, y + h / 2);
+        x.fillStyle = '#26262e'; x.fillRect(LW, y, W - LW, h);
+        t.items.forEach((id, i) => {
+          const it = L.items[id], cx = LW + PAD + (i % perRow) * (T + PAD), cy = y + PAD + Math.floor(i / perRow) * (T + PAD);
+          if (it.img && imgs[id]) x.drawImage(imgs[id], cx, cy, T, T);
+          else {
+            x.fillStyle = it.bg; x.fillRect(cx, cy, T, T);
+            x.fillStyle = '#1c1c22'; x.textAlign = 'center';
+            const m = (it.text || '').match(/^(\p{Extended_Pictographic}[\u{FE0F}\u{200D}\p{Extended_Pictographic}]*)\s*(.*)$/u);
+            if (m) { x.font = '38px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif'; x.fillText(m[1], cx + T / 2, cy + T * 0.4); x.font = '700 13px "Space Grotesk", sans-serif'; x.fillText(m[2].slice(0, 14), cx + T / 2, cy + T * 0.8); }
+            else { x.font = '700 14px "Space Grotesk", sans-serif'; wrap(x, it.text || '', cx + T / 2, cy + T / 2, T - 8); }
+          }
+        });
+        x.fillStyle = '#111'; x.fillRect(0, y + h - 2, W, 2);
+        y += h;
+      });
+      x.textAlign = 'right'; x.fillStyle = '#8d8d99'; x.font = '14px "Space Grotesk", sans-serif';
+      x.fillText('made with Mikaeel\'s Tier List Maker', W - 14, H - 18);
+      const a = document.createElement('a');
+      a.download = (L.title || 'tier-list').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() + '.png';
+      a.href = c.toDataURL('image/png'); a.click();
+      GS.toast('Saved! Check your downloads 📥');
+    });
+    function wrap(x, text, cx, cy, maxW) {
+      const words = text.split(' '), lines = []; let line = '';
+      for (const w of words) { const t = line ? line + ' ' + w : w; if (x.measureText(t).width > maxW && line) { lines.push(line); line = w; } else line = t; }
+      lines.push(line);
+      lines.slice(0, 4).forEach((l, i) => x.fillText(l, cx, cy + (i - (Math.min(lines.length, 4) - 1) / 2) * 16));
+    }
+
+    // ---------- Start ----------
+    try { L = JSON.parse(localStorage.getItem('tierlist')); } catch (e) {}
+    if (!L || !L.tiers) { L = blank(); TEMPLATES['Snacks 🍿'].forEach(text => addItem({ text })); L.title = 'Best snacks'; }
+    render();
+  </script>
+</body>
+</html>

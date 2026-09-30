@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#5b5bd6">
   <meta property="og:type" content="website">
   <meta property="og:title" content="Mikaeel">
-  <meta property="og:description" content="Hey, I'm Mikaeel 👋 Check out my projects: a customizable music player, a personal dashboard and a chess game.">
+  <meta property="og:description" content="Hey, I'm Mikaeel 👋 Check out my projects: games, a customizable music player, a personal dashboard, a typing test and more.">
   <meta property="og:url" content="https://the1miknoob.github.io/idk/">
   <meta name="twitter:card" content="summary">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👋</text></svg>">
@@ -247,10 +247,25 @@
           <h3>Personal Dashboard</h3>
           <p>Clock, weather, to-dos, notes, a focus timer, quick links and countdowns, all in one customizable page.</p>
         </a>
-        <a class="card" href="games/chess/" style="color:inherit;text-decoration:none">
-          <div class="emoji">♟️</div>
-          <h3>Chess</h3>
-          <p>Play chess against a computer I programmed (four levels) or with a friend. Has hints, undo and board themes.</p>
+        <a class="card" href="games/" style="color:inherit;text-decoration:none">
+          <div class="emoji">🎮</div>
+          <h3>Games Arcade</h3>
+          <p>9 games I built: Block Pop, Merge Drop, Word Hunt, Night Swarm, Sky Hop, Snake, 2048, Reaction Lab and Chess.</p>
+        </a>
+        <a class="card" href="typing-test/" style="color:inherit;text-decoration:none">
+          <div class="emoji">⌨️</div>
+          <h3>Typing Test</h3>
+          <p>How fast can you type? Words per minute, accuracy, a speed graph and your personal bests.</p>
+        </a>
+        <a class="card" href="tier-list/" style="color:inherit;text-decoration:none">
+          <div class="emoji">🏆</div>
+          <h3>Tier List Maker</h3>
+          <p>Rank anything from S to F by dragging. Add text, emoji or pictures, then save it as an image.</p>
+        </a>
+        <a class="card" href="spin-wheel/" style="color:inherit;text-decoration:none">
+          <div class="emoji">🎡</div>
+          <h3>Spin the Wheel</h3>
+          <p>Can't decide? Type your choices and let the wheel pick. Quick lists, results history and confetti.</p>
         </a>
       </div>
     </section>
@@ -296,7 +311,7 @@
     const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     // ---------- Typing effect (✏️ EDIT: change the words) ----------
-    const WORDS = ['music players', 'dashboards', 'chess games', 'websites', 'cool stuff', 'things I\'m proud of'];
+    const WORDS = ['games', 'music players', 'dashboards', 'chess engines', 'tier lists', 'websites', 'cool stuff', 'things I\'m proud of'];
     const typed = document.getElementById('typed');
     if (!reduceMotion) {
       let w = 0, i = WORDS[0].length, deleting = true;
