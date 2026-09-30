@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spin the Wheel · Mikaeel</title>
+  <meta name="description" content="Can't decide? Type your choices and spin the wheel.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎡</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../games/shared.css">
+  <style>
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
+    @media (max-width: 820px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+    .wheel-box { position: relative; width: min(100%, 560px); margin: 0 auto; aspect-ratio: 1; }
+    canvas { width: 100%; height: 100%; display: block; cursor: pointer; }
+    .pointer {
+      position: absolute; left: 50%; top: -6px; transform: translateX(-50%); width: 0; height: 0; z-index: 2;
+      border-left: 20px solid transparent; border-right: 20px solid transparent; border-top: 38px solid var(--text);
+      filter: drop-shadow(0 3px 3px rgba(0,0,0,.3)); transform-origin: 50% 0;
+    }
+    .pointer.tick { animation: tick .12s ease-out; }
+    @keyframes tick { 50% { transform: translateX(-50%) rotate(-14deg); } }
+    .spin-btn {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 22%; aspect-ratio: 1; border-radius: 50%; z-index: 2;
+      border: 5px solid #fff; background: var(--text); color: var(--bg); font-weight: 700; font-size: clamp(14px, 3.4vw, 22px); cursor: pointer;
+      box-shadow: 0 6px 18px rgba(0,0,0,.35);
+    }
+    .spin-btn:disabled { cursor: default; }
+    textarea { width: 100%; min-height: 220px; resize: vertical; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface-2); line-height: 1.6; }
+    textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+    .side h2 { font-size: 16px; margin: 14px 0 8px; }
+    .side h2:first-child { margin-top: 0; }
+    .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+    .presets button { padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); cursor: pointer; font-size: 13px; }
+    .history { list-style: none; display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow: auto; }
+    .history li { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+    .history li i { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+    .count { color: var(--muted); font-size: 13px; margin-top: 4px; }
+    dialog { margin: auto; width: min(380px, calc(100vw - 24px)); border: none; border-radius: 20px; background: var(--surface); color: var(--text); padding: 26px; text-align: center; }
+    dialog::backdrop { background: rgba(0,0,0,.55); }
+    .winner { font-size: clamp(28px, 7vw, 40px); font-weight: 700; line-height: 1.15; margin: 8px 0 16px; overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <div class="wrap wide">
+    <nav class="g-nav">
+      <a href="../">← Back to Mikaeel's site</a>
+      <div class="right">
+        <button class="icon-btn" data-mute-toggle aria-label="Sound">🔊</button>
+        <button class="icon-btn" data-theme-toggle aria-label="Light or dark">🌙</button>
+      </div>
+    </nav>
+    <div class="g-title"><h1>🎡 Spin the Wheel</h1></div>
+
+    <div class="layout">
+      <div>
+        <div class="wheel-box">
+          <div class="pointer" id="pointer"></div>
+          <canvas id="wheel" width="1120" height="1120" aria-label="Wheel"></canvas>
+          <button class="spin-btn" id="spin">SPIN</button>
+        </div>
+        <p class="help">Click the wheel, press <kbd>Space</kbd>, or tap SPIN.</p>
+      </div>
+      <aside class="panel side">
+        <h2>Choices <span class="muted" style="font-weight:400">(one per line)</span></h2>
+        <textarea id="options" spellcheck="false" aria-label="Choices, one per line"></textarea>
+        <div class="count" id="count"></div>
+        <div class="row" style="margin-top:8px">
+          <button class="btn" id="shuffle">🔀 Shuffle</button>
+          <button class="btn" id="sort">🔤 Sort</button>
+        </div>
+        <h2>Quick lists</h2>
+        <div class="presets" id="presets"></div>
+        <h2>Spin length</h2>
+        <div class="seg" id="length"><button data-v="3">Quick</button><button data-v="5">Normal</button><button data-v="8">Long</button></div>
+        <h2>Results</h2>
+        <ul class="history" id="history"></ul>
+      </aside>
+    </div>
+  </div>
+
+  <dialog id="win">
+    <div class="muted">🎉 The wheel picked…</div>
+    <div class="winner" id="winner"></div>
+    <div class="row" style="justify-content:center">
+      <button class="btn primary" id="again">Spin again</button>
+      <button class="btn" id="remove">Remove it &amp; spin</button>
+      <button class="btn" id="close">Close</button>
+    </div>
+  </dialog>
+
+  <script src="../games/shared.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    const cv = $('wheel'), ctx = cv.getContext('2d'), SZ = cv.width, R = SZ / 2 - 20;
+    const COLORS = ['#ff5c5c', '#ff9f43', '#feca57', '#2ecc71', '#1dd1a1', '#48a3ff', '#5f6bff', '#8e6cff', '#ff6bcb', '#ff8fab'];
+    const PRESETS = {
+      'Yes / No': ['Yes', 'No'],
+      'Coin flip': ['Heads 🪙', 'Tails 🪙'],
+      'Dinner 🍽️': ['🍕 Pizza', '🌮 Tacos', '🍝 Pasta', '🍣 Sushi', '🍔 Burgers', '🥗 Salad', '🍜 Noodles', '🍗 Chicken'],
+      '1–10': Array.from({ length: 10 }, (_, i) => String(i + 1)),
+      'What to do 🎲': ['🎮 Play a game', '📚 Read', '🚶 Go for a walk', '🎨 Draw something', '🎧 Listen to music', '🧹 Clean up', '💻 Code something', '🎬 Watch a movie'],
+      'Which game? 🎮': ['🧩 Block Pop', '🪐 Merge Drop', '🔤 Word Hunt', '🌙 Night Swarm', '🎈 Sky Hop', '🐍 Snake', '🔢 2048', '♟️ Chess'],
+    };
+    let state = { text: 'Pizza\nTacos\nPasta\nSushi\nBurgers\nSalad', secs: 5, history: [], ...GS.store.get('wheel', {}) };
+    let angle = 0, spinning = false, lastSeg = -1, winnerIdx = -1;
+
+    const options = () => state.text.split('\n').map(s => s.trim()).filter(Boolean);
+    const save = () => GS.store.set('wheel', state);
+
+    // ---------- Drawing ----------
+    function draw() {
+      const opts = options(), n = Math.max(opts.length, 1), seg = Math.PI * 2 / n;
+      ctx.clearRect(0, 0, SZ, SZ);
+      ctx.save(); ctx.translate(SZ / 2, SZ / 2);
+      ctx.beginPath(); ctx.arc(0, 0, R + 14, 0, Math.PI * 2); ctx.fillStyle = GS.isDark() ? '#2a2a31' : '#fff'; ctx.fill();
+      ctx.shadowColor = 'rgba(0,0,0,.25)'; ctx.shadowBlur = 20;
+      ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fillStyle = '#ddd'; ctx.fill(); ctx.shadowBlur = 0;
+      ctx.rotate(angle);
+      if (!opts.length) {
+        ctx.fillStyle = '#ccc'; ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
+      }
+      opts.forEach((o, i) => {
+        const a0 = -Math.PI / 2 + i * seg;
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, R, a0, a0 + seg); ctx.closePath();
+        ctx.fillStyle = COLORS[(i + (n % COLORS.length === 1 && i === n - 1 ? 1 : 0)) % COLORS.length];
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 3; ctx.stroke();
+        // label
+        ctx.save(); ctx.rotate(a0 + seg / 2);
+        const size = Math.max(18, Math.min(52, 900 / n, R * seg * 0.5));
+        ctx.font = `700 ${size}px "Space Grotesk", sans-serif`; ctx.fillStyle = '#fff'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 4;
+        let label = o; while (ctx.measureText(label).width > R * 0.68 && label.length > 2) label = label.slice(0, -2) + '…';
+        ctx.fillText(label, R - 30, 0);
+        ctx.restore();
+      });
+      ctx.restore();
+      // center ring
+      ctx.beginPath(); ctx.arc(SZ / 2, SZ / 2, R * 0.12, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
+    }
+
+    // Which option is under the pointer (at the top)?
+    function segmentAt(a) {
+      const n = options().length; if (!n) return -1;
+      const seg = Math.PI * 2 / n;
+      const rel = ((-a) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+      return Math.floor(rel / seg) % n;
+    }
+
+    // ---------- Spinning ----------
+    function spin() {
+      const opts = options();
+      if (spinning) return;
+      if (opts.length < 2) return GS.toast('Add at least 2 choices first');
+      spinning = true; $('spin').disabled = true;
+      const n = opts.length, seg = Math.PI * 2 / n;
+      winnerIdx = Math.floor(Math.random() * n);
+      // land somewhere inside the winning slice (not right on the edge)
+      const inside = seg * (0.15 + Math.random() * 0.7);
+      const targetRel = winnerIdx * seg + inside;                   // how far past the top the pointer should be
+      const current = ((angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+      const turns = 4 + state.secs;
+      const end = angle - current + Math.PI * 2 * turns + (Math.PI * 2 - targetRel);
+      const start = angle, dur = state.secs * 1000, t0 = performance.now();
+      (function frame(now) {
+        const k = Math.min(1, (now - t0) / dur);
+        const ease = 1 - Math.pow(1 - k, 4);
+        angle = start + (end - start) * ease;
+        const s = segmentAt(angle);
+        if (s !== lastSeg) { lastSeg = s; tickSound(); }
+        draw();
+        if (k < 1) requestAnimationFrame(frame); else finish();
+      })(t0);
+    }
+    function tickSound() {
+      GS.tone(1400, 0.02, 'square', 0.04);
+      const p = $('pointer'); p.classList.remove('tick'); void p.offsetWidth; p.classList.add('tick');
+    }
+    function finish() {
+      spinning = false; $('spin').disabled = false;
+      const opts = options(), idx = segmentAt(angle), pick = opts[idx];
+      state.history.unshift({ pick, color: COLORS[idx % COLORS.length], at: Date.now() });
+      state.history = state.history.slice(0, 20);
+      save(); renderHistory();
+      GS.sfx('win'); GS.confetti(100);
+      $('winner').textContent = pick;
+      winnerIdx = idx;
+      $('win').showModal();
+    }
+
+    // ---------- Sidebar ----------
+    function renderHistory() {
+      $('history').innerHTML = state.history.length ? state.history.map(h => `<li><i style="background:${h.color}"></i><span></span></li>`).join('') : '<li class="muted">Nothing yet. Give it a spin!</li>';
+      $('history').querySelectorAll('li span').forEach((s, i) => s.textContent = state.history[i].pick);
+    }
+    function renderAll() {
+      if ($('options').value !== state.text) $('options').value = state.text;
+      $('count').textContent = `${options().length} choices`;
+      document.querySelectorAll('#length button').forEach(b => b.classList.toggle('on', +b.dataset.v === state.secs));
+      draw();
+    }
+    $('options').addEventListener('input', e => { state.text = e.target.value; save(); renderAll(); });
+    $('presets').innerHTML = Object.keys(PRESETS).map(k => `<button data-p="${k}">${k}</button>`).join('');
+    $('presets').addEventListener('click', e => { const b = e.target.closest('[data-p]'); if (!b || spinning) return; state.text = PRESETS[b.dataset.p].join('\n'); save(); renderAll(); });
+    $('length').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { state.secs = +b.dataset.v; save(); renderAll(); } });
+    $('shuffle').addEventListener('click', () => { if (spinning) return; const o = options(); for (let i = o.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [o[i], o[j]] = [o[j], o[i]]; } state.text = o.join('\n'); save(); renderAll(); });
+    $('sort').addEventListener('click', () => { if (spinning) return; state.text = options().sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).join('\n'); save(); renderAll(); });
+
+    $('spin').addEventListener('click', spin);
+    cv.addEventListener('click', spin);
+    addEventListener('keydown', e => { if (e.code === 'Space' && document.activeElement !== $('options') && !$('win').open) { e.preventDefault(); spin(); } });
+    $('again').addEventListener('click', () => { $('win').close(); spin(); });
+    $('close').addEventListener('click', () => $('win').close());
+    $('remove').addEventListener('click', () => {
+      const o = options(); o.splice(winnerIdx, 1);
+      state.text = o.join('\n'); save(); renderAll();
+      $('win').close();
+      if (o.length >= 2) setTimeout(spin, 250); else GS.toast('Only one choice left!');
+    });
+    document.addEventListener('themechange', draw);
+
+    renderAll(); renderHistory();
+    if (document.fonts) document.fonts.ready.then(draw);
+  </script>
+</body>
+</html>

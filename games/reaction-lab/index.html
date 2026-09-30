@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+  <title>Reaction Lab · Mikaeel</title>
+  <meta name="description" content="Test your reaction time, aim and memory">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .tabs { display: flex; justify-content: center; margin-bottom: 14px; }
+    .arena {
+      position: relative; height: min(62vh, 480px); border-radius: 18px; display: grid; place-items: center; text-align: center;
+      color: #fff; user-select: none; -webkit-user-select: none; cursor: pointer; overflow: hidden; touch-action: manipulation; padding: 20px;
+      transition: background .08s;
+    }
+    .arena h2 { font-size: clamp(26px, 5vw, 44px); line-height: 1.15; }
+    .arena p { font-size: 18px; opacity: .9; margin-top: 8px; }
+    .arena .ico { font-size: 64px; }
+    .arena.blue { background: #2b87d1; } .arena.red { background: #ce2636; } .arena.green { background: #4bdb6a; color: #103d1a; }
+    .arena.purple { background: #5b4ad6; } .arena.dark { background: #1f2340; }
+    .target {
+      position: absolute; width: 70px; height: 70px; margin: -35px 0 0 -35px; border-radius: 50%; cursor: crosshair;
+      background: none; border: none; padding: 0;
+    }
+    /* only the picture pops in, so the target can be hit right away */
+    .target::after {
+      content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+      background: radial-gradient(circle, #fff 0 18%, #ff5c5c 19% 38%, #fff 39% 58%, #ff5c5c 59%); box-shadow: 0 6px 14px rgba(0,0,0,.35);
+      animation: popin .12s ease-out;
+    }
+    @keyframes popin { from { transform: scale(0); } to { transform: scale(1); } }
+    .progress-dots { position: absolute; top: 14px; left: 0; right: 0; display: flex; justify-content: center; gap: 6px; }
+    .progress-dots i { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,.3); }
+    .progress-dots i.on { background: #fff; }
+    .num { font-size: clamp(34px, 8vw, 64px); font-weight: 700; letter-spacing: 4px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .timebar { width: min(320px, 80%); height: 8px; background: rgba(255,255,255,.3); border-radius: 999px; margin: 16px auto 0; overflow: hidden; }
+    .timebar div { height: 100%; background: #fff; width: 100%; }
+    .num-input { font-size: 32px; text-align: center; letter-spacing: 3px; width: min(320px, 90%); padding: 8px; border-radius: 12px; border: none; margin-top: 14px; color: #1c1c22; }
+    .results { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 16px; }
+    .results div { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 10px 14px; }
+    .results small { display: block; color: var(--muted); font-size: 12px; }
+    .results b { font-size: 22px; font-variant-numeric: tabular-nums; }
+    .btn.light { background: #fff; color: #1c1c22; border: none; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav class="g-nav">
+      <a href="../">← All games</a>
+      <div class="right">
+        <button class="icon-btn" data-mute-toggle aria-label="Sound">🔊</button>
+        <button class="icon-btn" data-theme-toggle aria-label="Light or dark">🌙</button>
+      </div>
+    </nav>
+    <div class="g-title" style="justify-content:center"><h1>⚡ Reaction Lab</h1></div>
+    <div class="tabs"><div class="seg" id="tabs"><button data-v="reaction">⚡ Reaction</button><button data-v="aim">🎯 Aim</button><button data-v="memory">🔢 Memory</button></div></div>
+    <div class="arena blue" id="arena" tabindex="0"></div>
+    <div class="results" id="results"></div>
+  </div>
+
+  <script src="../shared.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    const arena = $('arena');
+    let test = GS.store.get('lab-tab', 'reaction');
+    let cleanup = () => {};
+    const set = (cls, html) => { arena.className = 'arena ' + cls; arena.innerHTML = html; };
+
+    // ============ Reaction time ============
+    function reaction() {
+      const ROUNDS = 5;
+      let times = [], phase = 'idle', timer = null, shownAt = 0;
+      const dots = () => `<div class="progress-dots">${Array.from({ length: ROUNDS }, (_, i) => `<i class="${i < times.length ? 'on' : ''}"></i>`).join('')}</div>`;
+      const idle = () => { phase = 'idle'; set('blue', `${dots()}<div><div class="ico">⚡</div><h2>Reaction time test</h2><p>When the screen turns <b>green</b>, click or tap as fast as you can.<br>Click anywhere to start.</p></div>`); };
+      function wait() {
+        phase = 'wait'; set('red', `${dots()}<div><div class="ico">⏳</div><h2>Wait for green…</h2></div>`);
+        timer = setTimeout(() => { phase = 'go'; shownAt = performance.now(); set('green', `${dots()}<div><div class="ico">👆</div><h2>CLICK!</h2></div>`); }, 1200 + Math.random() * 2800);
+      }
+      function press() {
+        if (phase === 'idle' || phase === 'result') return wait();
+        if (phase === 'wait') { clearTimeout(timer); phase = 'result'; GS.sfx('error'); set('blue', `${dots()}<div><div class="ico">😅</div><h2>Too soon!</h2><p>Wait for the green screen. Click to try again.</p></div>`); return; }
+        if (phase === 'go') {
+          const ms = Math.round(performance.now() - shownAt);
+          times.push(ms); GS.sfx('point');
+          if (times.length >= ROUNDS) return done();
+          phase = 'result';
+          set('blue', `${dots()}<div><div class="ico">⏱️</div><h2>${ms} ms</h2><p>Click to keep going (${times.length}/${ROUNDS})</p></div>`);
+        }
+      }
+      function done() {
+        phase = 'idle';
+        const avg = Math.round(times.reduce((a, b) => a + b, 0) / times.length);
+        const res = GS.best('reaction', avg, true);
+        const msg = avg < 200 ? 'Lightning fast! ⚡' : avg < 250 ? 'Super quick! 🔥' : avg < 300 ? 'Nice reflexes! 👍' : 'Keep practicing! 🙂';
+        if (res.isNew) GS.confetti(); GS.sfx('win');
+        set('blue', `<div><div class="ico">🏁</div><h2>${avg} ms average</h2><p>${msg}${res.isNew ? '<br>🏆 New best!' : ''}</p><p style="font-size:14px">${times.join(' · ')} ms</p><button class="btn light">Try again</button></div>`);
+        times = [];
+        showResults();
+      }
+      arena.onpointerdown = e => { e.preventDefault(); press(); };
+      arena.onkeydown = e => { if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); press(); } };
+      idle();
+      return () => clearTimeout(timer);
+    }
+
+    // ============ Aim trainer ============
+    function aim() {
+      const TOTAL = 30;
+      let hits = 0, misses = 0, start = 0, playing = false;
+      const idle = () => { playing = false; set('dark', `<div><div class="ico">🎯</div><h2>Aim trainer</h2><p>Hit ${TOTAL} targets as fast as you can.<br>Click to start.</p></div>`); };
+      function spawn() {
+        arena.querySelector('.target')?.remove();
+        const r = arena.getBoundingClientRect();
+        const t = document.createElement('button');
+        t.className = 'target'; t.setAttribute('aria-label', 'Target');
+        t.style.left = 45 + Math.random() * (r.width - 90) + 'px';
+        t.style.top = 60 + Math.random() * (r.height - 105) + 'px';
+        arena.appendChild(t);
+        arena.querySelector('h2').textContent = `${TOTAL - hits} left`;
+      }
+      arena.onpointerdown = e => {
+        e.preventDefault();
+        if (!playing) { playing = true; hits = 0; misses = 0; start = performance.now(); set('dark', '<h2 style="position:absolute;top:14px;left:0;right:0;font-size:20px;opacity:.7"></h2>'); spawn(); return; }
+        if (e.target.classList.contains('target')) {
+          hits++; GS.tone(700 + hits * 12, 0.05, 'sine', 0.1);
+          if (hits >= TOTAL) return done();
+          spawn();
+        } else { misses++; GS.sfx('error'); }
+      };
+      arena.onkeydown = null;
+      function done() {
+        const total = performance.now() - start, per = Math.round(total / TOTAL);
+        const acc = Math.round(TOTAL / (TOTAL + misses) * 100);
+        const res = GS.best('aim', per, true);
+        if (res.isNew) GS.confetti(); GS.sfx('win');
+        playing = false;
+        set('dark', `<div><div class="ico">🏁</div><h2>${per} ms per target</h2><p>Total ${(total / 1000).toFixed(1)}s · ${acc}% accuracy${res.isNew ? '<br>🏆 New best!' : ''}</p><button class="btn light">Try again</button></div>`);
+        showResults();
+      }
+      idle();
+      return () => {};
+    }
+
+    // ============ Number memory ============
+    function memory() {
+      let level = 1, number = '', timer = null, phase = 'idle';
+      const idle = () => { phase = 'idle'; set('purple', `<div><div class="ico">🔢</div><h2>Number memory</h2><p>Remember the number, then type it.<br>It gets one digit longer each round.</p><button class="btn light" id="m-start">Start</button></div>`); };
+      function show() {
+        phase = 'show';
+        number = Array.from({ length: level }, (_, i) => i === 0 ? 1 + Math.floor(Math.random() * 9) : Math.floor(Math.random() * 10)).join('');
+        const ms = 1200 + level * 600;
+        set('purple', `<div><p>Level ${level}</p><div class="num">${number}</div><div class="timebar"><div id="tb"></div></div></div>`);
+        const tb = $('tb'); tb.style.transition = `width ${ms}ms linear`; requestAnimationFrame(() => requestAnimationFrame(() => tb.style.width = '0%'));
+        timer = setTimeout(ask, ms);
+      }
+      function ask() {
+        phase = 'ask';
+        set('purple', `<div><p>Level ${level}</p><h2>What was the number?</h2><form id="m-form"><input class="num-input" id="m-in" inputmode="numeric" autocomplete="off" aria-label="Your answer"><br><button class="btn light">Submit</button></form></div>`);
+        $('m-in').focus();
+        $('m-form').onsubmit = e => {
+          e.preventDefault();
+          const v = $('m-in').value.replace(/\D/g, '');
+          if (v === number) { GS.sfx('point'); level++; phase = 'result'; set('purple', `<div><div class="ico">✅</div><h2>Correct!</h2><p>${number}</p><button class="btn light" id="m-next">Next level</button></div>`); $('m-next').onclick = e2 => { e2.stopPropagation(); show(); }; setTimeout(() => $('m-next')?.focus(), 50); }
+          else {
+            GS.sfx('lose');
+            const score = level - 1;
+            const res = GS.best('memory', score);
+            if (res.isNew && score > 0) GS.confetti();
+            set('purple', `<div><div class="ico">🧠</div><h2>You remembered ${score} digit${score === 1 ? '' : 's'}!</h2><p>The number was <b>${number}</b><br>You typed <s>${v || '(nothing)'}</s>${res.isNew && score > 0 ? '<br>🏆 New best!' : ''}</p><button class="btn light" id="m-again">Try again</button></div>`);
+            $('m-again').onclick = e2 => { e2.stopPropagation(); level = 1; show(); };
+            showResults();
+          }
+        };
+      }
+      arena.onpointerdown = e => { if (e.target.id === 'm-start') { e.preventDefault(); show(); } };
+      arena.onkeydown = null;
+      idle();
+      return () => clearTimeout(timer);
+    }
+
+    // ============ Tabs & results ============
+    const TESTS = { reaction, aim, memory };
+    function showResults() {
+      const r = GS.best('reaction'), a = GS.best('aim'), m = GS.best('memory');
+      $('results').innerHTML = `<div><small>⚡ Best reaction</small><b>${r ? r + ' ms' : '–'}</b></div><div><small>🎯 Best aim</small><b>${a ? a + ' ms' : '–'}</b></div><div><small>🔢 Best memory</small><b>${m ? m + ' digits' : '–'}</b></div>`;
+    }
+    function open(t) {
+      cleanup(); test = t; GS.store.set('lab-tab', t);
+      document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === t));
+      cleanup = TESTS[t]();
+      GS.played('reactionlab');
+    }
+    $('tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) open(b.dataset.v); });
+    showResults();
+    open(test);
+  </script>
+</body>
+</html>
