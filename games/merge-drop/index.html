@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+  <title>Merge Drop · Mikaeel</title>
+  <meta name="description" content="Drop and merge matching planets to make the biggest one">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪐</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .game { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    .stage { border-radius: 18px; width: min(100%, 420px); }
+    canvas#c { display: block; width: 100%; height: auto; border-radius: 18px; touch-action: none; cursor: pointer; box-shadow: 0 14px 30px rgba(0,0,0,.22); }
+    .next { display: flex; align-items: center; gap: 8px; }
+    .next canvas { width: 40px; height: 40px; }
+    .ladder { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; max-width: 420px; }
+    .ladder canvas { width: 30px; height: 30px; }
+    .ladder .arrow { color: var(--muted); font-size: 12px; align-self: center; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav class="g-nav">
+      <a href="../">← All games</a>
+      <div class="right">
+        <button class="icon-btn" data-mute-toggle aria-label="Sound">🔊</button>
+        <button class="icon-btn" data-theme-toggle aria-label="Light or dark">🌙</button>
+      </div>
+    </nav>
+    <div class="g-title">
+      <h1>🪐 Merge Drop</h1>
+      <div class="hud">
+        <div class="chip"><small>Score</small><b id="score">0</b></div>
+        <div class="chip"><small>Best</small><b id="best">0</b></div>
+        <div class="chip next"><div><small>Next</small></div><canvas id="next" width="80" height="80"></canvas></div>
+      </div>
+    </div>
+
+    <div class="game">
+      <div class="stage">
+        <canvas id="c" width="420" height="620" aria-label="Merge Drop game"></canvas>
+        <div class="overlay" id="overlay"><div class="card" id="card"></div></div>
+      </div>
+      <div class="ladder" id="ladder" aria-label="Merge order"></div>
+      <div class="row">
+        <div class="seg" id="themes"><button data-v="space">🪐 Space</button><button data-v="fruit">🍓 Fruit</button><button data-v="animals">🐶 Animals</button></div>
+        <button class="btn" id="restart">↻ New game</button>
+      </div>
+      <p class="help">Move to aim, tap or click to drop. Two of the same merge into the next size. Don't let them pile over the line!</p>
+    </div>
+  </div>
+
+  <script src="../shared.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    const cv = $('c'), ctx = cv.getContext('2d');
+    const W = 420, H = 620, TOP = 96, WALL = 10;
+    const RADII = [15, 20, 26, 32, 39, 47, 56, 66, 77, 89, 102];
+    const POINTS = [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 66];
+    const THEMES = {
+      space: null,
+      fruit: ['🫐', '🍒', '🍓', '🍋', '🍊', '🍎', '🍑', '🥥', '🍍', '🍈', '🍉'],
+      animals: ['🐭', '🐹', '🐰', '🐱', '🐶', '🦊', '🐼', '🐯', '🦁', '🐻', '🐘'],
+    };
+    // Space theme: my own little planets, each with a color and a face
+    const PLANET = [
+      ['#b8c0cc', '#7b8594'], ['#ffd166', '#e6a117'], ['#ff8fa3', '#e05473'], ['#8ce99a', '#3fae5a'], ['#74c0fc', '#2f84d6'],
+      ['#b197fc', '#7048e8'], ['#ffa94d', '#e8590c'], ['#63e6be', '#12b886'], ['#f783ac', '#c2255c'], ['#ffe066', '#f08c00'], ['#ff6b6b', '#c92a2a'],
+    ];
+
+    let theme = GS.store.get('merge-theme', 'space');
+    let bodies, score, current, next, aimX, lastDrop, dangerSince, over, idSeq, particles;
+
+    function newGame() {
+      bodies = []; particles = []; score = 0; idSeq = 0; over = false; dangerSince = 0; lastDrop = 0;
+      current = randTier(); next = randTier(); aimX = W / 2;
+      $('overlay').classList.remove('show');
+      GS.played('mergedrop');
+      updateHud();
+    }
+    const randTier = () => Math.floor(Math.random() * 5);
+
+    // ---------- Physics ----------
+    const G = 1500;
+    function step(dt) {
+      for (const b of bodies) {
+        b.vy += G * dt;
+        b.x += b.vx * dt; b.y += b.vy * dt;
+        b.vx *= 0.995; b.vy *= 0.999;
+      }
+      for (let iter = 0; iter < 4; iter++) {
+        for (const b of bodies) {
+          if (b.x - b.r < WALL) { b.x = WALL + b.r; b.vx = Math.abs(b.vx) * 0.2; }
+          if (b.x + b.r > W - WALL) { b.x = W - WALL - b.r; b.vx = -Math.abs(b.vx) * 0.2; }
+          if (b.y + b.r > H - WALL) { b.y = H - WALL - b.r; b.vy = -Math.abs(b.vy) * 0.15; b.vx *= 0.96; }
+        }
+        for (let i = 0; i < bodies.length; i++) {
+          const a = bodies[i];
+          for (let j = i + 1; j < bodies.length; j++) {
+            const b = bodies[j];
+            const dx = b.x - a.x, dy = b.y - a.y, rr = a.r + b.r;
+            const d2 = dx * dx + dy * dy;
+            if (d2 >= rr * rr || d2 === 0) continue;
+            if (a.t === b.t && !a.dead && !b.dead) { merge(a, b); continue; }
+            const d = Math.sqrt(d2), nx = dx / d, ny = dy / d, overlap = rr - d;
+            const ma = a.r * a.r, mb = b.r * b.r, tot = ma + mb;
+            a.x -= nx * overlap * (mb / tot); a.y -= ny * overlap * (mb / tot);
+            b.x += nx * overlap * (ma / tot); b.y += ny * overlap * (ma / tot);
+            const rv = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+            if (rv < 0) {
+              const jimp = -(1.1) * rv / (1 / ma + 1 / mb);
+              a.vx -= jimp * nx / ma; a.vy -= jimp * ny / ma;
+              b.vx += jimp * nx / mb; b.vy += jimp * ny / mb;
+            }
+          }
+        }
+        bodies = bodies.filter(b => !b.dead);
+      }
+    }
+
+    function merge(a, b) {
+      a.dead = b.dead = true;
+      const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;
+      if (a.t === RADII.length - 1) {
+        score += 200;
+        burst(x, y, PLANET[a.t][0], 40);
+        GS.sfx('win'); GS.confetti();
+      } else {
+        const t = a.t + 1;
+        bodies.push({ id: idSeq++, x, y, vx: (a.vx + b.vx) / 2, vy: (a.vy + b.vy) / 2 - 60, r: RADII[t], t, born: performance.now(), grow: 0 });
+        score += POINTS[t];
+        burst(x, y, PLANET[t][0], 12 + t * 2);
+        GS.tone(300 + t * 70, 0.12, 'sine', 0.18);
+      }
+      updateHud();
+    }
+
+    function burst(x, y, color, n) {
+      for (let k = 0; k < n; k++) {
+        const ang = Math.random() * Math.PI * 2, sp = 80 + Math.random() * 220;
+        particles.push({ x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, life: 0.6 + Math.random() * 0.3, color });
+      }
+    }
+
+    function drop() {
+      const now = performance.now();
+      if (over || now - lastDrop < 450) return;
+      lastDrop = now;
+      const r = RADII[current];
+      const x = Math.max(WALL + r, Math.min(W - WALL - r, aimX));
+      bodies.push({ id: idSeq++, x, y: TOP - 40, vx: 0, vy: 0, r, t: current, born: now, grow: 1 });
+      current = next; next = randTier();
+      GS.sfx('place');
+      updateHud();
+    }
+
+    // ---------- Drawing ----------
+    function drawBall(c, x, y, r, t, scale = 1) {
+      r *= scale;
+      if (theme === 'space') {
+        const [light, dark] = PLANET[t];
+        const g = c.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.1, x, y, r);
+        g.addColorStop(0, '#ffffff'); g.addColorStop(0.15, light); g.addColorStop(1, dark);
+        c.fillStyle = g;
+        c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
+        if (t === 6 || t === 9) {   // a ring on some planets
+          c.save(); c.strokeStyle = 'rgba(255,255,255,.55)'; c.lineWidth = Math.max(2, r * 0.08);
+          c.beginPath(); c.ellipse(x, y + r * 0.1, r * 1.25, r * 0.32, -0.25, Math.PI * 0.05, Math.PI * 0.95); c.stroke(); c.restore();
+        }
+        // face
+        c.fillStyle = '#2b2b35';
+        const ey = y - r * 0.08, ex = r * 0.3, er = Math.max(1.5, r * 0.09);
+        c.beginPath(); c.arc(x - ex, ey, er, 0, Math.PI * 2); c.arc(x + ex, ey, er, 0, Math.PI * 2); c.fill();
+        c.strokeStyle = '#2b2b35'; c.lineWidth = Math.max(1.5, r * 0.07); c.lineCap = 'round';
+        c.beginPath(); c.arc(x, y + r * 0.12, r * 0.22, 0.15 * Math.PI, 0.85 * Math.PI); c.stroke();
+        c.fillStyle = 'rgba(255,120,150,.45)';
+        c.beginPath(); c.arc(x - r * 0.5, y + r * 0.15, r * 0.12, 0, Math.PI * 2); c.arc(x + r * 0.5, y + r * 0.15, r * 0.12, 0, Math.PI * 2); c.fill();
+      } else {
+        c.fillStyle = 'rgba(255,255,255,.18)';
+        c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
+        c.font = `${r * 1.7}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+        c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillStyle = '#000';   // solid, or the emoji comes out see-through
+        c.fillText(THEMES[theme][t], x, y + r * 0.08);
+      }
+    }
+
+    function draw() {
+      const dark = GS.isDark();
+      // background
+      const bg = ctx.createLinearGradient(0, 0, 0, H);
+      if (theme === 'space') { bg.addColorStop(0, '#141833'); bg.addColorStop(1, '#2b1f4a'); }
+      else if (dark) { bg.addColorStop(0, '#2a2530'); bg.addColorStop(1, '#3a2f3f'); }
+      else { bg.addColorStop(0, '#fff4df'); bg.addColorStop(1, '#ffe2b8'); }
+      ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+      if (theme === 'space') {
+        ctx.fillStyle = 'rgba(255,255,255,.6)';
+        for (let k = 0; k < 40; k++) { const sx = (k * 97) % W, sy = (k * 173) % H; ctx.fillRect(sx, sy, 1.5, 1.5); }
+      }
+      // walls
+      ctx.fillStyle = theme === 'space' ? '#3b3f73' : dark ? '#56485e' : '#e0b97f';
+      ctx.fillRect(0, 0, WALL, H); ctx.fillRect(W - WALL, 0, WALL, H); ctx.fillRect(0, H - WALL, W, WALL);
+      // danger line
+      const danger = dangerSince && performance.now() - dangerSince > 300;
+      ctx.strokeStyle = danger ? `rgba(229,72,77,${0.5 + 0.5 * Math.sin(performance.now() / 90)})` : 'rgba(255,255,255,.35)';
+      ctx.setLineDash([8, 8]); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(WALL, TOP); ctx.lineTo(W - WALL, TOP); ctx.stroke(); ctx.setLineDash([]);
+      // aim guide + next ball
+      if (!over) {
+        const r = RADII[current], x = Math.max(WALL + r, Math.min(W - WALL - r, aimX));
+        ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(x, TOP - 40); ctx.lineTo(x, H - WALL); ctx.stroke();
+        const ready = performance.now() - lastDrop >= 450;
+        ctx.globalAlpha = ready ? 1 : 0.4;
+        drawBall(ctx, x, TOP - 40, r, current);
+        ctx.globalAlpha = 1;
+      }
+      // bodies
+      for (const b of bodies) {
+        const age = (performance.now() - b.born) / 1000;
+        const s = b.grow ? 1 : Math.min(1, 0.6 + age * 4);
+        drawBall(ctx, b.x, b.y, b.r, b.t, s);
+      }
+      // particles
+      for (const p of particles) { ctx.globalAlpha = Math.max(0, p.life); ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill(); }
+      ctx.globalAlpha = 1;
+    }
+
+    // ---------- Loop ----------
+    let last = performance.now(), acc = 0;
+    function loop(now) {
+      const dt = Math.min(0.05, (now - last) / 1000); last = now;
+      if (!over) {
+        acc += dt;
+        while (acc >= 1 / 120) { step(1 / 120); acc -= 1 / 120; }
+        // over the line for too long?
+        const tooHigh = bodies.some(b => now - b.born > 1200 && b.y - b.r < TOP && Math.abs(b.vy) < 120);
+        if (tooHigh) { if (!dangerSince) dangerSince = now; else if (now - dangerSince > 2500) gameOver(); }
+        else dangerSince = 0;
+      }
+      for (const p of particles) { p.vy += 600 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt * 1.6; }
+      particles = particles.filter(p => p.life > 0);
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    function gameOver() {
+      over = true;
+      const res = GS.best('mergedrop', score);
+      GS.sfx('lose');
+      if (res.isNew) GS.confetti();
+      const biggest = bodies.reduce((m, b) => Math.max(m, b.t), 0);
+      $('card').innerHTML = `<h2>It overflowed!</h2><p>Biggest you made:</p>
+        <canvas id="biggest" width="120" height="120" style="width:60px;height:60px"></canvas>
+        <div class="big">${score}</div>${res.isNew ? '<div class="new-best">🏆 New best!</div>' : `<p>Best: ${res.best}</p>`}
+        <div class="row" style="margin-top:14px"><button class="btn primary" id="again">Play again</button></div>`;
+      const bc = $('biggest').getContext('2d'); bc.scale(2, 2); drawBall(bc, 30, 30, 26, biggest);
+      $('overlay').classList.add('show');
+      $('again').onclick = newGame;
+    }
+
+    function updateHud() {
+      $('score').textContent = score;
+      $('best').textContent = Math.max(score, GS.best('mergedrop') || 0);
+      const nc = $('next').getContext('2d');
+      nc.setTransform(1, 0, 0, 1, 0, 0); nc.clearRect(0, 0, 80, 80); nc.scale(2, 2);
+      drawBall(nc, 20, 20, 16, next);
+    }
+    function renderLadder() {
+      $('ladder').innerHTML = RADII.map((_, t) => `<canvas width="60" height="60" data-t="${t}"></canvas>`).join('<span class="arrow">›</span>');
+      $('ladder').querySelectorAll('canvas').forEach(c => { const x = c.getContext('2d'); x.scale(2, 2); drawBall(x, 15, 15, 13, +c.dataset.t); });
+      document.querySelectorAll('#themes button').forEach(b => b.classList.toggle('on', b.dataset.v === theme));
+    }
+
+    // ---------- Input ----------
+    const toGame = e => { const r = cv.getBoundingClientRect(); return (e.clientX - r.left) / r.width * W; };
+    cv.addEventListener('pointermove', e => { aimX = toGame(e); });
+    cv.addEventListener('pointerdown', e => { aimX = toGame(e); if (e.pointerType === 'mouse') drop(); });
+    cv.addEventListener('pointerup', e => { if (e.pointerType !== 'mouse') { aimX = toGame(e); drop(); } });
+    addEventListener('keydown', e => {
+      if (e.key === 'ArrowLeft') aimX = Math.max(0, aimX - 20);
+      if (e.key === 'ArrowRight') aimX = Math.min(W, aimX + 20);
+      if (e.code === 'Space' || e.key === 'ArrowDown') { e.preventDefault(); drop(); }
+    });
+    $('themes').addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      theme = b.dataset.v; GS.store.set('merge-theme', theme); renderLadder(); updateHud();
+    });
+    $('restart').addEventListener('click', () => { if (over || !bodies.length || confirm('Start a new game?')) newGame(); });
+
+    newGame();
+    renderLadder();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
