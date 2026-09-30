@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+  <title>Sky Hop · Mikaeel</title>
+  <meta name="description" content="Tap to fly Blip through the crystal pillars">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎈</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .game { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+    .stage { width: min(100%, 400px); aspect-ratio: 2 / 3; border-radius: 18px; }
+    canvas { width: 100%; height: 100%; display: block; border-radius: 18px; touch-action: none; cursor: pointer; box-shadow: 0 14px 30px rgba(0,0,0,.22); }
+    .skins { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+    .skin { width: 44px; height: 44px; border-radius: 12px; border: 2px solid var(--border); background: var(--surface); cursor: pointer; padding: 2px; position: relative; }
+    .skin.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+    .skin.locked { opacity: .45; cursor: not-allowed; }
+    .skin canvas { width: 100%; height: 100%; box-shadow: none; border-radius: 8px; }
+    .skin .lock { position: absolute; right: -6px; bottom: -6px; font-size: 11px; background: var(--surface); border-radius: 999px; padding: 0 4px; border: 1px solid var(--border); }
+    .medal { font-size: 42px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav class="g-nav">
+      <a href="../">← All games</a>
+      <div class="right">
+        <button class="icon-btn" data-mute-toggle aria-label="Sound">🔊</button>
+        <button class="icon-btn" data-theme-toggle aria-label="Light or dark">🌙</button>
+      </div>
+    </nav>
+    <div class="g-title">
+      <h1>🎈 Sky Hop</h1>
+      <div class="hud"><div class="chip"><small>Best</small><b id="best">0</b></div></div>
+    </div>
+    <div class="game">
+      <div class="stage">
+        <canvas id="c" width="400" height="600" aria-label="Sky Hop game"></canvas>
+        <div class="overlay" id="overlay"><div class="card" id="card"></div></div>
+      </div>
+      <div class="skins" id="skins" aria-label="Choose Blip's color"></div>
+      <p class="help">Tap, click or press <kbd>Space</kbd> to hop. Fly through the gaps and grab ⭐ for bonus points. Beat your best to unlock new colors!</p>
+    </div>
+  </div>
+
+  <script src="../shared.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    const cv = $('c'), ctx = cv.getContext('2d');
+    const W = 400, H = 600, GROUND = 540;
+    // Blip's colors: [body, dark edge, name, score needed]
+    const SKINS = [
+      ['#2ec4b6', '#178a80', 'Teal', 0], ['#ff8fab', '#d9577a', 'Bubblegum', 5], ['#ffbe0b', '#d19200', 'Sunny', 15],
+      ['#8e6cff', '#5b3fd1', 'Grape', 25], ['#ff5d5d', '#c43131', 'Cherry', 40], ['#3a86ff', '#1f5fcc', 'Ocean', 60],
+      ['#222831', '#000000', 'Shadow', 80], ['rainbow', '#555', 'Rainbow', 100],
+    ];
+    let skin = GS.store.get('skyhop-skin', 0);
+    let state, blip, pillars, stars, score, frames, spawnIn, bgX, flash, shake;
+
+    function reset() {
+      blip = { x: 110, y: 280, vy: 0, rot: 0 };
+      pillars = []; stars = []; score = 0; frames = 0; spawnIn = 0; flash = 0; shake = 0;
+      state = 'ready';
+    }
+    const best = () => GS.best('skyhop') || 0;
+
+    // ---------- Game rules ----------
+    const GRAV = 1500, HOP = -430, SPEED = 150;
+    function hop() {
+      if (state === 'over') return;
+      if (state === 'ready') { state = 'playing'; $('overlay').classList.remove('show'); GS.played('skyhop'); }
+      blip.vy = HOP; GS.sfx('flap');
+    }
+    function spawn() {
+      const gap = Math.max(135, 170 - score * 1.2);
+      const top = 80 + Math.random() * (GROUND - 160 - gap);
+      pillars.push({ x: W + 40, top, gap, w: 70, passed: false, hue: 190 + Math.random() * 90 });
+      if (Math.random() < 0.35) stars.push({ x: W + 40 + 35, y: top + gap / 2, got: false });
+    }
+    function update(dt) {
+      frames += dt; bgX += SPEED * dt * 0.3;
+      if (state === 'ready') { blip.y = 280 + Math.sin(frames * 3) * 10; return; }
+      if (state === 'playing') {
+        blip.vy += GRAV * dt; blip.y += blip.vy * dt;
+        blip.rot = Math.max(-0.5, Math.min(1.2, blip.vy / 600));
+        spawnIn -= dt;
+        if (spawnIn <= 0) { spawn(); spawnIn = 1.55; }
+        for (const p of pillars) {
+          p.x -= SPEED * dt * (1 + Math.min(score, 60) * 0.006);
+          if (!p.passed && p.x + p.w < blip.x) { p.passed = true; score++; GS.sfx('point'); }
+          // hit test (circle vs rectangles)
+          const r = 17;
+          const hitX = blip.x + r > p.x && blip.x - r < p.x + p.w;
+          if (hitX && (blip.y - r < p.top || blip.y + r > p.top + p.gap)) return crash();
+        }
+        for (const s of stars) {
+          s.x -= SPEED * dt * (1 + Math.min(score, 60) * 0.006);
+          if (!s.got && Math.hypot(s.x - blip.x, s.y - blip.y) < 30) { s.got = true; score += 3; GS.sfx('pop'); }
+        }
+        pillars = pillars.filter(p => p.x > -100); stars = stars.filter(s => s.x > -40 && !s.got);
+        if (blip.y + 17 > GROUND) { blip.y = GROUND - 17; return crash(); }
+        if (blip.y < -40) blip.y = -40;
+      }
+      if (state === 'over') {
+        if (blip.y + 17 < GROUND) { blip.vy += GRAV * dt; blip.y = Math.min(GROUND - 17, blip.y + blip.vy * dt); blip.rot = Math.min(1.6, blip.rot + dt * 4); }
+      }
+      flash = Math.max(0, flash - dt * 3); shake = Math.max(0, shake - dt * 30);
+    }
+    function crash() {
+      state = 'over'; flash = 1; shake = 10; GS.sfx('hit');
+      const res = GS.best('skyhop', score);
+      const medal = score >= 100 ? '💎' : score >= 50 ? '🥇' : score >= 25 ? '🥈' : score >= 10 ? '🥉' : '';
+      const unlocked = SKINS.filter(s => s[3] <= score && s[3] > (res.isNew ? prevBest : Infinity));
+      if (res.isNew) GS.confetti();
+      setTimeout(() => {
+        $('card').innerHTML = `<h2>${score >= 10 ? 'Nice flying!' : 'Ouch!'}</h2>${medal ? `<div class="medal">${medal}</div>` : ''}
+          <div class="big">${score}</div>${res.isNew ? '<div class="new-best">🏆 New best!</div>' : `<p>Best: ${res.best}</p>`}
+          ${unlocked.length ? `<p>🎨 Unlocked: ${unlocked.map(s => s[2]).join(', ')}</p>` : ''}
+          <div class="row" style="margin-top:12px"><button class="btn primary" id="go">Fly again</button></div>`;
+        $('overlay').classList.add('show');
+        $('go').onclick = () => { newRound(); };
+        renderSkins();
+      }, 600);
+      prevBest = Math.max(prevBest, score);
+      $('best').textContent = best();
+    }
+    let prevBest = best();
+
+    // ---------- Drawing ----------
+    function drawBlip(c, x, y, rot, sk, t, scale = 1) {
+      const [body, edge] = SKINS[sk];
+      c.save(); c.translate(x, y); c.rotate(rot); c.scale(scale, scale);
+      // propeller hat
+      c.fillStyle = '#ffd23f'; c.fillRect(-2, -30, 4, 10);
+      const spin = Math.sin(t * 40);
+      c.fillStyle = '#ff5d5d'; c.beginPath(); c.ellipse(0, -31, 16 * Math.abs(spin) + 2, 3, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#3a86ff'; c.beginPath(); c.arc(0, -20, 8, Math.PI, 0); c.fill();
+      // body
+      let fill = body;
+      if (body === 'rainbow') { fill = c.createLinearGradient(-18, -18, 18, 18); ['#ff5d5d', '#ffbe0b', '#2ec4b6', '#3a86ff', '#8e6cff'].forEach((col, i) => fill.addColorStop(i / 4, col)); }
+      c.fillStyle = fill; c.strokeStyle = edge; c.lineWidth = 3;
+      c.beginPath(); c.ellipse(0, 0, 20, 18, 0, 0, Math.PI * 2); c.fill(); c.stroke();
+      c.fillStyle = 'rgba(255,255,255,.35)'; c.beginPath(); c.ellipse(-7, -8, 7, 4, -0.5, 0, Math.PI * 2); c.fill();
+      // face
+      c.fillStyle = '#fff'; c.beginPath(); c.arc(6, -3, 6, 0, Math.PI * 2); c.arc(-5, -3, 5, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#1c1c22'; c.beginPath(); c.arc(8, -3, 3, 0, Math.PI * 2); c.arc(-3, -3, 2.6, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = '#1c1c22'; c.lineWidth = 2; c.lineCap = 'round';
+      c.beginPath(); c.arc(2, 5, 5, 0.15 * Math.PI, 0.85 * Math.PI); c.stroke();
+      c.fillStyle = 'rgba(255,100,130,.5)'; c.beginPath(); c.arc(13, 5, 3, 0, Math.PI * 2); c.fill();
+      c.restore();
+    }
+
+    function drawWorld(t) {
+      const dark = GS.isDark();
+      // sky gets darker (sunset → night) as the score goes up
+      const night = Math.min(1, score / 60) * 0.7 + (dark ? 0.3 : 0);
+      const sky = ctx.createLinearGradient(0, 0, 0, H);
+      sky.addColorStop(0, mix('#6ec3ff', '#1b1f4b', night)); sky.addColorStop(1, mix('#ffd8a8', '#6b3fa0', night));
+      ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+      if (night > 0.35) { ctx.fillStyle = `rgba(255,255,255,${(night - 0.35) * 1.4})`; for (let k = 0; k < 30; k++) ctx.fillRect((k * 131 + 7) % W, (k * 71) % 300, 2, 2); }
+      // far hills
+      ctx.fillStyle = mix('#8fd3a0', '#2e3a6b', night);
+      ctx.beginPath(); ctx.moveTo(0, GROUND);
+      for (let x = 0; x <= W; x += 10) ctx.lineTo(x, GROUND - 60 - Math.sin((x + bgX * 0.5) / 60) * 25 - Math.sin((x + bgX * 0.5) / 23) * 8);
+      ctx.lineTo(W, GROUND); ctx.fill();
+      // clouds
+      ctx.fillStyle = `rgba(255,255,255,${0.8 - night * 0.5})`;
+      for (let k = 0; k < 4; k++) {
+        const cx = ((k * 150 - bgX * 0.8) % (W + 160) + W + 160) % (W + 160) - 80, cy = 70 + k * 45;
+        ctx.beginPath(); ctx.arc(cx, cy, 20, 0, Math.PI * 2); ctx.arc(cx + 22, cy - 8, 24, 0, Math.PI * 2); ctx.arc(cx + 46, cy, 18, 0, Math.PI * 2); ctx.fill();
+      }
+      // crystal pillars
+      for (const p of pillars) { crystal(p.x, 0, p.w, p.top, p.hue, true); crystal(p.x, p.top + p.gap, p.w, GROUND - p.top - p.gap, p.hue, false); }
+      // stars
+      for (const s of stars) star(s.x, s.y + Math.sin(t * 5 + s.x) * 4, 12);
+      // ground
+      ctx.fillStyle = mix('#7bc74d', '#2d5a3a', night); ctx.fillRect(0, GROUND, W, H - GROUND);
+      ctx.fillStyle = mix('#5aa332', '#234630', night);
+      for (let x = -((bgX * 3.3) % 30); x < W; x += 30) ctx.fillRect(x, GROUND, 15, 8);
+      ctx.fillStyle = mix('#c99a5b', '#4a3a2a', night); ctx.fillRect(0, GROUND + 14, W, H - GROUND);
+    }
+    function crystal(x, y, w, h, hue, fromTop) {
+      if (h <= 0) return;
+      const g = ctx.createLinearGradient(x, 0, x + w, 0);
+      g.addColorStop(0, `hsl(${hue},70%,72%)`); g.addColorStop(0.5, `hsl(${hue},75%,60%)`); g.addColorStop(1, `hsl(${hue},70%,45%)`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      if (fromTop) { ctx.moveTo(x, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + h - 16); ctx.lineTo(x + w / 2, y + h); ctx.lineTo(x, y + h - 16); }
+      else { ctx.moveTo(x, y + 16); ctx.lineTo(x + w / 2, y); ctx.lineTo(x + w, y + 16); ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h); }
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x + w * 0.3, fromTop ? y : y + h); ctx.lineTo(x + w * 0.3, fromTop ? y + h - 20 : y + 20); ctx.stroke();
+    }
+    function star(x, y, r) {
+      ctx.fillStyle = '#ffd23f'; ctx.strokeStyle = '#e0a800'; ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5 - Math.PI / 2, rr = i % 2 ? r * 0.45 : r; ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); }
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    function mix(a, b, t) {
+      const pa = [1, 3, 5].map(i => parseInt(a.slice(i, i + 2), 16)), pb = [1, 3, 5].map(i => parseInt(b.slice(i, i + 2), 16));
+      return `rgb(${pa.map((v, i) => Math.round(v + (pb[i] - v) * t)).join(',')})`;
+    }
+
+    function draw(t) {
+      ctx.save();
+      if (shake) ctx.translate((Math.random() - .5) * shake, (Math.random() - .5) * shake);
+      drawWorld(t);
+      drawBlip(ctx, blip.x, blip.y, blip.rot, skin, t);
+      ctx.restore();
+      if (state !== 'ready') {
+        ctx.font = '700 56px "Space Grotesk", sans-serif'; ctx.textAlign = 'center';
+        ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.strokeText(score, W / 2, 90);
+        ctx.fillStyle = '#fff'; ctx.fillText(score, W / 2, 90);
+      }
+      if (flash) { ctx.fillStyle = `rgba(255,255,255,${flash})`; ctx.fillRect(0, 0, W, H); }
+    }
+
+    let last = performance.now();
+    function loop(now) {
+      const dt = Math.min(0.033, (now - last) / 1000); last = now;
+      update(dt); draw(now / 1000);
+      requestAnimationFrame(loop);
+    }
+
+    // ---------- Skins ----------
+    function renderSkins() {
+      const b = best();
+      $('skins').innerHTML = SKINS.map((s, i) => {
+        const locked = b < s[3];
+        return `<button class="skin ${i === skin ? 'on' : ''} ${locked ? 'locked' : ''}" data-i="${i}" title="${s[2]}${locked ? ` · score ${s[3]} to unlock` : ''}" aria-label="${s[2]}${locked ? ' (locked)' : ''}">
+          <canvas width="80" height="80"></canvas>${locked ? `<span class="lock">🔒${s[3]}</span>` : ''}</button>`;
+      }).join('');
+      $('skins').querySelectorAll('canvas').forEach((c, i) => { const x = c.getContext('2d'); drawBlip(x, 40, 46, 0, i, 0, 1.45); });
+    }
+    $('skins').addEventListener('click', e => {
+      const b = e.target.closest('.skin'); if (!b) return;
+      const i = +b.dataset.i;
+      if (best() < SKINS[i][3]) return GS.toast(`Score ${SKINS[i][3]} to unlock ${SKINS[i][2]}`);
+      skin = i; GS.store.set('skyhop-skin', i); renderSkins();
+    });
+
+    // ---------- Input ----------
+    function newRound() {
+      reset();
+      $('card').innerHTML = `<h2>🎈 Sky Hop</h2><p>Tap to hop. Fly through the gaps!</p><div class="row"><button class="btn primary" id="go">▶ Start</button></div>`;
+      $('overlay').classList.add('show');
+      $('go').onclick = e => { e.stopPropagation(); hop(); };
+    }
+    cv.addEventListener('pointerdown', e => { e.preventDefault(); hop(); });
+    $('overlay').addEventListener('pointerdown', e => { if (state === 'ready' && !e.target.closest('button')) hop(); });
+    addEventListener('keydown', e => {
+      if (e.code === 'Space' || e.key === 'ArrowUp' || e.key === 'w') {
+        e.preventDefault();
+        if (state === 'over' && $('overlay').classList.contains('show')) newRound(); else hop();
+      }
+    });
+
+    bgX = 0;
+    newRound();
+    renderSkins();
+    $('best').textContent = best();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

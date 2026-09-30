@@ -59,6 +59,12 @@
         bg: 'linear-gradient(135deg,#141833,#5b2a86)', text: 'Drop planets, merge matching ones into bigger ones, and don\'t overflow. Fruit and animal themes too.' },
       { id: 'wordhunt', href: 'word-hunt/', emoji: '🔤', title: 'Word Hunt', tags: ['Word', 'Daily'], badge: '📅 Daily',
         bg: 'linear-gradient(135deg,#3fa45b,#d4a72c)', text: 'Guess the 5-letter word in 6 tries. A new puzzle every day, plus unlimited practice.', bestLabel: 'Streak' },
+      { id: 'nightswarm', href: 'night-swarm/', emoji: '🌙', title: 'Night Swarm', tags: ['Arcade', 'Action'], badge: '🔥 Trending',
+        bg: 'radial-gradient(circle at 50% 60%,#3b2a6b,#0d1410 70%)', text: 'Survive 10 minutes against an endless swarm. Level up, pick upgrades and face the Shadow King.', bestLabel: 'Best time', fmt: s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` },
+      { id: 'skyhop', href: 'sky-hop/', emoji: '🎈', title: 'Sky Hop', tags: ['Arcade'],
+        bg: 'linear-gradient(180deg,#6ec3ff,#ffd8a8)', text: 'Tap to fly Blip through the crystal pillars. Unlock new colors as you beat your best.' },
+      { id: 'snake', href: 'snake/', emoji: '🐍', title: 'Snake', tags: ['Arcade'],
+        bg: 'repeating-conic-gradient(#aad751 0 25%, #a2d149 0 50%) 0 0 / 40px 40px', text: 'The classic: eat apples, grow longer, don\'t bite yourself. Three speeds and a no-walls mode.', bestKey: 'snake-normal-walls' },
       { id: '2048', href: '2048/', emoji: '🔢', title: '2048', tags: ['Puzzle'],
         bg: 'linear-gradient(135deg,#edc22e,#f67c5f)', text: 'Slide tiles, merge matching numbers and reach 2048. Try 5×5 and 6×6 boards too.' },
       { id: 'chess', href: 'chess/', emoji: '♟️', title: 'Chess', tags: ['Strategy'],
@@ -78,8 +84,8 @@
         const wins = st ? Object.values(st).reduce((s, x) => s + (x.w || 0), 0) : 0;
         if (wins) out.push(`<span class="pill best">🏆 ${wins} win${wins === 1 ? '' : 's'}</span>`);
       } else {
-        const best = read('game-best-' + g.id);
-        if (best) out.push(`<span class="pill best">🏆 ${g.bestLabel || 'Best'}: ${best}</span>`);
+        const best = read('game-best-' + (g.bestKey || g.id));
+        if (best) out.push(`<span class="pill best">🏆 ${g.bestLabel || 'Best'}: ${g.fmt ? g.fmt(best) : best}</span>`);
       }
       out.push(...g.tags.map(t => `<span class="pill">${t}</span>`));
       return out.join('');
