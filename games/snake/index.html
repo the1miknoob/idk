@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+  <title>Snake · Mikaeel</title>
+  <meta name="description" content="Classic snake: eat, grow, don't bite yourself">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐍</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .game { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+    .stage { width: min(100%, 480px); aspect-ratio: 1; border-radius: 16px; }
+    canvas { width: 100%; height: 100%; display: block; border-radius: 16px; touch-action: none; box-shadow: 0 14px 30px rgba(0,0,0,.2); }
+    .dpad { display: none; grid-template-columns: repeat(3, 60px); grid-template-rows: repeat(2, 54px); gap: 6px; }
+    .dpad button { border: none; border-radius: 12px; background: var(--surface-2); font-size: 22px; cursor: pointer; touch-action: manipulation; }
+    .dpad .up { grid-column: 2; } .dpad .left { grid-column: 1; grid-row: 2; } .dpad .down { grid-column: 2; grid-row: 2; } .dpad .right { grid-column: 3; grid-row: 2; }
+    @media (hover: none) { .dpad { display: grid; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav class="g-nav">
+      <a href="../">← All games</a>
+      <div class="right">
+        <button class="icon-btn" data-mute-toggle aria-label="Sound">🔊</button>
+        <button class="icon-btn" data-theme-toggle aria-label="Light or dark">🌙</button>
+      </div>
+    </nav>
+    <div class="g-title">
+      <h1>🐍 Snake</h1>
+      <div class="hud">
+        <div class="chip"><small>Score</small><b id="score">0</b></div>
+        <div class="chip"><small>Best</small><b id="best">0</b></div>
+      </div>
+    </div>
+    <div class="game">
+      <div class="stage">
+        <canvas id="c" width="960" height="960" aria-label="Snake game"></canvas>
+        <div class="overlay show" id="overlay"><div class="card" id="card"></div></div>
+      </div>
+      <div class="row">
+        <div class="seg" id="speed"><button data-v="chill">🐢 Chill</button><button data-v="normal">🐍 Normal</button><button data-v="fast">⚡ Fast</button></div>
+        <div class="seg" id="walls"><button data-v="walls">🧱 Walls</button><button data-v="wrap">🌀 No walls</button></div>
+      </div>
+      <div class="dpad" id="dpad">
+        <button class="up" data-d="up" aria-label="Up">▲</button><button class="left" data-d="left" aria-label="Left">◀</button>
+        <button class="down" data-d="down" aria-label="Down">▼</button><button class="right" data-d="right" aria-label="Right">▶</button>
+      </div>
+      <p class="help">Arrow keys, <kbd>WASD</kbd> or swipe to turn. <kbd>Space</kbd> pauses. Golden apples are worth 5!</p>
+    </div>
+  </div>
+
+  <script src="../shared.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    const cv = $('c'), ctx = cv.getContext('2d');
+    const N = 20, CS = cv.width / N;
+    const SPEEDS = { chill: 150, normal: 105, fast: 70 };
+    const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+    let opts = { speed: 'normal', walls: 'walls', ...GS.store.get('snake-opts', {}) };
+    let snake, prevSnake, dir, queue, food, gold, score, state = 'ready', lastTick = 0, eaten = 0;
+    const bestKey = () => `snake-${opts.speed}-${opts.walls}`;
+
+    function reset() {
+      snake = [[9, 10], [8, 10], [7, 10], [6, 10]];
+      prevSnake = snake.map(s => [...s]);
+      dir = 'right'; queue = []; score = 0; eaten = 0; gold = null;
+      placeFood();
+      updateHud();
+    }
+    function freeCell() {
+      while (true) {
+        const c = [Math.floor(Math.random() * N), Math.floor(Math.random() * N)];
+        if (!snake.some(s => s[0] === c[0] && s[1] === c[1]) && !(food && food[0] === c[0] && food[1] === c[1])) return c;
+      }
+    }
+    function placeFood() { food = freeCell(); }
+
+    function turn(d) {
+      if (state === 'ready' || state === 'over') return start();
+      if (state === 'paused') return;
+      const last = queue.length ? queue[queue.length - 1] : dir;
+      const opposite = { up: 'down', down: 'up', left: 'right', right: 'left' };
+      if (d !== last && d !== opposite[last] && queue.length < 3) queue.push(d);
+    }
+
+    function tick() {
+      if (queue.length) dir = queue.shift();
+      const [dx, dy] = DIRS[dir];
+      let [x, y] = snake[0];
+      x += dx; y += dy;
+      if (opts.walls === 'wrap') { x = (x + N) % N; y = (y + N) % N; }
+      else if (x < 0 || y < 0 || x >= N || y >= N) return die();
+      const willEat = x === food[0] && y === food[1];
+      const willGold = gold && x === gold.c[0] && y === gold.c[1];
+      const body = willEat || willGold ? snake : snake.slice(0, -1);
+      if (body.some(s => s[0] === x && s[1] === y)) return die();
+      prevSnake = snake.map(s => [...s]);
+      snake.unshift([x, y]);
+      if (willEat) {
+        score++; eaten++; placeFood(); GS.sfx('point');
+        if (eaten % 5 === 0 && !gold) gold = { c: freeCell(), until: performance.now() + 6000 };
+      } else if (willGold) {
+        score += 5; gold = null; GS.sfx('pop');
+        snake.push([...snake[snake.length - 1]], [...snake[snake.length - 1]]);
+      } else snake.pop();
+      if (prevSnake.length < snake.length) prevSnake.push([...prevSnake[prevSnake.length - 1]]);
+      if (gold && performance.now() > gold.until) gold = null;
+      updateHud();
+    }
+
+    function die() {
+      state = 'over'; GS.sfx('hit');
+      const res = GS.best(bestKey(), score);
+      if (res.isNew) GS.confetti();
+      card(`<h2>Game over</h2><p>Length ${snake.length}</p><div class="big">${score}</div>
+        ${res.isNew ? '<div class="new-best">🏆 New best!</div>' : `<p>Best: ${res.best}</p>`}
+        <div class="row" style="margin-top:12px"><button class="btn primary" id="go">Play again</button></div>`);
+      $('go').onclick = start;
+    }
+    function card(html) { $('card').innerHTML = html; $('overlay').classList.add('show'); }
+
+    function start() {
+      reset(); state = 'playing'; lastTick = performance.now();
+      $('overlay').classList.remove('show'); GS.played('snake');
+    }
+    function pause() {
+      if (state === 'playing') { state = 'paused'; card('<h2>Paused</h2><p>Press space or tap to keep going</p><div class="row"><button class="btn primary" id="go">Resume</button></div>'); $('go').onclick = pause; }
+      else if (state === 'paused') { state = 'playing'; lastTick = performance.now(); $('overlay').classList.remove('show'); }
+    }
+
+    // ---------- Drawing ----------
+    function draw(t) {
+      const dark = GS.isDark();
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        ctx.fillStyle = (x + y) % 2 ? (dark ? '#1f3a26' : '#aad751') : (dark ? '#24432c' : '#a2d149');
+        ctx.fillRect(x * CS, y * CS, CS, CS);
+      }
+      if (opts.walls === 'walls') { ctx.strokeStyle = dark ? '#0f1f14' : '#578a34'; ctx.lineWidth = 8; ctx.strokeRect(4, 4, cv.width - 8, cv.height - 8); }
+      // food
+      drawApple(food[0], food[1], '#e5484d', 1 + Math.sin(performance.now() / 200) * 0.05);
+      if (gold) drawApple(gold.c[0], gold.c[1], '#f5c518', 1.1 + Math.sin(performance.now() / 120) * 0.08, gold.until - performance.now() < 2000);
+      // snake (slides smoothly between grid steps)
+      const speed = SPEEDS[opts.speed];
+      const k = state === 'playing' ? Math.min(1, (performance.now() - lastTick) / speed) : 1;
+      const pts = snake.map((s, i) => {
+        const p = prevSnake[i] || s;
+        let dx = s[0] - p[0], dy = s[1] - p[1];
+        if (Math.abs(dx) > 1) dx = -Math.sign(dx); if (Math.abs(dy) > 1) dy = -Math.sign(dy);   // wrapped around
+        return [(p[0] + dx * k + 0.5) * CS, (p[1] + dy * k + 0.5) * CS];
+      });
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      for (let i = pts.length - 1; i > 0; i--) {
+        const [x1, y1] = pts[i], [x2, y2] = pts[i - 1];
+        if (Math.hypot(x2 - x1, y2 - y1) > CS * 1.5) continue;   // don't draw across the screen when wrapping
+        const g = i / pts.length;
+        ctx.strokeStyle = `hsl(${225 - g * 20}, 75%, ${58 - g * 18}%)`;
+        ctx.lineWidth = CS * (0.82 - g * 0.22);
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      }
+      // head with eyes
+      const [hx, hy] = pts[0], [dx, dy] = DIRS[dir];
+      ctx.fillStyle = 'hsl(225, 75%, 58%)';
+      ctx.beginPath(); ctx.arc(hx, hy, CS * 0.46, 0, Math.PI * 2); ctx.fill();
+      const px = -dy, py = dx;
+      for (const s of [-1, 1]) {
+        const ex = hx + dx * CS * 0.14 + px * s * CS * 0.2, ey = hy + dy * CS * 0.14 + py * s * CS * 0.2;
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ex, ey, CS * 0.14, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#1c1c22'; ctx.beginPath(); ctx.arc(ex + dx * CS * 0.05, ey + dy * CS * 0.05, CS * 0.07, 0, Math.PI * 2); ctx.fill();
+      }
+      if (state === 'over') { ctx.fillStyle = 'rgba(0,0,0,.15)'; ctx.fillRect(0, 0, cv.width, cv.height); }
+    }
+    function drawApple(x, y, color, s, blink) {
+      if (blink && Math.floor(performance.now() / 150) % 2) return;
+      const cx = (x + 0.5) * CS, cy = (y + 0.55) * CS, r = CS * 0.36 * s;
+      ctx.fillStyle = color; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.beginPath(); ctx.arc(cx - r * 0.35, cy - r * 0.35, r * 0.25, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#3c8d2f'; ctx.beginPath(); ctx.ellipse(cx + r * 0.3, cy - r * 1.05, r * 0.35, r * 0.18, -0.6, 0, Math.PI * 2); ctx.fill();
+    }
+
+    function loop(t) {
+      if (state === 'playing' && t - lastTick >= SPEEDS[opts.speed]) { tick(); lastTick = t; }
+      draw(t);
+      requestAnimationFrame(loop);
+    }
+
+    function updateHud() {
+      $('score').textContent = score;
+      $('best').textContent = Math.max(score, GS.best(bestKey()) || 0);
+      document.querySelectorAll('#speed button').forEach(b => b.classList.toggle('on', b.dataset.v === opts.speed));
+      document.querySelectorAll('#walls button').forEach(b => b.classList.toggle('on', b.dataset.v === opts.walls));
+    }
+
+    // ---------- Input ----------
+    addEventListener('keydown', e => {
+      const map = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', w: 'up', s: 'down', a: 'left', d: 'right', W: 'up', S: 'down', A: 'left', D: 'right' };
+      if (map[e.key]) { e.preventDefault(); turn(map[e.key]); }
+      else if (e.code === 'Space' || e.key === 'p') { e.preventDefault(); if (state === 'ready' || state === 'over') start(); else pause(); }
+    });
+    GS.onSwipe(cv, turn, 16);
+    $('dpad').addEventListener('pointerdown', e => { const b = e.target.closest('[data-d]'); if (b) { e.preventDefault(); turn(b.dataset.d); } });
+    for (const id of ['speed', 'walls']) $(id).addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      opts[id] = b.dataset.v; GS.store.set('snake-opts', opts);
+      if (state === 'playing') { state = 'ready'; }
+      reset(); showStart(); b.blur();
+    });
+    function showStart() {
+      state = 'ready';
+      card(`<h2>🐍 Snake</h2><p>Eat apples to grow. Don't hit the walls or yourself!</p><div class="row"><button class="btn primary" id="go">▶ Start</button></div>`);
+      $('go').onclick = start;
+    }
+
+    reset(); showStart();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
