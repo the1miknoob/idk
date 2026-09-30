@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+  <title>Block Pop · Mikaeel</title>
+  <meta name="description" content="Drag blocks onto the board and clear rows and columns">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧩</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    :root { --cell: min(calc((100vw - 48px) / 8), 50px); --board-bg: #1f2340; --empty: #2b3057; }
+    .game { display: flex; flex-direction: column; align-items: center; gap: 18px; user-select: none; -webkit-user-select: none; }
+    .stage { border-radius: 16px; }
+    .board {
+      display: grid; grid-template-columns: repeat(8, var(--cell)); grid-template-rows: repeat(8, var(--cell)); gap: 3px;
+      padding: 8px; background: var(--board-bg); border-radius: 16px; box-shadow: 0 14px 30px rgba(0,0,0,.25); touch-action: none;
+    }
+    .cell { border-radius: 7px; background: var(--empty); position: relative; }
+    .cell.fill, .mini .b, .float .b { background: var(--c); box-shadow: inset 0 -4px 0 rgba(0,0,0,.22), inset 0 3px 0 rgba(255,255,255,.28); }
+    .cell.ghost { background: color-mix(in srgb, var(--c) 45%, var(--empty)); }
+    .cell.will-clear { filter: brightness(1.35) saturate(1.2); }
+    .cell.pop { animation: pop .38s ease-out forwards; }
+    @keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.18); filter: brightness(2); } 100% { transform: scale(0); opacity: 0; } }
+    .cell.drop { animation: drop .18s ease-out; }
+    @keyframes drop { from { transform: scale(.7); } to { transform: scale(1); } }
+
+    .tray { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: calc(var(--cell) * 8 + 37px); }
+    .slot {
+      height: calc(var(--cell) * 2.9); border-radius: 14px; background: var(--surface); border: 1px solid var(--border);
+      display: grid; place-items: center; touch-action: none; cursor: grab;
+    }
+    .slot.used { cursor: default; }
+    .slot.cant .mini { opacity: .3; filter: grayscale(1); }
+    .mini { display: grid; gap: 2px; }
+    .mini .b, .float .b { border-radius: 4px; }
+    .mini .e { visibility: hidden; }
+    .float { position: fixed; z-index: 40; display: grid; gap: 3px; pointer-events: none; filter: drop-shadow(0 10px 14px rgba(0,0,0,.35)); }
+    .float .b { border-radius: 7px; }
+    .float .e { visibility: hidden; }
+    .float.back { transition: left .18s, top .18s, opacity .18s; opacity: 0; }
+
+    .pops { position: fixed; inset: 0; pointer-events: none; z-index: 45; }
+    .pop-text {
+      position: absolute; transform: translate(-50%, -50%); font-weight: 700; font-size: 26px; color: #fff; white-space: nowrap;
+      text-shadow: 0 2px 0 rgba(0,0,0,.35), 0 0 12px rgba(0,0,0,.3); animation: rise 1s ease-out forwards;
+    }
+    .pop-text.combo { font-size: 32px; color: #ffd23f; }
+    @keyframes rise { from { opacity: 0; transform: translate(-50%, -30%) scale(.7); } 15% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); } to { opacity: 0; transform: translate(-50%, -140%) scale(1); } }
+    .combo-bar { height: 22px; font-weight: 700; color: var(--warn); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav class="g-nav">
+      <a href="../">← All games</a>
+      <div class="right">
+        <button class="icon-btn" data-mute-toggle aria-label="Sound">🔊</button>
+        <button class="icon-btn" data-theme-toggle aria-label="Light or dark">🌙</button>
+      </div>
+    </nav>
+    <div class="g-title">
+      <h1>🧩 Block Pop</h1>
+      <div class="hud">
+        <div class="chip"><small>Score</small><b id="score">0</b></div>
+        <div class="chip"><small>Best</small><b id="best">0</b></div>
+      </div>
+    </div>
+
+    <div class="game">
+      <div class="stage" id="stage">
+        <div class="board" id="board" aria-label="Game board"></div>
+        <div class="overlay" id="overlay"><div class="card" id="card"></div></div>
+      </div>
+      <div class="combo-bar" id="combo-bar"></div>
+      <div class="tray" id="tray"></div>
+      <div class="row">
+        <button class="btn" id="restart">↻ New game</button>
+      </div>
+      <p class="help">Drag the pieces onto the board. Fill a whole row or column to clear it. Clear lines back to back for combos!</p>
+    </div>
+  </div>
+  <div class="pops" id="pops"></div>
+
+  <script src="../shared.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    const N = 8;
+    const COLORS = ['#ff5c5c', '#ff9f43', '#feca57', '#2ecc71', '#1dd1a1', '#48a3ff', '#8e6cff', '#ff6bcb'];
+
+    // Piece shapes as [row, col] cells
+    const SHAPES = [
+      [[0, 0]],
+      [[0, 0], [0, 1]], [[0, 0], [1, 0]],
+      [[0, 0], [0, 1], [0, 2]], [[0, 0], [1, 0], [2, 0]],
+      [[0, 0], [0, 1], [0, 2], [0, 3]], [[0, 0], [1, 0], [2, 0], [3, 0]],
+      [[0, 0], [0, 1], [0, 2], [0, 3], [0, 4]], [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]],
+      [[0, 0], [0, 1], [1, 0], [1, 1]],
+      [[0, 0], [0, 1], [0, 2], [1, 0], [1, 1], [1, 2], [2, 0], [2, 1], [2, 2]],
+      [[0, 0], [0, 1], [0, 2], [1, 0], [1, 1], [1, 2]], [[0, 0], [0, 1], [1, 0], [1, 1], [2, 0], [2, 1]],
+      [[0, 0], [1, 0], [1, 1]], [[0, 0], [0, 1], [1, 0]], [[0, 0], [0, 1], [1, 1]], [[0, 1], [1, 0], [1, 1]],
+      [[0, 0], [1, 0], [2, 0], [2, 1]], [[0, 1], [1, 1], [2, 1], [2, 0]], [[0, 0], [0, 1], [1, 0], [2, 0]], [[0, 0], [0, 1], [1, 1], [2, 1]],
+      [[0, 0], [0, 1], [0, 2], [1, 0]], [[0, 0], [0, 1], [0, 2], [1, 2]], [[0, 0], [1, 0], [1, 1], [1, 2]], [[0, 2], [1, 0], [1, 1], [1, 2]],
+      [[0, 0], [0, 1], [0, 2], [1, 1]], [[0, 1], [1, 0], [1, 1], [1, 2]], [[0, 0], [1, 0], [1, 1], [2, 0]], [[0, 1], [1, 0], [1, 1], [2, 1]],
+      [[0, 0], [0, 1], [1, 1], [1, 2]], [[0, 1], [0, 2], [1, 0], [1, 1]], [[0, 0], [1, 0], [1, 1], [2, 1]], [[0, 1], [1, 0], [1, 1], [2, 0]],
+      [[0, 0], [1, 0], [2, 0], [2, 1], [2, 2]], [[0, 0], [0, 1], [0, 2], [1, 2], [2, 2]],
+    ];
+    const size = s => [Math.max(...s.map(p => p[0])) + 1, Math.max(...s.map(p => p[1])) + 1];
+
+    let board, tray, score, combo, over;
+    const cells = [];
+
+    // ---------- Build board ----------
+    for (let i = 0; i < N * N; i++) { const d = document.createElement('div'); d.className = 'cell'; $('board').appendChild(d); cells.push(d); }
+
+    function randomPiece() {
+      // Smaller pieces a little more often
+      const idx = Math.random() < 0.25 ? Math.floor(Math.random() * 9) : Math.floor(Math.random() * SHAPES.length);
+      return { shape: SHAPES[idx], color: COLORS[Math.floor(Math.random() * COLORS.length)] };
+    }
+    function canPlace(shape, r, c) {
+      return shape.every(([dr, dc]) => { const rr = r + dr, cc = c + dc; return rr >= 0 && rr < N && cc >= 0 && cc < N && !board[rr * N + cc]; });
+    }
+    function fitsAnywhere(shape) {
+      for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (canPlace(shape, r, c)) return true;
+      return false;
+    }
+    function newTray() {
+      // Make sure at least one piece can be placed so new trays are always playable
+      for (let tries = 0; tries < 20; tries++) {
+        tray = [randomPiece(), randomPiece(), randomPiece()];
+        if (tray.some(p => fitsAnywhere(p.shape))) break;
+      }
+    }
+
+    function newGame() {
+      board = Array(N * N).fill(null);
+      score = 0; combo = 0; over = false;
+      newTray();
+      $('overlay').classList.remove('show');
+      GS.played('blockpop');
+      renderAll(); save();
+    }
+
+    function save() { GS.store.set('blockpop-state', { board, tray, score, combo, over }); }
+
+    // ---------- Rendering ----------
+    function renderBoard(ghost = null, clearLines = null) {
+      for (let i = 0; i < N * N; i++) {
+        const el = cells[i];
+        el.className = 'cell';
+        el.style.removeProperty('--c');
+        if (board[i]) { el.classList.add('fill'); el.style.setProperty('--c', board[i]); }
+      }
+      if (ghost) for (const i of ghost.cells) { cells[i].classList.add('ghost'); cells[i].style.setProperty('--c', ghost.color); }
+      if (clearLines) for (const i of clearLines) {
+        cells[i].classList.add('will-clear');
+        if (!board[i] && ghost) { cells[i].classList.add('fill'); cells[i].style.setProperty('--c', ghost.color); }
+      }
+    }
+    function miniHTML(piece, cell) {
+      const [h, w] = size(piece.shape);
+      let html = `<div class="mini" style="grid-template-columns:repeat(${w},${cell}px);grid-template-rows:repeat(${h},${cell}px)">`;
+      for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) {
+        const on = piece.shape.some(p => p[0] === r && p[1] === c);
+        html += `<div class="${on ? 'b' : 'e'}" style="--c:${piece.color}"></div>`;
+      }
+      return html + '</div>';
+    }
+    function renderTray() {
+      const cs = cellSize();
+      const mini = Math.max(12, Math.floor(cs * 0.52));
+      $('tray').innerHTML = tray.map((p, i) => p
+        ? `<div class="slot ${fitsAnywhere(p.shape) ? '' : 'cant'}" data-i="${i}">${miniHTML(p, mini)}</div>`
+        : `<div class="slot used" data-i="${i}"></div>`).join('');
+    }
+    function renderAll() {
+      renderBoard(); renderTray();
+      $('score').textContent = score;
+      $('best').textContent = Math.max(score, GS.best('blockpop') || 0);
+      $('combo-bar').textContent = combo > 1 ? `🔥 Combo ×${combo}` : '';
+    }
+    const cellSize = () => cells[0].getBoundingClientRect().width;
+
+    // ---------- Drag & drop ----------
+    let drag = null;
+    $('tray').addEventListener('pointerdown', e => {
+      const slot = e.target.closest('.slot'); if (!slot || over) return;
+      const i = +slot.dataset.i, piece = tray[i]; if (!piece) return;
+      e.preventDefault();
+      const cs = cellSize();
+      const [h, w] = size(piece.shape);
+      const el = document.createElement('div');
+      el.className = 'float';
+      el.innerHTML = miniHTML(piece, cs).replace('class="mini"', 'style="display:contents"');
+      el.style.gridTemplateColumns = `repeat(${w}, ${cs}px)`;
+      el.style.gridTemplateRows = `repeat(${h}, ${cs}px)`;
+      document.body.appendChild(el);
+      const touch = e.pointerType !== 'mouse';
+      drag = { i, piece, el, w: w * cs + (w - 1) * 3, h: h * cs + (h - 1) * 3, lift: touch ? 70 : 0, target: null, slot };
+      slot.style.visibility = 'hidden';
+      slot.setPointerCapture(e.pointerId);
+      moveDrag(e.clientX, e.clientY);
+      GS.sfx('click');
+    });
+    $('tray').addEventListener('pointermove', e => { if (drag) moveDrag(e.clientX, e.clientY); });
+    $('tray').addEventListener('pointerup', endDrag);
+    $('tray').addEventListener('pointercancel', endDrag);
+
+    function moveDrag(x, y) {
+      const d = drag;
+      const left = x - d.w / 2, top = y - d.h / 2 - d.lift;
+      d.el.style.left = left + 'px'; d.el.style.top = top + 'px';
+      const b = cells[0].getBoundingClientRect(), step = cellSize() + 3;
+      const c = Math.round((left - b.left) / step), r = Math.round((top - b.top) / step);
+      if (canPlace(d.piece.shape, r, c)) {
+        d.target = [r, c];
+        const idx = d.piece.shape.map(([dr, dc]) => (r + dr) * N + c + dc);
+        renderBoard({ cells: idx, color: d.piece.color }, linesToClear(idx).cells);
+      } else { d.target = null; renderBoard(); }
+    }
+
+    function endDrag() {
+      if (!drag) return;
+      const d = drag; drag = null;
+      d.slot.style.visibility = '';
+      if (d.target) { d.el.remove(); place(d.i, d.target[0], d.target[1]); return; }
+      // fly back to the tray
+      const s = d.slot.getBoundingClientRect();
+      d.el.classList.add('back');
+      d.el.style.left = s.left + s.width / 2 - d.w / 2 + 'px'; d.el.style.top = s.top + s.height / 2 - d.h / 2 + 'px';
+      setTimeout(() => d.el.remove(), 200);
+      renderBoard();
+    }
+
+    function linesToClear(extra = []) {
+      const filled = i => board[i] || extra.includes(i);
+      const rows = [], cols = [];
+      for (let r = 0; r < N; r++) { let full = true; for (let c = 0; c < N; c++) if (!filled(r * N + c)) { full = false; break; } if (full) rows.push(r); }
+      for (let c = 0; c < N; c++) { let full = true; for (let r = 0; r < N; r++) if (!filled(r * N + c)) { full = false; break; } if (full) cols.push(c); }
+      const set = new Set();
+      rows.forEach(r => { for (let c = 0; c < N; c++) set.add(r * N + c); });
+      cols.forEach(c => { for (let r = 0; r < N; r++) set.add(r * N + c); });
+      return { rows, cols, cells: [...set] };
+    }
+
+    // ---------- Placing & clearing ----------
+    function place(ti, r, c) {
+      const piece = tray[ti];
+      const idx = piece.shape.map(([dr, dc]) => (r + dr) * N + c + dc);
+      idx.forEach(i => board[i] = piece.color);
+      tray[ti] = null;
+      score += idx.length;
+      GS.sfx('place');
+      renderBoard();
+      idx.forEach(i => { cells[i].classList.add('drop'); });
+
+      const lines = linesToClear();
+      const n = lines.rows.length + lines.cols.length;
+      if (n) {
+        combo++;
+        const gained = 10 * n * n * Math.max(1, combo);
+        score += gained;
+        lines.cells.forEach(i => cells[i].classList.add('pop'));
+        GS.sfx(n > 1 || combo > 1 ? 'clear' : 'pop');
+        const b = $('board').getBoundingClientRect();
+        popText(`+${gained}`, b.left + b.width / 2, b.top + b.height / 2 - 20);
+        if (combo > 1) popText(`Combo ×${combo}!`, b.left + b.width / 2, b.top + b.height / 2 + 26, 'combo');
+        if (n >= 3) popText(n >= 4 ? 'AMAZING!' : 'GREAT!', b.left + b.width / 2, b.top + b.height * 0.25, 'combo');
+        setTimeout(() => { lines.cells.forEach(i => board[i] = null); afterMove(); }, 380);
+      } else {
+        combo = 0;
+        afterMove();
+      }
+    }
+
+    function afterMove() {
+      if (tray.every(p => !p)) newTray();
+      renderAll();
+      if (tray.filter(Boolean).every(p => !fitsAnywhere(p.shape))) gameOver();
+      save();
+    }
+
+    function popText(t, x, y, cls = '') {
+      const el = document.createElement('div');
+      el.className = 'pop-text ' + cls; el.textContent = t;
+      el.style.left = x + 'px'; el.style.top = y + 'px';
+      $('pops').appendChild(el);
+      setTimeout(() => el.remove(), 1000);
+    }
+
+    function gameOver() {
+      over = true;
+      const res = GS.best('blockpop', score);
+      GS.sfx('lose');
+      if (res.isNew) GS.confetti();
+      $('card').innerHTML = `<h2>No more room!</h2><p>None of your pieces fit.</p><div class="big">${score}</div>
+        ${res.isNew ? '<div class="new-best">🏆 New best!</div>' : `<p>Best: ${res.best}</p>`}
+        <div class="row" style="margin-top:14px"><button class="btn primary" id="again">Play again</button></div>`;
+      $('overlay').classList.add('show');
+      $('again').onclick = newGame;
+      renderAll();
+    }
+
+    $('restart').addEventListener('click', () => { if (over || score === 0 || confirm('Start a new game?')) newGame(); });
+    addEventListener('resize', renderTray);
+
+    // Resume a saved game
+    const saved = GS.store.get('blockpop-state', null);
+    if (saved && saved.board && saved.board.length === N * N && !saved.over) {
+      ({ board, tray, score, combo } = saved); over = false;
+      renderAll();
+      if (tray.filter(Boolean).every(p => !fitsAnywhere(p.shape))) gameOver();
+    } else newGame();
+  </script>
+</body>
+</html>

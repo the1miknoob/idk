@@ -4,90 +4,97 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Games · Mikaeel</title>
-  <meta name="description" content="Games made by Mikaeel">
+  <meta name="description" content="Free browser games made by Mikaeel: puzzles, arcade games, word games and chess">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared.css">
   <style>
-    :root { --bg: #fafaf7; --surface: #fff; --surface-2: #f2f2ee; --text: #16161a; --muted: #5c5c66; --border: #e4e4df; --accent: #5b5bd6; --accent-soft: #ececfb; }
-    @media (prefers-color-scheme: dark) {
-      :root:not([data-theme="light"]) { --bg: #111114; --surface: #1a1a1f; --surface-2: #232329; --text: #ededf0; --muted: #a0a0ab; --border: #2a2a31; --accent: #8b8bf5; --accent-soft: #23233a; }
-    }
-    :root[data-theme="dark"] { --bg: #111114; --surface: #1a1a1f; --surface-2: #232329; --text: #ededf0; --muted: #a0a0ab; --border: #2a2a31; --accent: #8b8bf5; --accent-soft: #23233a; }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: "Space Grotesk", system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; min-height: 100vh; }
-    a { color: var(--accent); text-decoration: none; }
-    .wrap { max-width: 900px; margin: 0 auto; padding: 0 16px 48px; }
-    nav { display: flex; align-items: center; justify-content: space-between; height: 56px; }
-    nav a { color: var(--muted); font-size: 15px; }
-    nav a:hover { color: var(--text); }
-    .square-btn { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; width: 34px; height: 34px; cursor: pointer; font-size: 16px; }
-    header { padding: 36px 0 28px; }
-    h1 { font-size: clamp(34px, 6vw, 48px); line-height: 1.1; }
+    header { padding: 28px 0 18px; }
+    header h1 { font-size: clamp(34px, 6vw, 48px); line-height: 1.1; }
     header p { color: var(--muted); font-size: 18px; margin-top: 8px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; }
+    .filters { margin: 8px 0 20px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px; }
     .game {
       display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
       overflow: hidden; color: var(--text); transition: transform .15s, border-color .15s, box-shadow .15s;
     }
     .game:hover { transform: translateY(-4px); border-color: var(--accent); box-shadow: 0 14px 30px rgba(0,0,0,.12); }
-    .art { height: 150px; display: grid; place-items: center; font-size: 72px; }
-    .art.chess { background: conic-gradient(#769656 0 25%, #eeeed2 0 50%, #769656 0 75%, #eeeed2 0) 0 0 / 50px 50px; }
-    .art.chess span { background: var(--surface); border-radius: 50%; width: 110px; height: 110px; display: grid; place-items: center; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
-    .body { padding: 16px 18px 18px; flex: 1; display: flex; flex-direction: column; gap: 6px; }
-    .body h2 { font-size: 20px; }
-    .body p { color: var(--muted); font-size: 15px; }
-    .meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; padding-top: 8px; }
-    .pill { background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: 500; }
-    .pill.muted { background: var(--surface-2); color: var(--muted); }
+    .art { height: 130px; display: grid; place-items: center; font-size: 64px; position: relative; }
+    .art .emo { filter: drop-shadow(0 6px 10px rgba(0,0,0,.3)); transition: transform .2s; }
+    .game:hover .art .emo { transform: scale(1.12) rotate(-4deg); }
+    .badge { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,.55); color: #fff; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 999px; }
+    .body { padding: 14px 16px 16px; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+    .body h2 { font-size: 19px; }
+    .body p { color: var(--muted); font-size: 14px; }
+    .meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; padding-top: 8px; }
+    .pill { background: var(--surface-2); color: var(--muted); border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 500; }
+    .pill.best { background: var(--accent-soft); color: var(--accent); }
+    .pill.live { background: #30a46c22; color: var(--good); }
+    .empty { color: var(--muted); text-align: center; padding: 30px; }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <nav>
+  <div class="wrap wide">
+    <nav class="g-nav">
       <a href="../">← Back to Mikaeel's site</a>
-      <button class="square-btn" id="theme-toggle" aria-label="Toggle dark mode">🌙</button>
+      <div class="right"><button class="icon-btn" data-theme-toggle aria-label="Light or dark">🌙</button></div>
     </nav>
     <header>
       <h1>🎮 Games</h1>
-      <p>Games I've built. They run right in your browser and save your progress.</p>
+      <p>Games I've built. They run right in your browser, work on phones, and save your best scores.</p>
     </header>
-
-    <!-- ✏️ EDIT: copy a card to add a new game -->
-    <main class="grid">
-      <a class="game" href="chess/">
-        <div class="art chess"><span>♟️</span></div>
-        <div class="body">
-          <h2>Chess</h2>
-          <p>Play against the computer on four levels, or with a friend on the same device. Hints, undo, move history and board themes.</p>
-          <div class="meta" id="chess-meta"><span class="pill muted">1–2 players</span></div>
-        </div>
-      </a>
-    </main>
+    <div class="seg filters" id="filters"></div>
+    <main class="grid" id="grid"></main>
   </div>
-  <script>
-    const root = document.documentElement, btn = document.getElementById('theme-toggle');
-    const isDark = () => root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
-    try { const t = localStorage.getItem('theme'); if (t) root.dataset.theme = t; } catch (e) {}
-    btn.textContent = isDark() ? '☀️' : '🌙';
-    btn.addEventListener('click', () => {
-      root.dataset.theme = isDark() ? 'light' : 'dark';
-      try { localStorage.setItem('theme', root.dataset.theme); } catch (e) {}
-      btn.textContent = isDark() ? '☀️' : '🌙';
-    });
 
-    // Show your chess progress on the card
+  <script src="shared.js"></script>
+  <script>
+    // ✏️ EDIT: add a game here and it shows up on the page
+    const GAMES = [
+      { id: 'blockpop', href: 'block-pop/', emoji: '🧩', title: 'Block Pop', tags: ['Puzzle'], badge: '🔥 Trending',
+        bg: 'linear-gradient(135deg,#3a4ad9,#8e6cff)', text: 'Drag blocks onto the board and clear rows and columns. Chain clears for big combos.' },
+      { id: 'mergedrop', href: 'merge-drop/', emoji: '🪐', title: 'Merge Drop', tags: ['Puzzle', 'Arcade'], badge: '🔥 Trending',
+        bg: 'linear-gradient(135deg,#141833,#5b2a86)', text: 'Drop planets, merge matching ones into bigger ones, and don\'t overflow. Fruit and animal themes too.' },
+      { id: 'wordhunt', href: 'word-hunt/', emoji: '🔤', title: 'Word Hunt', tags: ['Word', 'Daily'], badge: '📅 Daily',
+        bg: 'linear-gradient(135deg,#3fa45b,#d4a72c)', text: 'Guess the 5-letter word in 6 tries. A new puzzle every day, plus unlimited practice.', bestLabel: 'Streak' },
+      { id: '2048', href: '2048/', emoji: '🔢', title: '2048', tags: ['Puzzle'],
+        bg: 'linear-gradient(135deg,#edc22e,#f67c5f)', text: 'Slide tiles, merge matching numbers and reach 2048. Try 5×5 and 6×6 boards too.' },
+      { id: 'chess', href: 'chess/', emoji: '♟️', title: 'Chess', tags: ['Strategy'],
+        bg: 'conic-gradient(#769656 0 25%, #eeeed2 0 50%, #769656 0 75%, #eeeed2 0) 0 0 / 44px 44px', text: 'Play the computer on four levels or a friend. Hints, undo, and full game analysis.' },
+    ];
+
+    const tags = ['All', ...new Set(GAMES.flatMap(g => g.tags))];
+    let filter = 'All';
     const read = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
-    const meta = document.getElementById('chess-meta');
-    const g = read('chess-game');
-    if (g && g.moves && g.moves.length && !g.over) meta.insertAdjacentHTML('afterbegin', `<span class="pill">▶ Game in progress · move ${Math.ceil(g.moves.length / 2)}</span>`);
-    const st = read('chess-stats');
-    if (st) {
-      const w = Object.values(st).reduce((s, x) => s + (x.w || 0), 0);
-      const total = Object.values(st).reduce((s, x) => s + (x.w || 0) + (x.l || 0) + (x.d || 0), 0);
-      if (total) meta.insertAdjacentHTML('beforeend', `<span class="pill muted">🏆 ${w} win${w === 1 ? '' : 's'} vs computer</span>`);
+
+    function metaFor(g) {
+      const out = [];
+      if (g.id === 'chess') {
+        const game = read('chess-game');
+        if (game && game.moves && game.moves.length && !game.over) out.push(`<span class="pill live">▶ Game in progress</span>`);
+        const st = read('chess-stats');
+        const wins = st ? Object.values(st).reduce((s, x) => s + (x.w || 0), 0) : 0;
+        if (wins) out.push(`<span class="pill best">🏆 ${wins} win${wins === 1 ? '' : 's'}</span>`);
+      } else {
+        const best = read('game-best-' + g.id);
+        if (best) out.push(`<span class="pill best">🏆 ${g.bestLabel || 'Best'}: ${best}</span>`);
+      }
+      out.push(...g.tags.map(t => `<span class="pill">${t}</span>`));
+      return out.join('');
     }
+
+    function render() {
+      $filters.innerHTML = tags.map(t => `<button data-t="${t}" class="${t === filter ? 'on' : ''}">${t}</button>`).join('');
+      const list = GAMES.filter(g => filter === 'All' || g.tags.includes(filter));
+      $grid.innerHTML = list.map(g => `<a class="game" href="${g.href}">
+        <div class="art" style="background:${g.bg}"><span class="emo">${g.emoji}</span>${g.badge ? `<span class="badge">${g.badge}</span>` : ''}</div>
+        <div class="body"><h2>${g.title}</h2><p>${g.text}</p><div class="meta">${metaFor(g)}</div></div></a>`).join('') || '<p class="empty">No games here yet.</p>';
+    }
+    const $filters = document.getElementById('filters'), $grid = document.getElementById('grid');
+    $filters.addEventListener('click', e => { const b = e.target.closest('button'); if (b) { filter = b.dataset.t; render(); } });
+    render();
   </script>
 </body>
 </html>
