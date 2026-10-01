@@ -182,6 +182,7 @@
         <a href="music-player/" title="Music Player">🎵<span class="hide-sm"> Music</span></a>
         <a href="dashboard/" title="Dashboard">📊<span class="hide-sm"> Dashboard</span></a>
         <a href="games/" title="Games">🎮<span class="hide-sm"> Games</span></a>
+        <a href="world-watch/" title="World Watch">🛰️<span class="hide-sm"> World</span></a>
         <button id="theme-toggle" aria-label="Toggle dark mode">🌙</button>
       </div>
     </div>
@@ -252,6 +253,11 @@
           <h3>Games Arcade</h3>
           <p>9 games I built: Block Pop, Merge Drop, Word Hunt, Night Swarm, Sky Hop, Snake, 2048, Reaction Lab and Chess.</p>
         </a>
+        <a class="card" href="world-watch/" style="color:inherit;text-decoration:none">
+          <div class="emoji">🛰️</div>
+          <h3>World Watch</h3>
+          <p>A live world map like a command center: breaking news, wars and conflict zones, earthquakes, storms, the space station, live news TV and more.</p>
+        </a>
         <a class="card" href="typing-test/" style="color:inherit;text-decoration:none">
           <div class="emoji">⌨️</div>
           <h3>Typing Test</h3>
@@ -311,7 +317,7 @@
     const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     // ---------- Typing effect (✏️ EDIT: change the words) ----------
-    const WORDS = ['games', 'music players', 'dashboards', 'chess engines', 'tier lists', 'websites', 'cool stuff', 'things I\'m proud of'];
+    const WORDS = ['games', 'music players', 'dashboards', 'world maps', 'chess engines', 'tier lists', 'websites', 'cool stuff', 'things I\'m proud of'];
     const typed = document.getElementById('typed');
     if (!reduceMotion) {
       let w = 0, i = WORDS[0].length, deleting = true;

@@ -1,0 +1,1286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>World Watch · Mikaeel</title>
+  <meta name="description" content="A live world map: news, conflicts, earthquakes, storms, the space station, flights, markets and history.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛰️</text></svg>">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #04070c; --panel: rgba(7, 14, 22, .9); --panel-2: rgba(14, 26, 38, .75); --line: rgba(63, 208, 255, .22); --line-2: rgba(63, 208, 255, .45);
+      --cyan: #3fd0ff; --green: #4dff9a; --red: #ff4d4d; --amber: #ffb81a; --text: #d9e8f2; --muted: #7d95a6;
+      --mono: "JetBrains Mono", ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      background: var(--bg); color: var(--text); font-family: "Space Grotesk", system-ui, sans-serif; overflow: hidden;
+      display: grid; grid-template-columns: minmax(0, 1fr) 410px; grid-template-rows: auto minmax(0, 1fr) 34px; height: 100vh;
+    }
+    a { color: var(--cyan); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    button, input, select { font: inherit; color: inherit; }
+
+    /* ---------- Top bar ---------- */
+    .top {
+      grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; padding: 8px 12px; min-width: 0;
+      border-bottom: 1px solid var(--line); background: linear-gradient(180deg, #0a1622, #05090f); font-family: var(--mono);
+    }
+    .back { color: var(--muted); font-size: 18px; padding: 0 4px; }
+    .brand { font-weight: 700; letter-spacing: 2px; color: var(--cyan); white-space: nowrap; display: flex; align-items: center; gap: 8px; }
+    .live-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--red); box-shadow: 0 0 8px var(--red); animation: blink 1.2s steps(2) infinite; }
+    @keyframes blink { 50% { opacity: .25; } }
+    .clocks { display: flex; gap: 14px; overflow-x: auto; scrollbar-width: none; font-size: 12px; color: var(--muted); min-width: 0; flex: 1; }
+    .clocks::-webkit-scrollbar { display: none; }
+    .clocks span { white-space: nowrap; }
+    .clocks b { color: var(--text); font-weight: 500; }
+    .clocks .utc b { color: var(--green); }
+    .search { position: relative; flex: none; }
+    .search input {
+      width: 230px; background: rgba(63, 208, 255, .07); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-family: var(--mono); font-size: 13px;
+    }
+    .search input:focus { outline: none; border-color: var(--cyan); box-shadow: 0 0 0 2px rgba(63, 208, 255, .2); }
+    .results { position: absolute; right: 0; top: calc(100% + 6px); width: 320px; z-index: 1200; background: var(--panel); border: 1px solid var(--line-2); border-radius: 10px; overflow: hidden; display: none; }
+    .results.show { display: block; }
+    .results button { display: block; width: 100%; text-align: left; padding: 8px 12px; background: none; border: none; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13px; font-family: "Space Grotesk", sans-serif; }
+    .results button:hover { background: rgba(63, 208, 255, .1); }
+    .results .msg { padding: 10px 12px; font-size: 13px; color: var(--muted); }
+
+    /* ---------- Map ---------- */
+    .map-wrap { position: relative; min-height: 0; overflow: hidden; }
+    #map { position: absolute; inset: 0; background: #07111b; cursor: crosshair; }
+    .scanlines { position: absolute; inset: 0; z-index: 450; pointer-events: none; background: repeating-linear-gradient(0deg, transparent 0 2px, rgba(0, 0, 0, .14) 2px 3px); }
+    .vignette { position: absolute; inset: 0; z-index: 451; pointer-events: none; box-shadow: inset 0 0 120px rgba(0, 0, 0, .65); }
+    .corner { position: absolute; width: 26px; height: 26px; z-index: 452; pointer-events: none; border: 2px solid var(--cyan); opacity: .7; }
+    .corner.tl { left: 6px; top: 6px; border-right: none; border-bottom: none; }
+    .corner.tr { right: 6px; top: 6px; border-left: none; border-bottom: none; }
+    .corner.bl { left: 6px; bottom: 6px; border-right: none; border-top: none; }
+    .corner.br { right: 6px; bottom: 6px; border-left: none; border-top: none; }
+    .readout {
+      position: absolute; left: 14px; bottom: 14px; z-index: 600; font-family: var(--mono); font-size: 12px; color: var(--green);
+      background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px 9px; pointer-events: none; text-shadow: 0 0 6px rgba(77, 255, 154, .4);
+    }
+    .legend {
+      position: absolute; right: 54px; bottom: 14px; z-index: 600; font-size: 11px; font-family: var(--mono); background: var(--panel);
+      border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; display: flex; flex-direction: column; gap: 3px; max-width: 210px;
+    }
+    .legend:empty { display: none; }
+    .hud { position: absolute; top: 12px; right: 12px; z-index: 600; max-width: calc(100% - 300px); display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; pointer-events: none; }
+    .hud span { font-family: var(--mono); font-size: 11px; letter-spacing: .5px; color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 3px 8px; white-space: nowrap; }
+    .hud b { color: var(--text); }
+    .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+
+    /* Layer panel */
+    .layers {
+      position: absolute; top: 12px; left: 12px; z-index: 600; width: 262px; max-height: calc(100% - 70px); overflow: auto;
+      background: var(--panel); border: 1px solid var(--line); border-radius: 12px; backdrop-filter: blur(8px); font-size: 13px; scrollbar-width: thin;
+    }
+    .lp-head { width: 100%; text-align: left; padding: 9px 12px; background: none; border: none; cursor: pointer; font-family: var(--mono); font-weight: 700; letter-spacing: 1.5px; color: var(--cyan); }
+    .lp-body { padding: 2px 10px 10px; }
+    .lp-label { font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; color: var(--muted); margin: 8px 2px 4px; }
+    .bases { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+    .bases button { padding: 5px 0; border-radius: 7px; border: 1px solid var(--line); background: none; cursor: pointer; font-size: 12px; }
+    .bases button.on { background: var(--cyan); color: #04121c; border-color: var(--cyan); font-weight: 700; }
+    .lp-row { display: flex; align-items: center; gap: 8px; padding: 5px 4px; border-radius: 7px; cursor: pointer; }
+    .lp-row:hover { background: rgba(63, 208, 255, .07); }
+    .lp-row input { accent-color: var(--cyan); width: 15px; height: 15px; }
+    .lp-row span.name { flex: 1; }
+    .lp-count { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: #3a4a56; flex: none; }
+    .dot.ok { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .dot.loading { background: var(--amber); animation: blink 1s steps(2) infinite; }
+    .dot.error { background: var(--red); }
+    .dot.idle { background: #5d6d79; }
+    .era { width: 100%; margin-top: 6px; padding: 5px 8px; border-radius: 7px; border: 1px solid var(--line); background: #08121c; font-size: 12px; }
+
+    /* Markers */
+    .ww-icon { background: none; border: none; }
+    .pin {
+      width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; background: color-mix(in srgb, var(--c) 30%, #0a1118);
+      border: 1.5px solid var(--c); box-shadow: 0 0 10px color-mix(in srgb, var(--c) 70%, transparent);
+    }
+    .pin.conflict { animation: glow 1.8s ease-in-out infinite; }
+    @keyframes glow { 50% { box-shadow: 0 0 20px var(--c), 0 0 4px var(--c); } }
+    .emo { font-size: 17px; line-height: 1; filter: drop-shadow(0 1px 2px #000); text-align: center; }
+    .battle { font-size: 16px; filter: drop-shadow(0 0 3px #000); }
+    .pulse { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--c); animation: ping 1.8s ease-out infinite; }
+    @keyframes ping { from { transform: scale(.35); opacity: 1; } to { transform: scale(2.8); opacity: 0; } }
+    .iss { font-size: 26px; filter: drop-shadow(0 0 8px var(--cyan)); }
+    .sun { font-size: 20px; filter: drop-shadow(0 0 10px #ffd23f); }
+    .plane svg { width: 18px; height: 18px; fill: #ffd23f; stroke: #2a1d00; stroke-width: .6; filter: drop-shadow(0 0 2px #000); }
+    .scan { position: relative; width: 90px; height: 90px; }
+    .scan i { position: absolute; inset: 0; border: 2px solid var(--green); border-radius: 50%; animation: ping 2.2s ease-out infinite; }
+    .scan i:nth-child(2) { animation-delay: .7s; } .scan i:nth-child(3) { animation-delay: 1.4s; }
+    .scan b { position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px; border: 2px solid var(--green); border-radius: 4px; box-shadow: 0 0 10px var(--green); }
+    .scan::before, .scan::after { content: ''; position: absolute; background: var(--green); opacity: .8; }
+    .scan::before { left: 50%; top: 4px; bottom: 4px; width: 1px; }
+    .scan::after { top: 50%; left: 4px; right: 4px; height: 1px; }
+    path.zone.major { animation: zonepulse 2.4s ease-in-out infinite; }
+    @keyframes zonepulse { 50% { fill-opacity: .22; } }
+
+    /* Leaflet in HUD colors */
+    .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: rgba(6, 13, 21, .97); color: var(--text); border: 1px solid var(--line-2); box-shadow: 0 0 24px rgba(63, 208, 255, .15); }
+    .leaflet-popup-content-wrapper { border-radius: 12px; }
+    .leaflet-popup-content { margin: 12px 14px; font-size: 13.5px; line-height: 1.45; }
+    .leaflet-container a.leaflet-popup-close-button { color: var(--muted); }
+    .leaflet-container { font-family: "Space Grotesk", sans-serif; }
+    .leaflet-control-attribution { background: rgba(4, 7, 12, .78) !important; color: var(--muted) !important; font-size: 10px; }
+    .leaflet-control-attribution a { color: var(--cyan) !important; }
+    .leaflet-bar a { background: var(--panel); color: var(--text); border-bottom-color: var(--line); }
+    .leaflet-bar a:hover { background: #10202e; color: var(--cyan); }
+    .ww-tip { background: rgba(6, 13, 21, .95); color: var(--text); border: 1px solid var(--line-2); border-radius: 6px; font-family: var(--mono); font-size: 11.5px; box-shadow: none; }
+    .ww-tip.leaflet-tooltip-top::before { border-top-color: var(--line-2); }
+    .pp-cat { font-family: var(--mono); font-size: 11px; letter-spacing: 1.2px; font-weight: 700; margin-bottom: 3px; }
+    .pp-topic { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+    .pp-meta { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 6px; }
+    .pp-links { margin-top: 6px; font-size: 12.5px; display: flex; flex-wrap: wrap; gap: 4px 10px; }
+    .pp-list { margin: 6px 0 0 16px; font-size: 12.5px; }
+    .pp-list li { margin-bottom: 3px; }
+    .scan-card .sc-title { font-family: var(--mono); color: var(--green); font-weight: 700; letter-spacing: 2px; font-size: 12px; text-shadow: 0 0 8px rgba(77, 255, 154, .5); }
+    .scan-card .sc-coords { font-family: var(--mono); font-size: 12px; color: var(--cyan); margin: 2px 0 6px; }
+    .scan-card .sc-place { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+    .scan-card .sc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 6px 0; }
+    .scan-card .sc-grid div { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
+    .scan-card small { display: block; font-family: var(--mono); font-size: 9.5px; letter-spacing: 1px; color: var(--muted); }
+    .scan-card .sc-sub { font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; color: var(--muted); margin-top: 8px; }
+    .scan-card .sc-near { font-size: 12.5px; margin-top: 3px; }
+
+    /* ---------- Side panel ---------- */
+    .side { border-left: 1px solid var(--line); background: #050a10; display: flex; flex-direction: column; min-height: 0; }
+    .tabs { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--line); flex: none; }
+    .tabs button {
+      flex: 1 1 auto; padding: 8px 9px; background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; color: var(--muted);
+      font-size: 12.5px; white-space: nowrap;
+    }
+    .tabs button.on { color: var(--cyan); border-bottom-color: var(--cyan); background: rgba(63, 208, 255, .06); }
+    .tabs button .n { font-family: var(--mono); font-size: 10px; margin-left: 4px; opacity: .8; }
+    .tab-body { overflow: auto; padding: 10px; flex: 1; scrollbar-width: thin; }
+    .sec { font-family: var(--mono); font-size: 11px; letter-spacing: 1.5px; color: var(--muted); margin: 14px 2px 8px; display: flex; justify-content: space-between; gap: 8px; }
+    .sec:first-child { margin-top: 2px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+    .chips button { padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); background: none; cursor: pointer; font-size: 12px; color: var(--muted); }
+    .chips button.on { border-color: var(--cyan); color: var(--cyan); background: rgba(63, 208, 255, .1); }
+    .item {
+      padding: 9px 11px; border: 1px solid var(--line); border-left: 3px solid var(--c, var(--cyan)); border-radius: 10px; background: var(--panel-2);
+      margin-bottom: 8px; font-size: 13.5px; line-height: 1.42;
+    }
+    .item .head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; margin-bottom: 3px; }
+    .tag { font-family: var(--mono); font-size: 10.5px; font-weight: 700; letter-spacing: 1px; color: var(--c, var(--cyan)); white-space: nowrap; }
+    .topic { font-size: 12px; color: var(--muted); }
+    .meta { font-family: var(--mono); font-size: 11px; color: var(--muted); display: flex; gap: 4px 10px; flex-wrap: wrap; margin-top: 5px; align-items: center; }
+    .go { background: rgba(63, 208, 255, .1); border: 1px solid var(--line); border-radius: 6px; padding: 1px 7px; cursor: pointer; color: var(--cyan); font-size: 11px; font-family: var(--mono); }
+    .go:hover { background: rgba(63, 208, 255, .2); }
+    .empty { color: var(--muted); font-size: 13px; padding: 14px 4px; text-align: center; }
+    .err { color: #ff9b9b; }
+    .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .card { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--panel-2); }
+    .card small { display: block; font-family: var(--mono); font-size: 10px; letter-spacing: 1px; color: var(--muted); }
+    .card b { font-size: 18px; font-family: var(--mono); }
+    .up { color: var(--green); } .down { color: var(--red); }
+    .stat-row { display: flex; align-items: center; gap: 8px; padding: 8px 4px; border-bottom: 1px solid var(--line); font-size: 13px; }
+    .stat-row .info { flex: 1; min-width: 0; }
+    .stat-row small { display: block; color: var(--muted); font-size: 11.5px; }
+    .lvl { display: inline-block; font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; color: #160404; }
+    .note { font-size: 12px; color: var(--muted); margin: 10px 2px; line-height: 1.45; }
+    .tv { aspect-ratio: 16 / 9; border: 1px solid var(--line-2); border-radius: 10px; overflow: hidden; background: #000; }
+    .tv iframe { width: 100%; height: 100%; border: 0; display: block; }
+    .tv-off { display: grid; place-items: center; text-align: center; color: var(--muted); font-size: 13px; line-height: 1.8; background: repeating-linear-gradient(0deg, #060c12 0 2px, #0a141d 2px 4px); }
+    .tv-off div::first-line { font-size: 28px; }
+    .tv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
+    .tv-grid button { text-align: left; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); cursor: pointer; }
+    .tv-grid button:hover { border-color: var(--line-2); }
+    .tv-grid button.on { border-color: var(--red); box-shadow: inset 3px 0 0 var(--red); }
+    .tv-grid b { display: block; font-size: 13px; font-weight: 500; }
+    .tv-grid small { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+
+    /* ---------- Ticker ---------- */
+    .ticker { grid-column: 1 / -1; display: flex; align-items: center; overflow: hidden; border-top: 1px solid var(--line); background: #03060a; font-family: var(--mono); font-size: 12.5px; min-width: 0; }
+    .ticker-label { flex: none; height: 100%; display: flex; align-items: center; padding: 0 12px; background: var(--red); color: #fff; font-weight: 700; letter-spacing: 1.5px; }
+    .ticker-view { overflow: hidden; flex: 1; height: 100%; display: flex; align-items: center; }
+    .ticker-track { display: inline-flex; white-space: nowrap; animation: tick var(--dur, 200s) linear infinite; will-change: transform; }
+    .ticker:hover .ticker-track { animation-play-state: paused; }
+    @keyframes tick { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+    .t-item { padding: 0 26px 0 0; }
+    .t-item b { color: var(--c, var(--cyan)); margin-right: 6px; }
+
+    @media (max-width: 1000px) {
+      body { display: block; height: auto; overflow: auto; }
+      .map-wrap { height: 64vh; }
+      .side { border-left: none; border-top: 1px solid var(--line); height: 75vh; }
+      .ticker { position: sticky; bottom: 0; height: 34px; z-index: 1000; }
+      .search input { width: 150px; }
+      .results { width: min(320px, 90vw); }
+      .layers { width: 236px; }
+    }
+    @media (max-width: 700px) { .hud { display: none; } }
+    @media (max-width: 560px) {
+      .clocks { display: none; } .search { margin-left: auto; }
+      .readout { display: none; }
+      .legend { left: 10px; right: auto; bottom: 10px; font-size: 10px; display: grid; grid-template-columns: auto auto; gap: 3px 10px; }
+      .legend div { margin: 0 !important; }
+    }
+    @media (prefers-reduced-motion: reduce) { .ticker-track, .pin, .pulse, .scan i, path.zone.major, .live-dot { animation: none !important; } }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <a class="back" href="../" title="Back to Mikaeel's site" aria-label="Back to Mikaeel's site">←</a>
+    <div class="brand"><span class="live-dot"></span>WORLD WATCH</div>
+    <div class="clocks" id="clocks"></div>
+    <form class="search" id="search" autocomplete="off">
+      <input id="q" placeholder="🔎 Search a place or lat, lon" aria-label="Search a place">
+      <div class="results" id="results"></div>
+    </form>
+  </header>
+
+  <main class="map-wrap">
+    <div id="map" aria-label="World map"></div>
+    <div class="scanlines"></div><div class="vignette"></div>
+    <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+    <div class="layers" id="layers"></div>
+    <div class="hud" id="hud"></div>
+    <div class="readout" id="readout">LAT --  LON --</div>
+    <div class="legend" id="legend"></div>
+  </main>
+
+  <aside class="side">
+    <nav class="tabs" id="tabs"></nav>
+    <div class="tab-body" id="tab-body"></div>
+  </aside>
+
+  <footer class="ticker"><div class="ticker-label">LIVE</div><div class="ticker-view"><div class="ticker-track" id="ticker"><span class="t-item">Loading live feeds…</span></div></div></footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+  <script>
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const safeUrl = u => /^https?:\/\//i.test(u || '') ? u : '#';
+  const link = (href, text) => `<a href="${esc(safeUrl(href))}" target="_blank" rel="noopener">${esc(text)}</a>`;
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+  };
+  const WIKI = 'https://en.wikipedia.org/w/api.php';
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  // ===================== Settings =====================
+  const DEFAULT_LAYERS = { borders: true, night: true, news: true, conflicts: true, warnews: true, quakes: true, events: true, iss: true, radar: false, flights: false, battles: false };
+  const saved = store.get('worldwatch', {});
+  const S = { base: 'dark', tab: 'news', era: 'all', newsCat: 'all', layersOpen: innerWidth > 700, ...saved, layers: { ...DEFAULT_LAYERS, ...(saved.layers || {}) } };
+  const save = () => store.set('worldwatch', S);
+
+  // ===================== Helpers =====================
+  async function getJSON(url, timeout = 15000) {
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), timeout);
+    try {
+      const r = await fetch(url, { signal: ctl.signal });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const txt = await r.text();
+      try { return JSON.parse(txt); }
+      catch (e) { throw new Error(/limit|too many|slow down/i.test(txt) ? 'HTTP 429' : 'Unexpected response'); }   // some APIs answer in plain text when busy
+    } finally { clearTimeout(t); }
+  }
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const CAN_HOVER = matchMedia('(hover: hover)').matches;   // mouse, not a touch screen
+  // OpenStreetMap's place search asks for at most one request per second, so line them up
+  let nomQueue = Promise.resolve();
+  function nominatim(url) {
+    const p = nomQueue.then(() => getJSON(url, 10000));
+    nomQueue = p.catch(() => {}).then(() => sleep(1100));
+    return p;
+  }
+  const ago = t => {
+    if (!t) return '';
+    const s = (Date.now() - t) / 1000;
+    if (s < 60) return 'just now'; if (s < 3600) return Math.floor(s / 60) + ' min ago';
+    if (s < 86400) return Math.floor(s / 3600) + ' h ago'; return Math.floor(s / 86400) + ' d ago';
+  };
+  const wrapLon = lon => ((lon + 180) % 360 + 360) % 360 - 180;
+  function dms(v, pos, neg) {
+    const a = Math.abs(v), d = Math.floor(a), m = Math.floor((a - d) * 60), s = (a - d - m / 60) * 3600;
+    return `${d}°${String(m).padStart(2, '0')}′${s.toFixed(1).padStart(4, '0')}″${v >= 0 ? pos : neg}`;
+  }
+  function distKm(a, b) {
+    const R = 6371, rad = Math.PI / 180, dLat = (b[0] - a[0]) * rad, dLon = (b[1] - a[1]) * rad;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * rad) * Math.cos(b[0] * rad) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+  const fmtDay = d => d ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' }) : '';
+  const yearStr = y => y < 0 ? `${-y} BC` : y < 1000 ? `AD ${y}` : String(y);
+  const pulseIcon = c => L.divIcon({ className: 'ww-icon', html: `<div class="pulse" style="--c:${c}"></div>`, iconSize: [22, 22] });
+  function friendlyError(e) {
+    if (!e) return 'Error';
+    if (e.name === 'AbortError') return 'Timed out';
+    if (/HTTP 429/.test(e.message)) return 'Too many requests, will retry';
+    if (/HTTP/.test(e.message)) return e.message;
+    if (e instanceof TypeError) return "Couldn't connect";
+    return e.message || 'Error';
+  }
+
+  // ===================== Feed status =====================
+  const FEED_INFO = {
+    news:      ['📰 World news', 'Wikipedia Current events (CC BY-SA)', 'https://en.wikipedia.org/wiki/Portal:Current_events'],
+    conflicts: ['⚔️ Ongoing conflicts', 'Wikipedia: List of ongoing armed conflicts (CC BY-SA)', 'https://en.wikipedia.org/wiki/List_of_ongoing_armed_conflicts'],
+    warnews:   ['💥 War news hotspots', 'The GDELT Project', 'https://www.gdeltproject.org/'],
+    quakes:    ['🌍 Earthquakes', 'U.S. Geological Survey', 'https://earthquake.usgs.gov/'],
+    events:    ['🔥 Fires, storms & volcanoes', 'NASA EONET', 'https://eonet.gsfc.nasa.gov/'],
+    iss:       ['🛰️ Space station', 'Where the ISS at?', 'https://wheretheiss.at/'],
+    radar:     ['🌧️ Weather radar', 'RainViewer', 'https://www.rainviewer.com/'],
+    flights:   ['✈️ Flights', 'The OpenSky Network', 'https://opensky-network.org/'],
+    tech:      ['💻 Tech news', 'Hacker News', 'https://news.ycombinator.com/'],
+    space:     ['🚀 Space news', 'Spaceflight News API', 'https://spaceflightnewsapi.net/'],
+    markets:   ['📈 Markets', 'CoinGecko and Frankfurter (ECB rates)', 'https://www.coingecko.com/'],
+    borders:   ['🗺️ Country shapes', 'Natural Earth via world-atlas', 'https://github.com/topojson/world-atlas'],
+  };
+  const status = {};
+  function setStatus(k, state, msg = '', count = null) {
+    status[k] = { state, msg, count, at: Date.now() };
+    renderLayerPanel(); renderTabs(); renderHUD();
+    if (S.tab === 'status') renderTab();
+  }
+
+  // ===================== Map =====================
+  // SVG (not canvas) so clicks pass through empty space to the conflict zones underneath
+  const map = L.map('map', { zoomControl: false, worldCopyJump: true, minZoom: 2, maxZoom: 18, zoomSnap: 0.5 }).setView([24, 18], innerWidth < 700 ? 2 : 2.5);
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
+  map.attributionControl.setPrefix('<a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>');
+  [['night', 350], ['zones', 360], ['borders', 370]].forEach(([n, z]) => {
+    map.createPane(n); map.getPane(n).style.zIndex = z;
+    if (n !== 'zones') map.getPane(n).style.pointerEvents = 'none';
+  });
+  const zoneRenderer = L.svg({ pane: 'zones' });
+  const FLY = 1.6;   // seconds; Leaflet's default can take 3+ s for long trips
+  const fly = (ll, z) => map.flyTo(ll, z, { duration: FLY });
+
+  const BASES = {
+    satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19, attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community' }),
+    dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      subdomains: 'abcd', maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>' }),
+    streets: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }),
+  };
+  let baseLayer = null;
+  function setBase(b) {
+    if (!BASES[b]) b = 'dark';
+    if (baseLayer) baseLayer.remove();
+    S.base = b; baseLayer = BASES[b].addTo(map); baseLayer.bringToBack();
+    save(); renderLayerPanel();
+  }
+
+  const groups = {};
+  Object.keys(DEFAULT_LAYERS).forEach(k => groups[k] = L.layerGroup());
+  function applyLayers() {
+    for (const [k, on] of Object.entries(S.layers)) { if (!groups[k]) continue; if (on) groups[k].addTo(map); else groups[k].remove(); }
+    renderLegend();
+  }
+  const scanLayer = L.layerGroup().addTo(map);
+
+  // ===================== Day & night =====================
+  function solar(date) {
+    const rad = Math.PI / 180, d = date.getTime() / 86400000 + 2440587.5 - 2451545.0;
+    const g = (357.529 + 0.98560028 * d) % 360, q = (280.459 + 0.98564736 * d) % 360;
+    const Lng = (q + 1.915 * Math.sin(g * rad) + 0.020 * Math.sin(2 * g * rad)) % 360;
+    const e = 23.439 - 0.00000036 * d;
+    const ra = Math.atan2(Math.cos(e * rad) * Math.sin(Lng * rad), Math.cos(Lng * rad)) / rad;
+    let dec = Math.asin(Math.sin(e * rad) * Math.sin(Lng * rad)) / rad;
+    if (Math.abs(dec) < 0.05) dec = dec < 0 ? -0.05 : 0.05;
+    const gmst = ((18.697374558 + 24.06570982441908 * d) % 24 + 24) % 24;
+    return { lat: dec, lon: wrapLon(ra - gmst * 15) };
+  }
+  let nightPolys = [], sunMarker = null;
+  function updateNight() {
+    const sun = solar(new Date()), rad = Math.PI / 180, pts = [];
+    for (let lon = -180; lon <= 180; lon += 2) pts.push([Math.atan(-Math.cos((lon - sun.lon) * rad) / Math.tan(sun.lat * rad)) / rad, lon]);
+    const pole = sun.lat > 0 ? -90 : 90;   // the pole that's in darkness
+    pts.push([pole, 180], [pole, -180]);
+    const copies = [-360, 0, 360].map(off => pts.map(([a, b]) => [a, b + off]));
+    if (!nightPolys.length) {
+      nightPolys = copies.map(c => L.polygon(c, { pane: 'night', stroke: false, fillColor: '#000610', fillOpacity: 0.42, interactive: false }).addTo(groups.night));
+      sunMarker = L.marker([sun.lat, sun.lon], { icon: L.divIcon({ className: 'ww-icon', html: '<div class="sun" title="The sun is straight overhead here">☀️</div>', iconSize: [24, 24] }), keyboard: false })
+        .bindPopup(() => `<div class="pp-cat" style="color:#ffd23f">☀️ SUBSOLAR POINT</div>The sun is straight overhead here right now.<div class="pp-meta">${dms(sun.lat, 'N', 'S')} ${dms(sun.lon, 'E', 'W')}</div>`).addTo(groups.night);
+    } else { nightPolys.forEach((p, i) => p.setLatLngs(copies[i])); sunMarker.setLatLng([sun.lat, sun.lon]); }
+  }
+
+  // ===================== Country shapes =====================
+  let countries = null, COUNTRY_INDEX = null, countriesPromise = null;
+  const ALIASES = {
+    'Democratic Republic of the Congo': 'Dem. Rep. Congo', 'DR Congo': 'Dem. Rep. Congo', 'DRC': 'Dem. Rep. Congo', 'Congo-Kinshasa': 'Dem. Rep. Congo',
+    'Republic of the Congo': 'Congo', 'Congo-Brazzaville': 'Congo', 'Central African Republic': 'Central African Rep.', 'South Sudan': 'S. Sudan',
+    'State of Palestine': 'Palestine', 'Palestinian territories': 'Palestine', 'Palestinian Territories': 'Palestine', 'Gaza Strip': 'Palestine', 'Gaza': 'Palestine', 'West Bank': 'Palestine',
+    'United States': 'United States of America', 'USA': 'United States of America', 'Ivory Coast': "Côte d'Ivoire", 'Western Sahara': 'W. Sahara',
+    'Sahrawi Arab Democratic Republic': 'W. Sahara', 'Bosnia and Herzegovina': 'Bosnia and Herz.', 'Dominican Republic': 'Dominican Rep.', 'Equatorial Guinea': 'Eq. Guinea',
+    'Eswatini': 'eSwatini', 'Swaziland': 'eSwatini', 'Solomon Islands': 'Solomon Is.', 'North Macedonia': 'Macedonia', 'East Timor': 'Timor-Leste', 'Czech Republic': 'Czechia',
+    'Burma': 'Myanmar', 'Türkiye': 'Turkey', 'The Gambia': 'Gambia', 'The Bahamas': 'Bahamas', "People's Republic of China": 'China', 'Republic of China': 'Taiwan',
+    'Russian Federation': 'Russia', 'Syrian Arab Republic': 'Syria', 'Northern Cyprus': 'N. Cyprus', 'Falkland Islands': 'Falkland Is.', 'Lao PDR': 'Laos', 'Viet Nam': 'Vietnam',
+    "Democratic People's Republic of Korea": 'North Korea', 'Republic of Korea': 'South Korea',
+  };
+  const norm = s => String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const matchCountry = s => s && COUNTRY_INDEX ? COUNTRY_INDEX[norm(s)] || null : null;
+  // A point that's surely inside a country: take its biggest piece, then the middle of the
+  // widest stretch of land across it (the plain center of a shape like Vietnam is in Laos!)
+  const COUNTRY_PT = {}, PT_OVERRIDE = { Russia: [55.75, 37.62] };
+  function labelPoint(f) {
+    const g = f.geometry; if (!g) return null;
+    const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+    let best = null, bestArea = 0;
+    for (const p of polys) {
+      const ring = p[0]; let a = 0, cy = 0;
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const k = ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1]; a += k; cy += (ring[j][1] + ring[i][1]) * k; }
+      if (Math.abs(a) > bestArea) { bestArea = Math.abs(a); best = { ring, lat: cy / (3 * a) }; }
+    }
+    if (!best) return null;
+    const { ring, lat } = best, xs = [];
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [x1, y1] = ring[j], [x2, y2] = ring[i];
+      if ((y1 > lat) !== (y2 > lat)) xs.push(x1 + (lat - y1) / (y2 - y1) * (x2 - x1));
+    }
+    xs.sort((a, b) => a - b);
+    let lon = null, w = -1;
+    for (let i = 0; i + 1 < xs.length; i += 2) if (xs[i + 1] - xs[i] > w) { w = xs[i + 1] - xs[i]; lon = (xs[i] + xs[i + 1]) / 2; }
+    return lon == null ? null : [lat, lon];
+  }
+  // The map data joins shapes across the 180° line (fine on a globe). On a flat map that draws a
+  // stripe across the whole world (Russia, Fiji), so "unwrap" each ring and keep it on the main copy.
+  function unwrapRing(ring) {
+    let off = 0;
+    const out = ring.map((p, i) => {
+      if (i) { const d = p[0] - ring[i - 1][0]; if (d > 180) off -= 360; else if (d < -180) off += 360; }
+      return [p[0] + off, p[1]];
+    });
+    const mean = out.reduce((s, p) => s + p[0], 0) / out.length;
+    const shift = mean > 180 ? -360 : mean < -180 ? 360 : 0;
+    return shift ? out.map(p => [p[0] + shift, p[1]]) : out;
+  }
+  function unwrapGeometry(g) {
+    if (g && g.type === 'Polygon') g.coordinates = g.coordinates.map(unwrapRing);
+    else if (g && g.type === 'MultiPolygon') {
+      const polys = g.coordinates.map(p => p.map(unwrapRing));
+      // keep every piece on the same side as the biggest one (Russia's islands stay next to Russia)
+      const mid = ring => ring.reduce((s, p) => s + p[0], 0) / ring.length;
+      const m = mid(polys.reduce((a, b) => b[0].length > a[0].length ? b : a)[0]);
+      g.coordinates = polys.map(p => { const d = mid(p[0]) - m, sh = d > 180 ? -360 : d < -180 ? 360 : 0; return sh ? p.map(r => r.map(q => [q[0] + sh, q[1]])) : p; });
+    }
+  }
+  function loadCountries() {
+    if (!countriesPromise) countriesPromise = (async () => {
+      const topo = await getJSON('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json', 20000);
+      countries = topojson.feature(topo, topo.objects.countries).features.filter(f => f.properties.name !== 'Antarctica');   // goes around the pole, can't be unwrapped
+      countries.forEach(f => unwrapGeometry(f.geometry));
+      COUNTRY_INDEX = {};
+      countries.forEach(f => { COUNTRY_INDEX[norm(f.properties.name)] = f.properties.name; COUNTRY_PT[f.properties.name] = PT_OVERRIDE[f.properties.name] || labelPoint(f); });
+      for (const [k, v] of Object.entries(ALIASES)) COUNTRY_INDEX[norm(k)] = v;
+      L.geoJSON({ type: 'FeatureCollection', features: countries }, { pane: 'borders', interactive: false, style: { color: '#3fd0ff', weight: 0.7, opacity: 0.45, fill: false } }).addTo(groups.borders);
+      setStatus('borders', 'ok', '', countries.length);
+    })().catch(e => { countriesPromise = null; setStatus('borders', 'error', friendlyError(e)); throw e; });
+    return countriesPromise;
+  }
+
+  // ===================== World news (Wikipedia "Current events") =====================
+  const CATS = [
+    ['Armed conflicts and attacks', 'conflict', '⚔️', 'CONFLICT', '#ff4d4d'],
+    ['Disasters and accidents', 'disaster', '⚠️', 'DISASTER', '#ff9f43'],
+    ['International relations', 'intl', '🌐', 'WORLD', '#48a3ff'],
+    ['Politics and elections', 'politics', '🏛️', 'POLITICS', '#8e9bff'],
+    ['Law and crime', 'law', '⚖️', 'LAW', '#c9a0ff'],
+    ['Business and economy', 'business', '📈', 'ECONOMY', '#feca57'],
+    ['Science and technology', 'science', '🔬', 'SCIENCE', '#1dd1a1'],
+    ['Health and environment', 'health', '🩺', 'HEALTH', '#4cd97b'],
+    ['Arts and culture', 'arts', '🎭', 'CULTURE', '#ff6bcb'],
+    ['Sports', 'sports', '🏅', 'SPORTS', '#54d1ff'],
+  ];
+  const CAT = Object.fromEntries(CATS.map(([name, k, emoji, short, color]) => [k, { name, emoji, short, color }]));
+  let news = [];
+  const dayParts = d => [d.getUTCFullYear(), MONTHS[d.getUTCMonth()], d.getUTCDate()];
+  const dayTitle = d => { const [y, m, dd] = dayParts(d); return `Portal:Current events/${y} ${m} ${dd}`; };
+  const dayUrl = d => { const [y, m, dd] = dayParts(d); return `https://en.wikipedia.org/wiki/Portal:Current_events/${y}_${m}_${dd}`; };
+  const titleOf = a => { try { return decodeURIComponent((a.getAttribute('href') || '').replace(/^\/wiki\//, '').split('#')[0]).replace(/_/g, ' '); } catch (e) { return ''; } };
+
+  function parseCurrentEvents(html, date) {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const root = doc.querySelector('.current-events-content') || doc.querySelector('.mw-parser-output') || doc.body;
+    const out = [];
+    let cat = null;
+    const catFor = txt => CATS.find(c => txt.toLowerCase().startsWith(c[0].toLowerCase()));
+    function walk(ul, topics) {
+      for (const li of ul.children) {
+        if (li.tagName !== 'LI') continue;
+        const sub = [...li.children].find(c => c.tagName === 'UL');
+        if (sub) {
+          const own = li.cloneNode(true);
+          own.querySelectorAll('ul').forEach(u => u.remove());
+          const topic = { text: own.textContent.replace(/\s+/g, ' ').trim(), links: [...own.querySelectorAll('a[href^="/wiki/"]')].map(titleOf) };
+          walk(sub, [...topics, topic]);
+        } else {
+          const clone = li.cloneNode(true);
+          const sources = [...clone.querySelectorAll('a.external, a[rel~="nofollow"]')].map(a => ({ label: a.textContent.replace(/[()]/g, '').trim() || 'source', href: a.getAttribute('href') }));
+          clone.querySelectorAll('a.external, a[rel~="nofollow"], sup').forEach(a => a.remove());
+          const text = clone.textContent.replace(/\s+/g, ' ').replace(/\s+([.,;:])/g, '$1').trim();
+          if (text.length < 12) continue;
+          out.push({
+            text, cat: cat[1], date, sources,
+            topic: topics.map(t => t.text).filter(Boolean).join(' › '),
+            links: [...li.querySelectorAll('a[href^="/wiki/"]')].map(titleOf).filter(Boolean),
+            topicLinks: topics.flatMap(t => t.links).filter(Boolean),
+          });
+        }
+      }
+    }
+    for (const el of root.children) {
+      if (el.tagName === 'UL') { if (cat) walk(el, []); continue; }
+      const txt = el.textContent.trim();
+      const c = txt.length < 60 && catFor(txt);
+      if (c) cat = c;
+    }
+    return out;
+  }
+
+  // Find coordinates for the places a story links to (cities, countries…)
+  async function geolocate(stories) {
+    const titles = [...new Set(stories.flatMap(s => [...s.links, ...s.topicLinks]))].filter(t => t && !/^(File|Category|Portal|Help|Wikipedia|Template|Special|Talk):/i.test(t));
+    const coords = {};
+    for (let i = 0; i < titles.length; i += 50) {
+      const batch = titles.slice(i, i + 50);
+      try {
+        const d = await getJSON(`${WIKI}?action=query&prop=coordinates&colimit=max&redirects=1&format=json&formatversion=2&origin=*&titles=${encodeURIComponent(batch.join('|'))}`);
+        const alias = {};
+        (d.query?.normalized || []).forEach(n => alias[n.from] = n.to);
+        (d.query?.redirects || []).forEach(n => alias[n.from] = n.to);
+        const byTitle = {};
+        (d.query?.pages || []).forEach(p => { const c = p.coordinates && p.coordinates[0]; if (c && (!c.globe || c.globe === 'earth')) byTitle[p.title] = [c.lat, c.lon]; });
+        batch.forEach(t => { let k = t; for (let h = 0; h < 3 && alias[k]; h++) k = alias[k]; if (byTitle[k]) coords[t] = byTitle[k]; });
+      } catch (e) { /* places for this batch just won't get pins */ }
+    }
+    try { await loadCountries(); } catch (e) { /* no country fallback then */ }
+    const countryIn = list => { for (const t of list) { const c = matchCountry(t); if (c && COUNTRY_PT[c]) return [c, t]; } return null; };
+    stories.forEach(s => {
+      // 1) a specific place with coordinates (a city, a dam…), 2) a country the story links to
+      const t = s.links.find(t => coords[t]) || s.topicLinks.find(t => coords[t]);
+      if (t) { s.ll = coords[t]; s.place = t; return; }
+      const c = countryIn(s.links) || countryIn(s.topicLinks);
+      if (c) { s.ll = COUNTRY_PT[c[0]]; s.place = c[1]; }
+    });
+  }
+
+  async function loadNews() {
+    const days = [0, 1, 2].map(k => new Date(Date.now() - k * 86400000));
+    const res = await Promise.allSettled(days.map(d => getJSON(`${WIKI}?action=parse&page=${encodeURIComponent(dayTitle(d))}&prop=text&format=json&formatversion=2&origin=*`)));
+    const stories = [];
+    res.forEach((r, i) => { if (r.status === 'fulfilled' && r.value.parse && r.value.parse.text) stories.push(...parseCurrentEvents(r.value.parse.text, days[i])); });
+    if (!stories.length) throw new Error(res.every(r => r.status === 'rejected') ? friendlyError(res[0].reason) : 'No stories found');
+    await geolocate(stories);
+    news = stories.map((s, i) => ({ ...s, id: i }));
+    renderNewsPins();
+    setStatus('news', 'ok', `${news.filter(s => s.ll).length} on the map`, news.length);
+    renderTicker();
+    if (['news', 'conflicts', 'disasters'].includes(S.tab)) renderTab();
+  }
+
+  function renderNewsPins() {
+    groups.news.clearLayers();
+    const seen = {};
+    news.forEach(s => {
+      if (!s.ll) return;
+      const key = s.ll.map(v => v.toFixed(1)).join();
+      const k = seen[key] = (seen[key] || 0) + 1;
+      const r = k > 1 ? 0.35 * Math.sqrt(k) : 0, ang = k * 2.4;
+      const c = CAT[s.cat];
+      s.marker = L.marker([s.ll[0] + Math.sin(ang) * r, s.ll[1] + Math.cos(ang) * r], {
+        icon: L.divIcon({ className: 'ww-icon', html: `<div class="pin ${s.cat}" style="--c:${c.color}">${c.emoji}</div>`, iconSize: [24, 24] }),
+        riseOnHover: true, zIndexOffset: s.cat === 'conflict' ? 500 : 0,
+      }).bindPopup(() => storyPopup(s), { maxWidth: 320 }).addTo(groups.news);
+    });
+  }
+  function storyPopup(s) {
+    const c = CAT[s.cat];
+    return `<div class="pp-cat" style="color:${c.color}">${c.emoji} ${c.short}</div>${s.topic ? `<div class="pp-topic">${esc(s.topic)}</div>` : ''}
+      <div>${esc(s.text)}</div><div class="pp-meta">📍 ${esc(s.place || '')} · ${fmtDay(s.date)}</div>
+      <div class="pp-links">${s.sources.slice(0, 4).map(x => link(x.href, x.label)).join('')}${link(dayUrl(s.date), 'Wikipedia')}</div>`;
+  }
+
+  // ===================== Ongoing conflicts (Wikipedia list) =====================
+  const LEVELS = {
+    major:    { label: 'Major war', note: '10,000+ deaths in the last year', color: '#ff2d2d', op: 0.45, rank: 4 },
+    minor:    { label: 'War', note: '1,000–9,999 deaths in the last year', color: '#ff7a1a', op: 0.38, rank: 3 },
+    conflict: { label: 'Conflict', note: '100–999 deaths in the last year', color: '#ffb81a', op: 0.3, rank: 2 },
+    skirmish: { label: 'Clashes', note: 'fewer than 100 deaths in the last year', color: '#ffe066', op: 0.2, rank: 1 },
+  };
+  let conflicts = [], conflictByCountry = {};
+  const clean = s => s.replace(/\[[^\]]*\]/g, '').replace(/\s+/g, ' ').trim();
+  const CONTINENT_RE = /^(?:(?:africa|asia|europe|americas?|north america|south america|central america|latin america|caribbean|middle east|oceania|worldwide|global|international)\s*(?:,|and|&|\/)?\s*)+$/i;
+  function levelFromHeading(t) {
+    t = clean(t);
+    if (/10,000/.test(t)) return 'major';
+    if (/1,000/.test(t)) return 'minor';
+    if (/\b100\b/.test(t)) return 'conflict';
+    if (/skirmish|clashes|1–99|1-99|fewer than 100/i.test(t)) return 'skirmish';
+    return null;
+  }
+  function parseConflicts(html) {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const out = []; let level = null;
+    doc.querySelectorAll('h2, h3, table').forEach(n => {
+      if (n.tagName === 'H2') { level = levelFromHeading(n.textContent); return; }
+      if (n.tagName === 'H3') { const l = levelFromHeading(n.textContent); if (l) level = l; return; }
+      if (!level || !n.classList.contains('wikitable')) return;
+      n.querySelectorAll('tr').forEach(tr => {
+        const tds = [...tr.children].filter(c => c.tagName === 'TD');
+        if (tds.length < 2) return;
+        const locCell = tds.find(td => td.querySelector('.flagicon, img'));
+        if (!locCell) return;
+        const found = [...locCell.querySelectorAll('a')].map(a => matchCountry(a.getAttribute('title')) || matchCountry(a.textContent)).filter(Boolean);
+        const countriesHere = [...new Set(found)];
+        if (!countriesHere.length) return;
+        const nameCell = tds.find(td => td !== locCell && /[a-z]{3}/i.test(td.textContent) && !CONTINENT_RE.test(clean(td.textContent)) && !/^\s*\d{3,4}\b/.test(td.textContent));
+        const a = nameCell && nameCell.querySelector('a[href^="/wiki/"]');
+        out.push({ name: nameCell ? clean(nameCell.textContent) : 'Armed conflict', level, countries: countriesHere, href: a ? 'https://en.wikipedia.org' + a.getAttribute('href') : null });
+      });
+    });
+    return out;
+  }
+  const worstLevel = name => (conflictByCountry[name] || []).reduce((w, c) => !w || LEVELS[c.level].rank > LEVELS[w].rank ? c.level : w, null);
+  function conflictPopup(name) {
+    const list = (conflictByCountry[name] || []).slice().sort((a, b) => LEVELS[b.level].rank - LEVELS[a.level].rank);
+    return `<div class="pp-cat" style="color:${LEVELS[worstLevel(name)].color}">⚔️ ONGOING CONFLICT</div><b>${esc(name)}</b>
+      <ul class="pp-list">${list.map(c => `<li><span class="lvl" style="background:${LEVELS[c.level].color}">${LEVELS[c.level].label}</span> ${c.href ? link(c.href, c.name) : esc(c.name)}</li>`).join('')}</ul>
+      <div class="pp-meta">Source: ${link('https://en.wikipedia.org/wiki/List_of_ongoing_armed_conflicts', 'Wikipedia list of ongoing armed conflicts')}</div>`;
+  }
+  let countryLayers = {};
+  async function loadConflicts() {
+    await loadCountries();
+    const d = await getJSON(`${WIKI}?action=parse&page=List_of_ongoing_armed_conflicts&prop=text&format=json&formatversion=2&origin=*`, 20000);
+    if (!d.parse || !d.parse.text) throw new Error('No data');
+    const list = parseConflicts(d.parse.text);
+    if (!list.length) throw new Error("Couldn't read the list");
+    conflicts = list; conflictByCountry = {};
+    conflicts.forEach(c => c.countries.forEach(n => (conflictByCountry[n] = conflictByCountry[n] || []).push(c)));
+    groups.conflicts.clearLayers(); countryLayers = {};
+    const feats = countries.filter(f => conflictByCountry[f.properties.name]);
+    L.geoJSON({ type: 'FeatureCollection', features: feats }, {
+      pane: 'zones', renderer: zoneRenderer, bubblingMouseEvents: false,
+      style: f => { const lv = LEVELS[worstLevel(f.properties.name)]; return { color: lv.color, weight: 1.2, opacity: 0.9, fillColor: lv.color, fillOpacity: lv.op, className: 'zone ' + worstLevel(f.properties.name) }; },
+      onEachFeature: (f, layer) => {
+        const n = f.properties.name;
+        countryLayers[n] = layer;
+        layer.bindPopup(() => conflictPopup(n), { maxWidth: 320 });
+        if (CAN_HOVER) layer.bindTooltip(`${esc(n)} · ${LEVELS[worstLevel(n)].label}`, { sticky: true, direction: 'top', offset: [0, -6], className: 'ww-tip' });
+      },
+    }).addTo(groups.conflicts);
+    setStatus('conflicts', 'ok', `${feats.length} countries`, conflicts.length);
+    if (S.tab === 'conflicts') renderTab();
+  }
+
+  // ===================== War news hotspots (GDELT) =====================
+  const WAR_QUERY = '(airstrike OR shelling OR "missile strike" OR ceasefire OR clashes OR "drone attack" OR insurgents)';
+  let warHeadlines = [], warSpots = [];
+  async function loadWarNews() {
+    const settle = p => p.then(value => ({ ok: true, value }), reason => ({ ok: false, reason }));
+    // GDELT asks for no more than one request every 5 seconds, so the two calls take turns
+    const g = await settle(getJSON(`https://api.gdeltproject.org/api/v2/geo/geo?query=${encodeURIComponent(WAR_QUERY)}&format=GeoJSON&maxpoints=300`, 25000));
+    if (g.ok) {
+      warSpots = (g.value.features || []).map(f => {
+        const p = f.properties || {}, c = f.geometry && f.geometry.coordinates;
+        const items = [];
+        if (p.html) new DOMParser().parseFromString(p.html, 'text/html').querySelectorAll('a').forEach(x => items.push({ title: (x.getAttribute('title') || x.textContent).trim(), url: x.getAttribute('href') }));
+        return c ? { name: p.name || 'Unknown place', count: p.count || items.length || 1, ll: [c[1], c[0]], items: items.filter(i => i.title).slice(0, 6) } : null;
+      }).filter(Boolean);
+      groups.warnews.clearLayers();
+      warSpots.forEach(s => {
+        L.circleMarker(s.ll, { radius: Math.min(22, 4 + Math.sqrt(s.count) * 2), color: '#ff3b3b', weight: 1, fillColor: '#ff3b3b', fillOpacity: 0.28, bubblingMouseEvents: false })
+          .bindPopup(() => `<div class="pp-cat" style="color:#ff6b6b">💥 WAR NEWS HOTSPOT</div><b>${esc(s.name)}</b> · ${s.count} report${s.count === 1 ? '' : 's'} in the last day
+            <ul class="pp-list">${s.items.map(i => `<li>${link(i.url, i.title)}</li>`).join('')}</ul><div class="pp-meta">Source: GDELT Project</div>`, { maxWidth: 330 })
+          .addTo(groups.warnews);
+      });
+      // radar pings on the places with the most reports
+      warSpots.slice().sort((a, b) => b.count - a.count).slice(0, 8).forEach(s => L.marker(s.ll, { icon: pulseIcon('#ff3b3b'), interactive: false, keyboard: false }).addTo(groups.warnews));
+      setStatus('warnews', 'loading', 'Getting headlines', warSpots.length);
+      await sleep(5500);
+    }
+    const a = await settle(getJSON(`https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(WAR_QUERY + ' sourcelang:english')}&mode=artlist&maxrecords=30&format=json&sort=datedesc&timespan=24h`, 25000));
+    if (!g.ok && !a.ok) throw g.reason;
+    if (a.ok) {
+      warHeadlines = (a.value.articles || []).map(x => ({ title: x.title, url: x.url, domain: x.domain, country: x.sourcecountry, time: gdeltTime(x.seendate) })).filter(x => x.title);
+    }
+    setStatus('warnews', 'ok', !g.ok ? 'Headlines only' : !a.ok ? 'Map only' : '', warSpots.length || warHeadlines.length);
+    renderTicker();
+    if (S.tab === 'conflicts') renderTab();
+  }
+  const gdeltTime = s => { const m = /^(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z$/.exec(s || ''); return m ? Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : null; };
+
+  // ===================== Earthquakes (USGS) =====================
+  let quakes = [];
+  const qColor = m => m >= 6 ? '#ff3df0' : m >= 5 ? '#ff4d4d' : m >= 4 ? '#ff9f43' : '#ffe066';
+  async function loadQuakes() {
+    const d = await getJSON('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson');
+    quakes = (d.features || []).map(f => ({ id: f.id, mag: f.properties.mag, place: f.properties.place, time: f.properties.time, url: f.properties.url, tsunami: f.properties.tsunami,
+      ll: [f.geometry.coordinates[1], f.geometry.coordinates[0]], depth: f.geometry.coordinates[2] })).filter(q => q.mag != null);
+    groups.quakes.clearLayers();
+    quakes.slice().sort((a, b) => a.mag - b.mag).forEach(q => {
+      q.layer = L.circleMarker(q.ll, { radius: 3 + Math.pow(Math.max(q.mag, 0), 1.7) * 0.9, color: qColor(q.mag), weight: 1.5, fillColor: qColor(q.mag), fillOpacity: 0.35, bubblingMouseEvents: false })
+        .bindPopup(() => quakePopup(q)).addTo(groups.quakes);
+      if (Date.now() - q.time < 3 * 3600e3 && q.mag >= 4) L.marker(q.ll, { icon: pulseIcon(qColor(q.mag)), interactive: false, keyboard: false }).addTo(groups.quakes);
+    });
+    setStatus('quakes', 'ok', '', quakes.length);
+    renderTicker();
+    if (S.tab === 'disasters') renderTab();
+  }
+  const quakePopup = q => `<div class="pp-cat" style="color:${qColor(q.mag)}">🌍 EARTHQUAKE</div><b>Magnitude ${q.mag.toFixed(1)}</b><div>${esc(q.place || '')}</div>
+    <div class="pp-meta">${ago(q.time)} · depth ${Math.round(q.depth)} km${q.tsunami ? ' · 🌊 tsunami alert issued' : ''}</div><div class="pp-links">${link(q.url, 'USGS details')}</div>`;
+
+  // ===================== Natural events (NASA EONET) =====================
+  const EV_ICON = { wildfires: '🔥', severeStorms: '🌀', volcanoes: '🌋', seaLakeIce: '🧊', floods: '🌊', drought: '🏜️', dustHaze: '🌫️', landslides: '⛰️', snow: '❄️', tempExtremes: '🌡️', earthquakes: '🌍', manmade: '🏭', waterColor: '💧' };
+  let events = [];
+  async function loadEvents() {
+    const d = await getJSON('https://eonet.gsfc.nasa.gov/api/v3/events?status=open&days=30&limit=400', 25000);
+    events = (d.events || []).map(e => {
+      const g = e.geometry && e.geometry[e.geometry.length - 1];
+      let ll = null;
+      if (g && g.type === 'Point') ll = [g.coordinates[1], g.coordinates[0]];
+      else if (g && g.type === 'Polygon') { const ring = g.coordinates[0]; ll = [ring.reduce((s, p) => s + p[1], 0) / ring.length, ring.reduce((s, p) => s + p[0], 0) / ring.length]; }
+      const cat = (e.categories && e.categories[0]) || {};
+      return { id: e.id, title: e.title, cat: cat.id || 'other', catTitle: cat.title || 'Event', time: g ? Date.parse(g.date) : null, ll, link: e.sources && e.sources[0] && e.sources[0].url,
+        mag: g && g.magnitudeValue, unit: g && g.magnitudeUnit, track: e.geometry && e.geometry.length > 1 && cat.id === 'severeStorms' ? e.geometry.filter(x => x.type === 'Point').map(x => [x.coordinates[1], x.coordinates[0]]) : null };
+    }).filter(e => e.ll);
+    groups.events.clearLayers();
+    events.forEach(e => {
+      if (e.track) L.polyline(e.track, { color: '#9be7ff', weight: 1.5, opacity: 0.6, dashArray: '4 4', interactive: false }).addTo(groups.events);
+      e.layer = L.marker(e.ll, { icon: L.divIcon({ className: 'ww-icon', html: `<div class="emo">${EV_ICON[e.cat] || '⚠️'}</div>`, iconSize: [20, 20] }) })
+        .bindPopup(() => `<div class="pp-cat" style="color:#ff9f43">${EV_ICON[e.cat] || '⚠️'} ${esc(e.catTitle.toUpperCase())}</div><b>${esc(e.title)}</b>
+          <div class="pp-meta">${e.time ? 'updated ' + ago(e.time) : ''}${e.mag ? ` · ${e.mag} ${esc(e.unit || '')}` : ''}</div><div class="pp-links">${e.link ? link(e.link, 'Source') : ''}${link('https://eonet.gsfc.nasa.gov/', 'NASA EONET')}</div>`)
+        .addTo(groups.events);
+    });
+    setStatus('events', 'ok', '', events.length);
+    if (S.tab === 'disasters') renderTab();
+  }
+
+  // ===================== International Space Station =====================
+  let issMarker = null, iss = null, followISS = false;
+  async function loadISS() {
+    const d = await getJSON('https://api.wheretheiss.at/v1/satellites/25544', 8000);
+    iss = d;
+    const ll = [d.latitude, d.longitude];
+    if (!issMarker) issMarker = L.marker(ll, { icon: L.divIcon({ className: 'ww-icon', html: '<div class="iss">🛰️</div>', iconSize: [30, 30] }), zIndexOffset: 2000 })
+      .bindPopup(() => issPopup()).addTo(groups.iss);
+    else issMarker.setLatLng(ll);
+    if (issMarker.isPopupOpen()) issMarker.setPopupContent(issPopup());
+    if (followISS) map.panTo(ll, { animate: true });
+    if (!status.iss || status.iss.state !== 'ok') setStatus('iss', 'ok');   // it updates every few seconds; no need to redraw the panels each time
+    else status.iss.at = Date.now();
+    if (S.tab === 'space') renderISSCard();
+  }
+  const issPopup = () => iss ? `<div class="pp-cat" style="color:var(--cyan)">🛰️ INTERNATIONAL SPACE STATION</div>
+    <div>Height: <b>${Math.round(iss.altitude)} km</b><br>Speed: <b>${Math.round(iss.velocity).toLocaleString()} km/h</b><br>${iss.visibility === 'daylight' ? '☀️ In sunlight' : '🌑 In Earth\'s shadow'}</div>
+    <div class="pp-meta">${dms(iss.latitude, 'N', 'S')} ${dms(iss.longitude, 'E', 'W')}</div>` : 'Loading…';
+  async function loadISSPath() {
+    const now = Math.floor(Date.now() / 1000);
+    const stamps = Array.from({ length: 20 }, (_, i) => now - 45 * 60 + i * 5 * 60);
+    const parts = await Promise.all([stamps.slice(0, 10), stamps.slice(10)].map(ts => getJSON(`https://api.wheretheiss.at/v1/satellites/25544/positions?timestamps=${ts.join(',')}&units=kilometers`, 10000)));
+    const pts = parts.flat().map(p => [p.latitude, p.longitude]);
+    groups.iss.eachLayer(l => { if (l instanceof L.Polyline) groups.iss.removeLayer(l); });
+    let seg = [];
+    pts.forEach((p, i) => {
+      if (i && Math.abs(p[1] - pts[i - 1][1]) > 180) { L.polyline(seg, { color: '#3fd0ff', weight: 1.5, opacity: 0.7, dashArray: '6 6', interactive: false }).addTo(groups.iss); seg = []; }
+      seg.push(p);
+    });
+    if (seg.length) L.polyline(seg, { color: '#3fd0ff', weight: 1.5, opacity: 0.7, dashArray: '6 6', interactive: false }).addTo(groups.iss);
+  }
+
+  // ===================== Weather radar (RainViewer) =====================
+  let radarLayer = null;
+  async function loadRadar() {
+    const d = await getJSON('https://api.rainviewer.com/public/weather-maps.json');
+    const frames = (d.radar && d.radar.past) || [];
+    const f = frames[frames.length - 1];
+    if (!f) throw new Error('No radar frames');
+    const url = `${d.host}${f.path}/256/{z}/{x}/{y}/2/1_1.png`;
+    if (!radarLayer) radarLayer = L.tileLayer(url, { opacity: 0.65, maxNativeZoom: 7, maxZoom: 18, attribution: 'Radar &copy; <a href="https://www.rainviewer.com/">RainViewer</a>' }).addTo(groups.radar);
+    else radarLayer.setUrl(url);
+    setStatus('radar', 'ok', 'as of ' + new Date(f.time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+  }
+
+  // ===================== Flights (OpenSky) =====================
+  const PLANE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.5c.9 0 1.4.8 1.4 1.8V9l7.6 4.4v2.1l-7.6-2.3v4.9l2.3 1.7v1.7L12 20.6l-3.7.9v-1.7l2.3-1.7v-4.9L3 15.5v-2.1L10.6 9V3.3c0-1 .5-1.8 1.4-1.8z"/></svg>';
+  async function loadFlights() {
+    groups.flights.clearLayers();
+    if (map.getZoom() < 6) { setStatus('flights', 'idle', 'Zoom in closer to see planes'); return; }
+    const b = map.getBounds();
+    const d = await getJSON(`https://opensky-network.org/api/states/all?lamin=${b.getSouth().toFixed(2)}&lomin=${wrapLon(b.getWest()).toFixed(2)}&lamax=${b.getNorth().toFixed(2)}&lomax=${wrapLon(b.getEast()).toFixed(2)}`, 15000);
+    let n = 0;
+    (d.states || []).slice(0, 500).forEach(s => {
+      const [, callsign, country, , , lon, lat, alt, onGround, vel, track] = s;
+      if (lat == null || lon == null || onGround) return;
+      n++;
+      L.marker([lat, lon], { icon: L.divIcon({ className: 'ww-icon', html: `<div class="plane" style="transform:rotate(${track || 0}deg)">${PLANE}</div>`, iconSize: [18, 18] }) })
+        .bindPopup(() => `<div class="pp-cat" style="color:#ffd23f">✈️ FLIGHT ${esc((callsign || '').trim() || '(no callsign)')}</div>From: ${esc(country || '?')}<br>
+          Altitude: <b>${alt != null ? Math.round(alt * 3.281).toLocaleString() + ' ft' : '?'}</b><br>Speed: <b>${vel != null ? Math.round(vel * 3.6) + ' km/h' : '?'}</b>
+          <div class="pp-meta">Live data: OpenSky Network</div>`).addTo(groups.flights);
+    });
+    setStatus('flights', 'ok', 'in view', n);
+  }
+
+  // ===================== Tech, space & market feeds =====================
+  let tech = [], spaceNews = [], markets = null;
+  async function loadTech() {
+    const d = await getJSON('https://hn.algolia.com/api/v1/search?tags=front_page&hitsPerPage=30');
+    tech = (d.hits || []).map(h => ({ title: h.title, url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`, points: h.points, comments: h.num_comments, id: h.objectID, time: Date.parse(h.created_at) }));
+    setStatus('tech', 'ok', '', tech.length);
+    if (S.tab === 'tech') renderTab();
+  }
+  async function loadSpace() {
+    const d = await getJSON('https://api.spaceflightnewsapi.net/v4/articles/?limit=20&ordering=-published_at');
+    spaceNews = (d.results || []).map(a => ({ title: a.title, url: a.url, site: a.news_site, time: Date.parse(a.published_at) }));
+    setStatus('space', 'ok', '', spaceNews.length);
+    if (S.tab === 'space') renderTab();
+  }
+  async function loadMarkets() {
+    const [c, fx] = await Promise.allSettled([
+      getJSON('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,dogecoin&vs_currencies=usd&include_24hr_change=true'),
+      getJSON('https://api.frankfurter.dev/v1/latest?base=USD&symbols=EUR,GBP,JPY,CNY,INR,CAD').catch(() => getJSON('https://api.frankfurter.app/latest?from=USD&to=EUR,GBP,JPY,CNY,INR,CAD')),
+    ]);
+    if (c.status === 'rejected' && fx.status === 'rejected') throw c.reason;
+    markets = { crypto: c.status === 'fulfilled' ? c.value : null, fx: fx.status === 'fulfilled' ? fx.value : null };
+    setStatus('markets', 'ok', c.status === 'rejected' ? 'Currencies only' : fx.status === 'rejected' ? 'Crypto only' : '');
+    if (S.tab === 'markets') renderTab();
+  }
+
+  // ===================== Famous battles (history) =====================
+  // [name, year (negative = BC), lat, lon, war, short fact]
+  const BATTLES = [
+    ['Battle of Marathon', -490, 38.118, 23.978, 'Greco-Persian Wars', 'Athenian soldiers beat a much larger Persian army. The legend of the runner who carried the news to Athens comes from here.'],
+    ['Battle of Thermopylae', -480, 38.796, 22.536, 'Greco-Persian Wars', 'A small Greek force led by King Leonidas of Sparta held a narrow pass against the Persian army for three days.'],
+    ['Battle of Salamis', -480, 37.95, 23.55, 'Greco-Persian Wars', 'The Greek navy defeated the Persian fleet in narrow waters, a turning point of the war.'],
+    ['Battle of Gaugamela', -331, 36.55, 43.43, 'Wars of Alexander the Great', 'Alexander the Great defeated King Darius III, leading to the fall of the Persian Empire.'],
+    ['Battle of Cannae', -216, 41.306, 16.132, 'Second Punic War', 'Hannibal surrounded and destroyed a much larger Roman army. It is still studied by military schools today.'],
+    ['Battle of Alesia', -52, 47.537, 4.5, 'Gallic Wars', 'Julius Caesar besieged Vercingetorix, completing the Roman conquest of Gaul.'],
+    ['Battle of Actium', -31, 38.95, 20.73, 'Final war of the Roman Republic', 'Octavian defeated Mark Antony and Cleopatra at sea. Octavian later became Augustus, the first Roman emperor.'],
+    ['Battle of the Teutoburg Forest', 9, 52.408, 8.13, 'Roman–Germanic wars', 'Germanic tribes ambushed and destroyed three Roman legions, stopping Rome\'s expansion east of the Rhine.'],
+    ['Battle of Adrianople', 378, 41.67, 26.56, 'Gothic War', 'Gothic forces defeated the Eastern Roman army, and Emperor Valens was killed.'],
+    ['Battle of Tours', 732, 46.73, 0.43, 'Umayyad invasion of Gaul', 'Frankish leader Charles Martel defeated an Umayyad army in what is now France.'],
+    ['Battle of Hastings', 1066, 50.912, 0.487, 'Norman conquest of England', 'William of Normandy defeated King Harold II and became king of England.'],
+    ['Battle of Manzikert', 1071, 39.14, 42.54, 'Byzantine–Seljuk wars', 'The Seljuk Turks defeated the Byzantine army and captured Emperor Romanos IV.'],
+    ['Siege of Jerusalem', 1099, 31.778, 35.235, 'First Crusade', 'Crusader armies captured the city, the main goal of the First Crusade.'],
+    ['Battle of Hattin', 1187, 32.8, 35.45, 'Crusades', 'Saladin defeated the Crusader armies and took Jerusalem a few months later.'],
+    ['Battle of Ain Jalut', 1260, 32.55, 35.36, 'Mongol invasions', 'The Mamluks of Egypt defeated a Mongol army, stopping the Mongol advance toward Egypt.'],
+    ['Battle of Bannockburn', 1314, 56.093, -3.937, 'First War of Scottish Independence', 'Robert the Bruce\'s Scottish army defeated the English army of Edward II.'],
+    ['Battle of Agincourt', 1415, 50.463, 2.13, 'Hundred Years\' War', 'English archers with longbows helped King Henry V beat a larger French army.'],
+    ['Fall of Constantinople', 1453, 41.015, 28.98, 'Byzantine–Ottoman wars', 'The Ottoman army of Mehmed II captured the city, ending the Byzantine Empire.'],
+    ['First Battle of Panipat', 1526, 29.39, 76.97, 'Mughal conquests', 'Babur defeated the Sultan of Delhi, founding the Mughal Empire in India.'],
+    ['Battle of Lepanto', 1571, 38.25, 21.1, 'Ottoman–Habsburg wars', 'A Holy League fleet defeated the Ottoman navy in one of the largest sea battles of its time.'],
+    ['Spanish Armada (Gravelines)', 1588, 51.0, 2.12, 'Anglo-Spanish War', 'English ships, and then storms, stopped the Spanish Armada from invading England.'],
+    ['Battle of Sekigahara', 1600, 35.366, 136.466, 'Unification of Japan', 'Tokugawa Ieyasu\'s victory led to more than 250 years of rule by the Tokugawa shogunate.'],
+    ['Battle of Vienna', 1683, 48.21, 16.37, 'Great Turkish War', 'A combined European army broke the Ottoman siege of Vienna.'],
+    ['Battle of Plassey', 1757, 23.8, 88.25, 'Seven Years\' War', 'The British East India Company\'s win began British control of Bengal.'],
+    ['Battles of Lexington and Concord', 1775, 42.45, -71.29, 'American Revolutionary War', 'The first battles of the American Revolutionary War.'],
+    ['Battles of Saratoga', 1777, 43.0, -73.64, 'American Revolutionary War', 'An American victory that convinced France to join the war as an ally.'],
+    ['Siege of Yorktown', 1781, 37.238, -76.51, 'American Revolutionary War', 'American and French forces trapped the British army, effectively ending the war.'],
+    ['Battle of Trafalgar', 1805, 36.3, -6.25, 'Napoleonic Wars', 'Admiral Nelson\'s British fleet defeated the French and Spanish navies. Nelson was killed in the battle.'],
+    ['Battle of Austerlitz', 1805, 49.15, 16.76, 'Napoleonic Wars', 'Napoleon\'s great victory over Russia and Austria, also called the Battle of the Three Emperors.'],
+    ['Battle of Borodino', 1812, 55.52, 35.82, 'Napoleonic Wars', 'A huge and bloody battle during Napoleon\'s invasion of Russia, just before he reached Moscow.'],
+    ['Battle of Waterloo', 1815, 50.68, 4.41, 'Napoleonic Wars', 'Napoleon\'s final defeat, by a British-led army and the Prussians.'],
+    ['Battle of the Alamo', 1836, 29.426, -98.486, 'Texas Revolution', 'Mexican forces captured the Alamo mission. "Remember the Alamo" became a rallying cry.'],
+    ['Battle of Balaclava', 1854, 44.52, 33.6, 'Crimean War', 'Remembered for the Charge of the Light Brigade.'],
+    ['Battle of Antietam', 1862, 39.47, -77.74, 'American Civil War', 'The bloodiest single day in American history.'],
+    ['Battle of Gettysburg', 1863, 39.811, -77.226, 'American Civil War', 'A major Union victory and a turning point of the war. Lincoln later gave the Gettysburg Address here.'],
+    ['Siege of Vicksburg', 1863, 32.35, -90.88, 'American Civil War', 'The Union won control of the Mississippi River, splitting the Confederacy in two.'],
+    ['Battle of the Little Bighorn', 1876, 45.57, -107.43, 'Great Sioux War', 'Lakota, Northern Cheyenne and Arapaho warriors defeated Custer\'s 7th Cavalry.'],
+    ['Battle of Isandlwana', 1879, -28.36, 30.65, 'Anglo-Zulu War', 'The Zulu army defeated a British force.'],
+    ['Battle of Adwa', 1896, 14.16, 38.9, 'First Italo-Ethiopian War', 'Ethiopia defeated an Italian invasion and kept its independence.'],
+    ['Battle of Tsushima', 1905, 34.5, 129.9, 'Russo-Japanese War', 'Japan\'s navy destroyed the Russian fleet.'],
+    ['Battle of Tannenberg', 1914, 53.49, 20.12, 'World War I', 'Germany defeated the Russian Second Army in East Prussia.'],
+    ['First Battle of the Marne', 1914, 48.95, 3.3, 'World War I', 'French and British troops stopped the German advance on Paris.'],
+    ['Gallipoli campaign', 1915, 40.23, 26.27, 'World War I', 'Allied forces, including ANZAC troops, tried and failed to take the peninsula from the Ottoman Empire.'],
+    ['Battle of Verdun', 1916, 49.16, 5.39, 'World War I', 'One of the longest battles of the war. France held the city.'],
+    ['Battle of the Somme', 1916, 50.0, 2.69, 'World War I', 'One of the deadliest battles in history, and the first battle where tanks were used.'],
+    ['Battle of Jutland', 1916, 56.7, 5.9, 'World War I', 'The biggest naval battle of World War I, between Britain and Germany.'],
+    ['Battle of Passchendaele', 1917, 50.9, 3.0, 'World War I', 'Fought in deep mud near Ypres, Belgium.'],
+    ['Dunkirk evacuation', 1940, 51.03, 2.37, 'World War II', 'More than 330,000 Allied soldiers were rescued across the English Channel by ships and small boats.'],
+    ['Battle of Britain', 1940, 51.4, 0.0, 'World War II', 'Britain\'s Royal Air Force held off the German air force.'],
+    ['Attack on Pearl Harbor', 1941, 21.364, -157.95, 'World War II', 'Japan\'s surprise attack brought the United States into the war.'],
+    ['Battle of Moscow', 1941, 55.75, 37.62, 'World War II', 'The Soviet army stopped the German advance at the gates of Moscow.'],
+    ['Battle of Midway', 1942, 28.2, -177.37, 'World War II', 'The US Navy sank four Japanese aircraft carriers, a turning point in the Pacific.'],
+    ['Battle of Stalingrad', 1942, 48.71, 44.51, 'World War II', 'One of the largest and deadliest battles ever. The German Sixth Army surrendered in February 1943.'],
+    ['Second Battle of El Alamein', 1942, 30.83, 28.95, 'World War II', 'British-led forces defeated Rommel\'s army in Egypt.'],
+    ['Guadalcanal campaign', 1942, -9.43, 160.0, 'World War II', 'A long fight for an island and its airfield in the Solomon Islands.'],
+    ['Battle of Kursk', 1943, 51.73, 36.19, 'World War II', 'Included one of the largest tank battles in history, and ended in a Soviet victory.'],
+    ['D-Day (Normandy landings)', 1944, 49.37, -0.87, 'World War II', 'The largest seaborne invasion in history began the liberation of Western Europe.'],
+    ['Battle of Leyte Gulf', 1944, 10.6, 125.4, 'World War II', 'Often called the largest naval battle of World War II.'],
+    ['Battle of the Bulge', 1944, 50.0, 5.72, 'World War II', 'Germany\'s last big attack on the Western Front, in the Ardennes forest.'],
+    ['Battle of Iwo Jima', 1945, 24.78, 141.32, 'World War II', 'US Marines captured the island. The flag raising on Mount Suribachi became a famous photo.'],
+    ['Battle of Okinawa', 1945, 26.33, 127.8, 'World War II', 'The last major battle of the Pacific War.'],
+    ['Battle of Berlin', 1945, 52.52, 13.405, 'World War II', 'The Soviet army captured Berlin, and Germany surrendered days later.'],
+    ['Battle of Inchon', 1950, 37.47, 126.62, 'Korean War', 'A surprise UN landing from the sea that changed the course of the war.'],
+    ['Battle of Chosin Reservoir', 1950, 40.47, 127.25, 'Korean War', 'UN troops fought their way out of a Chinese encirclement in freezing cold.'],
+    ['Battle of Dien Bien Phu', 1954, 21.39, 103.02, 'First Indochina War', 'Viet Minh forces defeated France, ending French rule in Indochina.'],
+    ['Battle of Hue (Tet Offensive)', 1968, 16.47, 107.58, 'Vietnam War', 'Part of a huge offensive that changed how many Americans saw the war.'],
+    ['Operation Desert Storm', 1991, 29.37, 47.98, 'Gulf War', 'A US-led coalition drove Iraqi forces out of Kuwait.'],
+  ].map(([name, year, lat, lon, war, fact]) => ({ name, year, ll: [lat, lon], war, fact }));
+  const ERAS = { all: ['All eras', -9999, 9999], ancient: ['Ancient (before 500)', -9999, 499], medieval: ['Medieval (500–1499)', 500, 1499],
+    early: ['1500–1799', 1500, 1799], c19: ['1800–1913', 1800, 1913], ww1: ['World War I', 1914, 1918], ww2: ['World War II', 1939, 1945], modern: ['After 1945', 1946, 9999] };
+  const battlesInEra = () => BATTLES.filter(b => b.year >= ERAS[S.era][1] && b.year <= ERAS[S.era][2]);
+  function renderBattles() {
+    groups.battles.clearLayers();
+    battlesInEra().forEach(b => {
+      b.marker = L.marker(b.ll, { icon: L.divIcon({ className: 'ww-icon', html: '<div class="battle">⚔️</div>', iconSize: [20, 20] }) })
+        .bindPopup(() => `<div class="pp-cat" style="color:#e0c070">🏰 ${esc(b.war.toUpperCase())}</div><b>${esc(b.name)}</b> · ${yearStr(b.year)}<div style="margin-top:4px">${esc(b.fact)}</div>
+          <div class="pp-links">${link('https://en.wikipedia.org/wiki/Special:Search?search=' + encodeURIComponent(b.name), 'Read more on Wikipedia')}</div>`, { maxWidth: 300 })
+        .addTo(groups.battles);
+    });
+  }
+
+  // ===================== Click anywhere to scan =====================
+  const WX = { 0: 'Clear', 1: 'Mostly clear', 2: 'Partly cloudy', 3: 'Cloudy', 45: 'Fog', 48: 'Fog', 51: 'Drizzle', 53: 'Drizzle', 55: 'Drizzle', 61: 'Rain', 63: 'Rain', 65: 'Heavy rain',
+    71: 'Snow', 73: 'Snow', 75: 'Heavy snow', 80: 'Showers', 81: 'Showers', 82: 'Heavy showers', 95: 'Thunderstorm', 96: 'Thunderstorm', 99: 'Thunderstorm' };
+  const wxEmoji = (c, day) => c === 0 ? (day ? '☀️' : '🌙') : c <= 2 ? '⛅' : c === 3 ? '☁️' : c <= 48 ? '🌫️' : c <= 67 || (c >= 80 && c <= 82) ? '🌧️' : c <= 77 || c === 85 || c === 86 ? '🌨️' : c >= 95 ? '⛈️' : '🌡️';
+  function nearby(lat, lon, countryName) {
+    const out = [], p = [lat, lon];
+    const country = matchCountry(countryName);
+    if (country && conflictByCountry[country]) conflictByCountry[country].slice(0, 2).forEach(c => out.push(`⚔️ <b>${LEVELS[c.level].label}:</b> ${esc(c.name)}`));
+    news.filter(s => s.ll && distKm(p, s.ll) < 500).slice(0, 3).forEach(s => out.push(`${CAT[s.cat].emoji} ${esc(s.text.length > 110 ? s.text.slice(0, 110) + '…' : s.text)}`));
+    quakes.filter(q => distKm(p, q.ll) < 400).sort((a, b) => b.mag - a.mag).slice(0, 2).forEach(q => out.push(`🌍 M${q.mag.toFixed(1)} earthquake ${ago(q.time)}`));
+    events.filter(e => distKm(p, e.ll) < 400).slice(0, 2).forEach(e => out.push(`${EV_ICON[e.cat] || '⚠️'} ${esc(e.title)}`));
+    return out;
+  }
+  function scanHTML(ll, label, place, wx) {
+    const lat = ll.lat, lon = wrapLon(ll.lng);
+    let h = `<div class="scan-card"><div class="sc-title">◉ LOCATION LOCKED</div><div class="sc-coords">${dms(lat, 'N', 'S')} &nbsp;${dms(lon, 'E', 'W')}</div>`;
+    if (!place) return h + '<div class="sc-near">⏳ Scanning…</div></div>';
+    let country = null;
+    if (place.status === 'fulfilled' && place.value && place.value.address) {
+      const a = place.value.address; country = a.country;
+      h += `<div class="sc-place">📍 ${esc(label || [a.city || a.town || a.village || a.hamlet || a.county || a.state, a.country].filter(Boolean).join(', ') || place.value.display_name)}</div>`;
+    } else if (label) h += `<div class="sc-place">📍 ${esc(label)}</div>`;
+    else h += `<div class="sc-near" style="color:var(--muted)">📍 Ocean or remote area</div>`;
+    if (wx.status === 'fulfilled' && wx.value && wx.value.current) {
+      const c = wx.value.current;
+      let time = '';
+      try { time = new Intl.DateTimeFormat([], { timeZone: wx.value.timezone, weekday: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date()); } catch (e) {}
+      h += `<div class="sc-grid"><div><small>LOCAL TIME</small><b>${esc(time || '?')}</b></div><div><small>WEATHER</small><b>${wxEmoji(c.weather_code, c.is_day)} ${Math.round(c.temperature_2m)}°C / ${Math.round(c.temperature_2m * 9 / 5 + 32)}°F</b></div>
+        <div><small>CONDITIONS</small><b>${esc(WX[c.weather_code] || '—')}</b></div><div><small>ELEVATION</small><b>${Math.round(wx.value.elevation)} m</b></div></div>`;
+    }
+    const near = nearby(lat, lon, country);
+    if (near.length) h += '<div class="sc-sub">NEARBY</div>' + near.map(n => `<div class="sc-near">${n}</div>`).join('');
+    return h + '</div>';
+  }
+  let scanSeq = 0;
+  async function scan(ll, label) {
+    const id = ++scanSeq;
+    scanLayer.clearLayers();
+    L.marker(ll, { icon: L.divIcon({ className: 'ww-icon', html: '<div class="scan"><i></i><i></i><i></i><b></b></div>', iconSize: [90, 90] }), interactive: false, keyboard: false }).addTo(scanLayer);
+    const popup = L.popup({ maxWidth: 310, offset: [0, -24], autoPanPadding: [30, 30] }).setLatLng(ll).setContent(scanHTML(ll, label)).openOn(map);
+    popup.on('remove', () => { if (id === scanSeq) scanLayer.clearLayers(); });
+    const lat = ll.lat.toFixed(4), lon = wrapLon(ll.lng).toFixed(4);
+    const res = await Promise.allSettled([
+      nominatim(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=10&accept-language=en`),
+      getJSON(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,wind_speed_10m,is_day&timezone=auto`, 10000),
+    ]);
+    if (id === scanSeq && map.hasLayer(popup)) popup.setContent(scanHTML(ll, label, res[0], res[1]));
+  }
+  map.on('click', e => scan(e.latlng));
+
+  // ===================== Top bar: clocks & search =====================
+  const CLOCKS = [['NYC', 'America/New_York'], ['LDN', 'Europe/London'], ['PAR', 'Europe/Paris'], ['MOW', 'Europe/Moscow'], ['DXB', 'Asia/Dubai'], ['DEL', 'Asia/Kolkata'], ['BJS', 'Asia/Shanghai'], ['TYO', 'Asia/Tokyo'], ['SYD', 'Australia/Sydney']];
+  function tickClocks() {
+    const now = new Date();
+    const f = tz => { try { return now.toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit' }); } catch (e) { return '--:--'; } };
+    $('clocks').innerHTML = `<span class="utc">UTC <b>${now.toISOString().slice(11, 19)}</b></span>` + CLOCKS.map(([c, tz]) => `<span>${c} <b>${f(tz)}</b></span>`).join('');
+  }
+  setInterval(tickClocks, 1000); tickClocks();
+
+  $('search').addEventListener('submit', async e => {
+    e.preventDefault();
+    const q = $('q').value.trim(), box = $('results');
+    if (!q) return;
+    const m = q.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
+    if (m && Math.abs(+m[1]) <= 90 && Math.abs(+m[2]) <= 180) { const ll = L.latLng(+m[1], +m[2]); box.classList.remove('show'); fly(ll, 7); map.once('moveend', () => scan(ll)); return; }
+    box.innerHTML = '<div class="msg">Searching…</div>'; box.classList.add('show');
+    try {
+      const r = await nominatim(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&accept-language=en&q=${encodeURIComponent(q)}`);
+      if (!r.length) { box.innerHTML = '<div class="msg">No places found.</div>'; return; }
+      box.innerHTML = r.map((p, i) => `<button type="button" data-i="${i}">📍 ${esc(p.display_name)}</button>`).join('');
+      box.querySelectorAll('button').forEach(b => b.onclick = () => {
+        const p = r[+b.dataset.i], ll = L.latLng(+p.lat, +p.lon);
+        box.classList.remove('show');
+        const bb = p.boundingbox && p.boundingbox.map(Number);
+        if (bb) map.flyToBounds([[bb[0], bb[2]], [bb[1], bb[3]]], { maxZoom: 11, duration: FLY }); else fly(ll, 9);
+        map.once('moveend', () => scan(ll, p.display_name.split(',').slice(0, 3).join(',')));
+      });
+    } catch (err) { box.innerHTML = `<div class="msg">Search isn't available right now (${esc(friendlyError(err))}).</div>`; }
+  });
+  document.addEventListener('click', e => { if (!e.target.closest('.search')) $('results').classList.remove('show'); });
+
+  // ===================== Readout & legend =====================
+  map.on('mousemove', e => { $('readout').textContent = `LAT ${dms(e.latlng.lat, 'N', 'S')}  LON ${dms(wrapLon(e.latlng.lng), 'E', 'W')}  Z${map.getZoom()}`; });
+  map.on('moveend', () => { if (!CAN_HOVER) { const c = map.getCenter(); $('readout').textContent = `CENTER ${c.lat.toFixed(2)}, ${wrapLon(c.lng).toFixed(2)}  Z${map.getZoom()}`; } });
+  function renderLegend() {
+    let h = '';
+    if (S.layers.conflicts) h += Object.values(LEVELS).map(l => `<div><i style="background:${l.color}"></i>${l.label}</div>`).join('');
+    if (S.layers.quakes) h += '<div style="margin-top:3px"><i style="background:#ffe066;border-radius:50%"></i>Quake M2.5+ … <i style="background:#ff3df0;border-radius:50%;margin-left:4px"></i>M6+</div>';
+    if (S.layers.warnews) h += '<div><i style="background:#ff3b3b;border-radius:50%;opacity:.7"></i>War news hotspot</div>';
+    $('legend').innerHTML = h;
+  }
+
+  // ===================== Layer panel =====================
+  const LAYER_DEFS = [
+    ['borders', '🗺️', 'Country borders', 'borders'], ['night', '🌗', 'Day & night', null], ['news', '📰', 'World news', 'news'],
+    ['conflicts', '⚔️', 'Ongoing conflicts', 'conflicts'], ['warnews', '💥', 'War news hotspots', 'warnews'], ['quakes', '🌍', 'Earthquakes (24 h)', 'quakes'],
+    ['events', '🔥', 'Fires, storms & volcanoes', 'events'], ['iss', '🛰️', 'Space station', 'iss'], ['radar', '🌧️', 'Weather radar', 'radar'],
+    ['flights', '✈️', 'Live flights (zoom in)', 'flights'], ['battles', '🏰', 'Famous battles', null],
+  ];
+  function renderLayerPanel() {
+    const el = $('layers');
+    let h = `<button class="lp-head" id="lp-toggle" aria-expanded="${S.layersOpen}">▣ LAYERS ${S.layersOpen ? '▾' : '▸'}</button>`;
+    if (S.layersOpen) {
+      h += `<div class="lp-body"><div class="lp-label">MAP STYLE</div><div class="bases">${['dark', 'satellite', 'streets'].map(b => `<button data-base="${b}" class="${S.base === b ? 'on' : ''}">${b[0].toUpperCase() + b.slice(1)}</button>`).join('')}</div>
+        <div class="lp-label">LAYERS</div>` + LAYER_DEFS.map(([k, ic, name, feed]) => {
+          const st = feed ? status[feed] : null;
+          const count = k === 'battles' ? battlesInEra().length : st && st.count != null ? st.count : '';
+          return `<label class="lp-row"><input type="checkbox" data-layer="${k}" ${S.layers[k] ? 'checked' : ''}><span class="name">${ic} ${name}</span><span class="lp-count">${count}</span>${feed ? `<i class="dot ${st ? st.state : ''}" title="${esc(st ? (st.msg || st.state) : 'waiting')}"></i>` : '<i class="dot ok" style="visibility:hidden"></i>'}</label>`;
+        }).join('') +
+        (S.layers.battles ? `<select class="era" id="era" aria-label="Era">${Object.entries(ERAS).map(([k, [n]]) => `<option value="${k}" ${S.era === k ? 'selected' : ''}>${n}</option>`).join('')}</select>` : '') + '</div>';
+    }
+    if (h !== el._last) { el._last = h; el.innerHTML = h; }   // only redraw when something changed, so clicks aren't lost
+  }
+  $('layers').addEventListener('click', e => {
+    if (e.target.closest('#lp-toggle')) { S.layersOpen = !S.layersOpen; save(); renderLayerPanel(); return; }
+    const b = e.target.closest('[data-base]'); if (b) setBase(b.dataset.base);
+  });
+  $('layers').addEventListener('change', e => {
+    if (e.target.id === 'era') { S.era = e.target.value; save(); renderBattles(); renderLayerPanel(); if (S.tab === 'history') renderTab(); return; }
+    const k = e.target.dataset.layer; if (!k) return;
+    S.layers[k] = e.target.checked; save(); applyLayers(); renderLayerPanel();
+    const feed = { radar: 'radar', flights: 'flights' }[k];
+    if (feed && S.layers[k]) runFeed(feed);
+  });
+
+  // ===================== HUD summary =====================
+  function renderHUD() {
+    const wars = conflicts.filter(c => c.level === 'major' || c.level === 'minor').length;
+    const bits = [
+      [conflicts.length, `⚔️ <b>${wars}</b> WARS · <b>${conflicts.length}</b> CONFLICTS`, 'conflicts'],
+      [warSpots.length, `💥 <b>${warSpots.length}</b> HOTSPOTS`, 'warnews'],
+      [news.length, `📰 <b>${news.length}</b> STORIES`, 'news'],
+      [quakes.length, `🌍 <b>${quakes.length}</b> QUAKES`, 'quakes'],
+      [events.length, `🔥 <b>${events.length}</b> EVENTS`, 'events'],
+    ].filter(b => b[0]).map(b => `<span>${b[1]}</span>`).join('');
+    const el = $('hud');
+    if (bits !== el._last) { el._last = bits; el.innerHTML = bits; }
+  }
+
+  // ===================== Side panel tabs =====================
+  const TABS = [['news', '📰 News'], ['conflicts', '⚔️ Conflicts'], ['disasters', '🌋 Disasters'], ['tv', '📺 Live TV'], ['space', '🚀 Space'], ['tech', '💻 Tech'], ['markets', '📈 Markets'], ['history', '🏰 History'], ['status', '📡 Status']];
+  function renderTabs() {
+    const counts = { news: news.length, conflicts: news.filter(s => s.cat === 'conflict').length || '', disasters: quakes.filter(q => q.mag >= 4.5).length + events.length || '' };
+    const h = TABS.map(([k, n]) => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}">${n}${counts[k] ? `<span class="n">${counts[k]}</span>` : ''}</button>`).join('');
+    const el = $('tabs');
+    if (h !== el._last) { el._last = h; el.innerHTML = h; }
+  }
+  $('tabs').addEventListener('click', e => {
+    const b = e.target.closest('[data-tab]'); if (!b) return;
+    S.tab = b.dataset.tab; save(); renderTabs(); renderTab(); $('tab-body').scrollTop = 0;
+    const lazy = { tech: 'tech', space: 'space', markets: 'markets' }[S.tab];
+    if (lazy && !status[lazy]) runFeed(lazy);
+  });
+
+  // Official 24/7 news channels on YouTube: [key, name, YouTube channel id, where it's from]
+  const TV = [
+    ['aje', 'Al Jazeera English', 'UCNye-wNBqNL5ZzHSJj3l8Bg', 'Qatar'],
+    ['dw', 'DW News', 'UCknLrEdhRCp1aegoMqRaCZg', 'Germany'],
+    ['f24', 'France 24 English', 'UCQfwfsi5VrQ8yKZ-UWmAEFg', 'France'],
+    ['sky', 'Sky News', 'UCoMdktPbSTixAyNGwb-UYkQ', 'UK'],
+    ['euronews', 'Euronews', 'UCSrZ3UV4jOidv8ppoVuvW9Q', 'Europe'],
+    ['nasa', 'NASA', 'UCLA_DiR1FfKNvjuUpBHmylQ', 'Space'],
+  ];
+  let tvPlaying = null;   // nothing plays until you pick a channel
+
+  const storyItem = s => {
+    const c = CAT[s.cat];
+    return `<div class="item" style="--c:${c.color}"><div class="head"><span class="tag">${c.emoji} ${c.short}</span>${s.topic ? `<span class="topic">${esc(s.topic)}</span>` : ''}</div>
+      <div>${esc(s.text)}</div><div class="meta"><span>${fmtDay(s.date)}</span>${s.sources.slice(0, 3).map(x => link(x.href, x.label)).join('')}${s.ll ? `<button class="go" data-story="${s.id}">📍 ${esc(s.place)}</button>` : ''}</div></div>`;
+  };
+  const headlineItem = (title, url, meta, color) => `<div class="item" style="--c:${color}"><div>${link(url, title)}</div><div class="meta">${meta}</div></div>`;
+  const loadingOr = (feed, what) => { const st = status[feed]; return st && st.state === 'error' ? `<div class="empty err">⚠️ ${esc(what)} unavailable right now (${esc(st.msg)}). It will retry automatically.</div>` : `<div class="empty">⏳ Loading ${esc(what)}…</div>`; };
+
+  function renderTab() {
+    const body = $('tab-body');
+    const t = S.tab;
+    let h = '';
+    if (t === 'news') {
+      const cats = ['all', ...CATS.map(c => c[1]).filter(k => news.some(s => s.cat === k))];
+      if (!cats.includes(S.newsCat)) S.newsCat = 'all';
+      h += `<div class="chips" id="news-chips">${cats.map(k => `<button data-cat="${k}" class="${S.newsCat === k ? 'on' : ''}">${k === 'all' ? 'All' : CAT[k].emoji + ' ' + CAT[k].short[0] + CAT[k].short.slice(1).toLowerCase()}</button>`).join('')}</div>`;
+      const list = news.filter(s => S.newsCat === 'all' || s.cat === S.newsCat);
+      h += list.length ? list.slice(0, 150).map(storyItem).join('') : loadingOr('news', 'world news');
+      h += `<p class="note">News summaries from ${link('https://en.wikipedia.org/wiki/Portal:Current_events', 'Wikipedia Current events')}, written by volunteers with links to the original reporting. Pins show the first place each story mentions.</p>`;
+    } else if (t === 'conflicts') {
+      const cn = news.filter(s => s.cat === 'conflict');
+      h += `<div class="sec"><span>⚔️ LATEST CONFLICT NEWS</span><span>${cn.length}</span></div>` + (cn.length ? cn.slice(0, 40).map(storyItem).join('') : loadingOr('news', 'conflict news'));
+      h += `<div class="sec"><span>💥 LIVE WAR HEADLINES · 24 H</span><span>${warHeadlines.length || ''}</span></div>`;
+      h += warHeadlines.length ? warHeadlines.slice(0, 25).map(x => headlineItem(x.title, x.url, `<span>${esc(x.domain || '')}</span><span>${x.country ? esc(x.country) + ' · ' : ''}${ago(x.time)}</span>`, '#ff6b6b')).join('') : loadingOr('warnews', 'war headlines');
+      h += `<div class="sec"><span>🗺️ ONGOING ARMED CONFLICTS</span><span>${conflicts.length || ''}</span></div>`;
+      if (conflicts.length) {
+        for (const [lv, info] of Object.entries(LEVELS)) {
+          const list = conflicts.filter(c => c.level === lv);
+          if (!list.length) continue;
+          h += `<div class="sec" style="margin-top:8px"><span><span class="lvl" style="background:${info.color}">${info.label.toUpperCase()}</span> ${esc(info.note)}</span><span>${list.length}</span></div>`;
+          h += list.map(c => `<div class="stat-row"><div class="info">${c.href ? link(c.href, c.name) : esc(c.name)}<small>${c.countries.map(esc).join(', ')}</small></div>${countryLayers[c.countries[0]] ? `<button class="go" data-country="${esc(c.countries[0])}">📍 Map</button>` : ''}</div>`).join('');
+        }
+        h += `<p class="note">Based on ${link('https://en.wikipedia.org/wiki/List_of_ongoing_armed_conflicts', 'Wikipedia\'s list of ongoing armed conflicts')}, sorted by how many people died in the last year. Countries are colored by their most serious conflict.</p>`;
+      } else h += loadingOr('conflicts', 'the conflicts list');
+    } else if (t === 'disasters') {
+      const big = quakes.filter(q => q.mag >= 4.5).sort((a, b) => b.time - a.time);
+      h += `<div class="sec"><span>🌍 EARTHQUAKES M4.5+ · 24 H</span><span>${big.length}</span></div>`;
+      h += big.length ? big.map(q => `<div class="item" style="--c:${qColor(q.mag)}"><div class="head"><span class="tag">M${q.mag.toFixed(1)}</span><span class="topic">${ago(q.time)}</span></div><div>${esc(q.place || '')}</div><div class="meta">${link(q.url, 'USGS')}<button class="go" data-quake="${esc(q.id)}">📍 Map</button></div></div>`).join('')
+        : status.quakes && status.quakes.state === 'ok' ? '<div class="empty">No big earthquakes in the last day. 🙂</div>' : loadingOr('quakes', 'earthquakes');
+      const ev = events.slice().sort((a, b) => (b.time || 0) - (a.time || 0));
+      h += `<div class="sec"><span>🔥 FIRES, STORMS & VOLCANOES</span><span>${ev.length}</span></div>`;
+      h += ev.length ? ev.slice(0, 40).map(e => `<div class="item" style="--c:#ff9f43"><div class="head"><span class="tag">${EV_ICON[e.cat] || '⚠️'} ${esc(e.catTitle.toUpperCase())}</span><span class="topic">${e.time ? ago(e.time) : ''}</span></div><div>${esc(e.title)}</div><div class="meta">${e.link ? link(e.link, 'Source') : ''}<button class="go" data-event="${esc(e.id)}">📍 Map</button></div></div>`).join('') : loadingOr('events', 'natural events');
+      const dn = news.filter(s => s.cat === 'disaster');
+      if (dn.length) h += `<div class="sec"><span>⚠️ DISASTER NEWS</span><span>${dn.length}</span></div>` + dn.map(storyItem).join('');
+    } else if (t === 'tv') {
+      const ch = TV.find(c => c[0] === tvPlaying);
+      h += `<div class="sec"><span>📺 LIVE NEWS TV</span><span>${ch ? '● ON AIR' : 'pick a channel'}</span></div>`;
+      h += ch ? `<div class="tv"><iframe src="https://www.youtube.com/embed/live_stream?channel=${ch[2]}&autoplay=1" title="${esc(ch[1])} live stream" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+        <div class="meta" style="margin:6px 0 4px"><b style="color:var(--text)">${esc(ch[1])}</b><span>${esc(ch[3])}</span>${link(`https://www.youtube.com/channel/${ch[2]}/live`, 'Open on YouTube')}</div>`
+        : '<div class="tv tv-off"><div>📡<br>Choose a channel below to watch it live</div></div>';
+      h += `<div class="tv-grid">${TV.map(([k, name, , where]) => `<button data-tv="${k}" class="${k === tvPlaying ? 'on' : ''}"><b>${esc(name)}</b><small>${esc(where)}</small></button>`).join('')}</div>`;
+      h += `<p class="note">These are the channels' own live streams on YouTube. If one isn't live right now, try another one or open it on YouTube.</p>`;
+    } else if (t === 'space') {
+      h += `<div class="sec"><span>🛰️ INTERNATIONAL SPACE STATION</span></div><div id="iss-card"></div>`;
+      h += `<div class="sec"><span>🚀 SPACE NEWS</span><span>${spaceNews.length || ''}</span></div>`;
+      h += spaceNews.length ? spaceNews.map(a => headlineItem(a.title, a.url, `<span>${esc(a.site || '')}</span><span>${ago(a.time)}</span>`, '#8e9bff')).join('') : loadingOr('space', 'space news');
+    } else if (t === 'tech') {
+      h += `<div class="sec"><span>💻 HACKER NEWS FRONT PAGE</span><span>${tech.length || ''}</span></div>`;
+      h += tech.length ? tech.map(a => headlineItem(a.title, a.url, `<span>▲ ${a.points ?? 0}</span>${link('https://news.ycombinator.com/item?id=' + a.id, `💬 ${a.comments ?? 0}`)}<span>${ago(a.time)}</span>`, '#ff8a3d')).join('') : loadingOr('tech', 'tech news');
+    } else if (t === 'markets') {
+      if (!markets) h += loadingOr('markets', 'market data');
+      else {
+        if (markets.crypto) {
+          h += '<div class="sec"><span>🪙 CRYPTO (USD)</span><span>24 h change</span></div><div class="cards">';
+          [['bitcoin', 'Bitcoin', 'BTC'], ['ethereum', 'Ethereum', 'ETH'], ['solana', 'Solana', 'SOL'], ['dogecoin', 'Dogecoin', 'DOGE']].forEach(([id, name, sym]) => {
+            const c = markets.crypto[id]; if (!c) return;
+            const ch = c.usd_24h_change || 0;
+            h += `<div class="card"><small>${name} · ${sym}</small><b>$${c.usd >= 100 ? Math.round(c.usd).toLocaleString() : c.usd.toFixed(c.usd < 1 ? 4 : 2)}</b><div class="${ch >= 0 ? 'up' : 'down'}" style="font-family:var(--mono);font-size:12px">${ch >= 0 ? '▲' : '▼'} ${Math.abs(ch).toFixed(2)}%</div></div>`;
+          });
+          h += '</div>';
+        }
+        if (markets.fx && markets.fx.rates) {
+          h += `<div class="sec"><span>💱 1 US DOLLAR =</span><span>${esc(markets.fx.date || '')}</span></div><div class="cards">`;
+          const NAMES = { EUR: 'Euro', GBP: 'British pound', JPY: 'Japanese yen', CNY: 'Chinese yuan', INR: 'Indian rupee', CAD: 'Canadian dollar' };
+          Object.entries(markets.fx.rates).forEach(([k, v]) => { h += `<div class="card"><small>${NAMES[k] || k}</small><b>${v >= 100 ? v.toFixed(1) : v.toFixed(3)}</b> <span style="color:var(--muted);font-size:12px">${k}</span></div>`; });
+          h += '</div>';
+        }
+        h += `<p class="note">Crypto prices from ${link('https://www.coingecko.com/', 'CoinGecko')}. Currency rates from the European Central Bank via ${link('https://frankfurter.dev/', 'Frankfurter')} (updated on weekdays). Not financial advice!</p>`;
+      }
+    } else if (t === 'history') {
+      h += `<div class="chips" id="era-chips">${Object.entries(ERAS).map(([k, [n]]) => `<button data-era="${k}" class="${S.era === k ? 'on' : ''}">${n}</button>`).join('')}</div>`;
+      h += battlesInEra().map(b => `<div class="item" style="--c:#e0c070"><div class="head"><span class="tag">⚔️ ${yearStr(b.year)}</span><span class="topic">${esc(b.war)}</span></div><div><b>${esc(b.name)}</b></div><div style="color:var(--muted);font-size:13px">${esc(b.fact)}</div><div class="meta"><button class="go" data-battle="${esc(b.name)}">📍 Show on map</button>${link('https://en.wikipedia.org/wiki/Special:Search?search=' + encodeURIComponent(b.name), 'Wikipedia')}</div></div>`).join('');
+    } else if (t === 'status') {
+      h += '<div class="sec"><span>📡 LIVE FEEDS</span><span>refreshes automatically</span></div>';
+      h += Object.entries(FEED_INFO).map(([k, [name, src, url]]) => {
+        const st = status[k];
+        const state = st ? { ok: '✅ Live', loading: '⏳ Loading', error: '⚠️ ' + st.msg, idle: '💤 ' + st.msg }[st.state] : '💤 Not loaded yet';
+        return `<div class="stat-row"><i class="dot ${st ? st.state : ''}"></i><div class="info"><b>${name}</b><small>${link(url, src)}${st && st.at ? ' · ' + ago(st.at) : ''}</small></div><span style="font-size:12px;text-align:right">${esc(state)}</span></div>`;
+      }).join('');
+      h += `<p class="note">Everything here comes from free, public data. If a feed shows ⚠️, that service is busy or blocked on your network. The page keeps retrying. This map never tracks people. Click anywhere on the map to scan a spot.</p>`;
+    }
+    body.innerHTML = h;
+    if (t === 'space') renderISSCard();
+  }
+  function renderISSCard() {
+    const el = $('iss-card'); if (!el) return;
+    el.innerHTML = iss ? `<div class="cards"><div class="card"><small>POSITION</small><b style="font-size:13px">${dms(iss.latitude, 'N', 'S')}<br>${dms(iss.longitude, 'E', 'W')}</b></div>
+      <div class="card"><small>HEIGHT</small><b>${Math.round(iss.altitude)} km</b></div><div class="card"><small>SPEED</small><b>${Math.round(iss.velocity).toLocaleString()}</b> <span style="color:var(--muted);font-size:12px">km/h</span></div>
+      <div class="card"><small>LIGHT</small><b style="font-size:15px">${iss.visibility === 'daylight' ? '☀️ Sunlight' : '🌑 Shadow'}</b></div></div>
+      <div class="meta" style="margin-top:8px"><button class="go" id="iss-go">📍 Show</button><button class="go" id="iss-follow">${followISS ? '⏹ Stop following' : '🎯 Follow it'}</button><span>It circles Earth about every 92 minutes.</span></div>` : loadingOr('iss', 'space station position');
+  }
+
+  $('tab-body').addEventListener('click', e => {
+    const chip = e.target.closest('[data-cat]'); if (chip) { S.newsCat = chip.dataset.cat; save(); renderTab(); return; }
+    const tv = e.target.closest('[data-tv]'); if (tv) { tvPlaying = tvPlaying === tv.dataset.tv ? null : tv.dataset.tv; renderTab(); return; }
+    const era = e.target.closest('[data-era]'); if (era) { S.era = era.dataset.era; save(); renderBattles(); renderLayerPanel(); renderTab(); if (!S.layers.battles) { S.layers.battles = true; save(); applyLayers(); renderLayerPanel(); } return; }
+    const g = e.target.closest('.go'); if (!g) return;
+    const ensure = k => { if (!S.layers[k]) { S.layers[k] = true; save(); applyLayers(); renderLayerPanel(); } };
+    if (g.dataset.story) { const s = news[+g.dataset.story]; if (s && s.marker) { ensure('news'); fly(s.marker.getLatLng(), 6); map.once('moveend', () => s.marker.openPopup()); } }
+    if (g.dataset.quake) { const q = quakes.find(x => x.id === g.dataset.quake); if (q) { ensure('quakes'); fly(q.ll, 6); map.once('moveend', () => q.layer.openPopup()); } }
+    if (g.dataset.event) { const ev = events.find(x => x.id === g.dataset.event); if (ev) { ensure('events'); fly(ev.ll, 6); map.once('moveend', () => ev.layer.openPopup()); } }
+    if (g.dataset.country) { const l = countryLayers[g.dataset.country]; if (l) { ensure('conflicts'); map.flyToBounds(l.getBounds(), { maxZoom: 5, padding: [30, 30], duration: FLY }); map.once('moveend', () => l.openPopup(l.getBounds().getCenter())); } }
+    if (g.dataset.battle) { const b = BATTLES.find(x => x.name === g.dataset.battle); if (b) { ensure('battles'); if (!b.marker) renderBattles(); fly(b.ll, 7); map.once('moveend', () => b.marker && b.marker.openPopup()); } }
+    if (g.id === 'iss-go' && iss) { ensure('iss'); fly([iss.latitude, iss.longitude], 4); }
+    if (g.id === 'iss-follow') { followISS = !followISS; ensure('iss'); if (followISS && iss) fly([iss.latitude, iss.longitude], Math.max(map.getZoom(), 3)); renderISSCard(); }
+  });
+  map.on('dragstart', () => { if (followISS) { followISS = false; renderISSCard(); } });
+
+  // ===================== Breaking news ticker =====================
+  function renderTicker() {
+    const items = [];
+    const pri = { conflict: 0, disaster: 1, intl: 2, politics: 3 };
+    news.slice().sort((a, b) => (b.date - a.date) || ((pri[a.cat] ?? 9) - (pri[b.cat] ?? 9))).slice(0, 30)
+      .forEach(s => items.push([CAT[s.cat].color, `${CAT[s.cat].emoji} ${CAT[s.cat].short}`, s.text.length > 160 ? s.text.slice(0, 160) + '…' : s.text]));
+    warHeadlines.slice(0, 10).forEach(x => items.push(['#ff6b6b', '💥 WAR NEWS', x.title]));
+    quakes.filter(q => q.mag >= 5).slice(0, 5).forEach(q => items.push([qColor(q.mag), `🌍 M${q.mag.toFixed(1)} QUAKE`, `${q.place || ''} · ${ago(q.time)}`]));
+    if (!items.length) return;
+    // mix them so different kinds take turns
+    const html = items.map(([c, tag, text]) => `<span class="t-item" style="--c:${c}"><b>${esc(tag)}</b>${esc(text)}</span>`).join('');
+    const track = $('ticker');
+    track.innerHTML = html + html;   // twice, so it loops seamlessly
+    track.style.setProperty('--dur', Math.max(60, items.length * 9) + 's');
+  }
+
+  // ===================== Scheduler =====================
+  const FEEDS = {
+    news:      { fn: loadNews, every: 900 },
+    conflicts: { fn: loadConflicts, every: 3600, when: () => S.layers.conflicts || S.tab === 'conflicts' },
+    warnews:   { fn: loadWarNews, every: 900 },
+    quakes:    { fn: loadQuakes, every: 120 },
+    events:    { fn: loadEvents, every: 900 },
+    iss:       { fn: loadISS, every: 5, when: () => S.layers.iss || S.tab === 'space' },
+    issPath:   { fn: loadISSPath, every: 300, when: () => S.layers.iss, quiet: true },
+    radar:     { fn: loadRadar, every: 600, when: () => S.layers.radar },
+    flights:   { fn: loadFlights, every: 60, when: () => S.layers.flights },
+    tech:      { fn: loadTech, every: 900, when: () => S.tab === 'tech' },
+    space:     { fn: loadSpace, every: 1800, when: () => S.tab === 'space' },
+    markets:   { fn: loadMarkets, every: 120, when: () => S.tab === 'markets' },
+  };
+  const lastRun = {}, running = {};
+  async function runFeed(k) {
+    const f = FEEDS[k];
+    if (!f || running[k]) return;
+    running[k] = true; lastRun[k] = Date.now();
+    if (!f.quiet && (!status[k] || status[k].state !== 'ok')) setStatus(k, 'loading');
+    try { await f.fn(); }
+    catch (err) { console.warn('[World Watch]', k, err); if (!f.quiet) setStatus(k, 'error', friendlyError(err)); lastRun[k] = Date.now() - f.every * 1000 + 60000; }   // retry in a minute
+    running[k] = false;
+  }
+  setInterval(() => {
+    if (document.hidden) return;
+    for (const [k, f] of Object.entries(FEEDS)) {
+      if (f.when && !f.when()) continue;
+      if (Date.now() - (lastRun[k] || 0) >= f.every * 1000) runFeed(k);
+    }
+  }, 1000);
+  let flightTimer = null;
+  map.on('moveend', () => {
+    if (!S.layers.flights) return;
+    clearTimeout(flightTimer);
+    // reload for the new view, but at most every 10 s while planes are showing (OpenSky has a daily limit)
+    const showing = status.flights && status.flights.state === 'ok';
+    flightTimer = setTimeout(() => runFeed('flights'), showing ? Math.max(1200, (lastRun.flights || 0) + 10000 - Date.now()) : 600);
+  });
+
+  // ===================== Start =====================
+  setBase(S.base);
+  applyLayers();
+  updateNight(); setInterval(updateNight, 60000);
+  renderBattles();
+  renderLayerPanel(); renderTabs(); renderTab();
+  loadCountries().catch(() => {});
+  </script>
+</body>
+</html>
