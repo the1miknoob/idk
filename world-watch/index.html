@@ -362,8 +362,12 @@
   const BASES = {
     satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
       maxZoom: 19, attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community' }),
-    dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      subdomains: 'abcd', maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>' }),
+    // Esri's dark gray canvas: free, no API key (CARTO's dark tiles now need one)
+    dark: L.layerGroup([
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 19, maxNativeZoom: 16, attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ' }),
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, maxNativeZoom: 16 }),
+    ]),
     streets: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }),
   };
@@ -371,7 +375,7 @@
   function setBase(b) {
     if (!BASES[b]) b = 'dark';
     if (baseLayer) baseLayer.remove();
-    S.base = b; baseLayer = BASES[b].addTo(map); baseLayer.bringToBack();
+    S.base = b; baseLayer = BASES[b].addTo(map);
     save(); renderLayerPanel();
   }
 
@@ -800,7 +804,7 @@
     const f = frames[frames.length - 1];
     if (!f) throw new Error('No radar frames');
     const url = `${d.host}${f.path}/256/{z}/{x}/{y}/2/1_1.png`;
-    if (!radarLayer) radarLayer = L.tileLayer(url, { opacity: 0.65, maxNativeZoom: 7, maxZoom: 18, attribution: 'Radar &copy; <a href="https://www.rainviewer.com/">RainViewer</a>' }).addTo(groups.radar);
+    if (!radarLayer) radarLayer = L.tileLayer(url, { opacity: 0.65, zIndex: 10, maxNativeZoom: 7, maxZoom: 18, attribution: 'Radar &copy; <a href="https://www.rainviewer.com/">RainViewer</a>' }).addTo(groups.radar);
     else radarLayer.setUrl(url);
     setStatus('radar', 'ok', 'as of ' + new Date(f.time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
   }
