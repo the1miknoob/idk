@@ -1,0 +1,20 @@
+{
+  "name": "Mikaeel's site",
+  "short_name": "Mikaeel",
+  "description": "Games, a music player, a dashboard, a live world map and more, made by Mikaeel.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0f1220",
+  "theme_color": "#5b6cff",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Games", "url": "games/" },
+    { "name": "Music Player", "url": "music-player/" },
+    { "name": "World Watch", "url": "world-watch/" },
+    { "name": "Dashboard", "url": "dashboard/" }
+  ]
+}

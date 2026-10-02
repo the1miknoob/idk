@@ -34,12 +34,20 @@
     .pill.live { background: #30a46c22; color: var(--good); }
     .empty { color: var(--muted); text-align: center; padding: 30px; }
   </style>
+  <meta name="theme-color" content="#5b6cff">
+  <meta property="og:title" content="Games · Mikaeel">
+  <meta property="og:description" content="Free browser games made by Mikaeel: puzzles, arcade games, word games and chess">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://the1miknoob.github.io/idk/icon-512.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <link rel="apple-touch-icon" href="../apple-touch-icon.png">
+  <script src="../site.js" defer></script>
 </head>
 <body>
   <div class="wrap wide">
     <nav class="g-nav">
       <a href="../">← Back to Mikaeel's site</a>
-      <div class="right"><button class="icon-btn" data-theme-toggle aria-label="Light or dark">🌙</button></div>
+      <div class="right"><button class="icon-btn" id="surprise" title="Play a random game" style="width:auto;padding:0 12px;font-size:14px;font-weight:600;color:var(--text)">🎲 Surprise me</button><button class="icon-btn" data-theme-toggle aria-label="Light or dark">🌙</button></div>
     </nav>
     <header>
       <h1>🎮 Games</h1>
@@ -68,7 +76,7 @@
       { id: '2048', href: '2048/', emoji: '🔢', title: '2048', tags: ['Puzzle'],
         bg: 'linear-gradient(135deg,#edc22e,#f67c5f)', text: 'Slide tiles, merge matching numbers and reach 2048. Try 5×5 and 6×6 boards too.' },
       { id: 'reaction', href: 'reaction-lab/', emoji: '⚡', title: 'Reaction Lab', tags: ['Arcade', 'Brain'],
-        bg: 'linear-gradient(135deg,#2b87d1,#4bdb6a)', text: 'Test your reaction time, aim and number memory. How do you compare to your friends?', bestLabel: 'Reaction', fmt: v => v + ' ms' },
+        bg: 'linear-gradient(135deg,#2b87d1,#4bdb6a)', text: 'Test your reaction time, aim and number memory. How do you compare to your friends?', playKey: 'reactionlab', bestLabel: 'Reaction', fmt: v => v + ' ms' },
       { id: 'chess', href: 'chess/', emoji: '♟️', title: 'Chess', tags: ['Strategy'],
         bg: 'conic-gradient(#769656 0 25%, #eeeed2 0 50%, #769656 0 75%, #eeeed2 0) 0 0 / 44px 44px', text: 'Play the computer on four levels or a friend. Hints, undo, and full game analysis.' },
     ];
@@ -76,6 +84,7 @@
     const tags = ['All', ...new Set(GAMES.flatMap(g => g.tags))];
     let filter = 'All';
     const read = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
+    const plays = read('games-played') || {}, last = read('games-last');
 
     function metaFor(g) {
       const out = [];
@@ -89,6 +98,8 @@
         const best = read('game-best-' + (g.bestKey || g.id));
         if (best) out.push(`<span class="pill best">🏆 ${g.bestLabel || 'Best'}: ${g.fmt ? g.fmt(best) : best}</span>`);
       }
+      const n = plays[g.playKey || g.id];
+      if (n) out.push(`<span class="pill">▶ ${n}×</span>`);
       out.push(...g.tags.map(t => `<span class="pill">${t}</span>`));
       return out.join('');
     }
@@ -97,12 +108,16 @@
       $filters.innerHTML = tags.map(t => `<button data-t="${t}" class="${t === filter ? 'on' : ''}">${t}</button>`).join('');
       const list = GAMES.filter(g => filter === 'All' || g.tags.includes(filter));
       $grid.innerHTML = list.map(g => `<a class="game" href="${g.href}">
-        <div class="art" style="background:${g.bg}"><span class="emo">${g.emoji}</span>${g.badge ? `<span class="badge">${g.badge}</span>` : ''}</div>
+        <div class="art" style="background:${g.bg}"><span class="emo">${g.emoji}</span>${last && last.id === (g.playKey || g.id) ? '<span class="badge">⏱ Last played</span>' : g.badge ? `<span class="badge">${g.badge}</span>` : ''}</div>
         <div class="body"><h2>${g.title}</h2><p>${g.text}</p><div class="meta">${metaFor(g)}</div></div></a>`).join('') || '<p class="empty">No games here yet.</p>';
     }
     const $filters = document.getElementById('filters'), $grid = document.getElementById('grid');
     $filters.addEventListener('click', e => { const b = e.target.closest('button'); if (b) { filter = b.dataset.t; render(); } });
     render();
+    document.getElementById('surprise').addEventListener('click', () => {
+      const pool = GAMES.filter(g => !last || (g.playKey || g.id) !== last.id);   // something different from last time
+      location.href = pool[Math.floor(Math.random() * pool.length)].href;
+    });
   </script>
 </body>
 </html>

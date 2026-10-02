@@ -41,6 +41,10 @@
     .clocks b { color: var(--text); font-weight: 500; }
     .clocks .utc b { color: var(--green); }
     .search { position: relative; flex: none; }
+    .hud-btn { flex: none; background: rgba(63, 208, 255, .07); border: 1px solid var(--line); border-radius: 8px; width: 32px; height: 30px; cursor: pointer; color: var(--cyan); font-size: 15px; }
+    .hud-btn:hover { border-color: var(--cyan); }
+    .fatal { position: fixed; inset: 0; z-index: 5000; display: grid; place-items: center; text-align: center; padding: 24px; background: var(--bg); font-family: var(--mono); color: var(--text); line-height: 1.6; }
+    .fatal button { margin-top: 14px; padding: 8px 16px; border-radius: 8px; border: 1px solid var(--cyan); background: none; color: var(--cyan); cursor: pointer; font: inherit; }
     .search input {
       width: 230px; background: rgba(63, 208, 255, .07); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-family: var(--mono); font-size: 13px;
     }
@@ -220,18 +224,30 @@
     @media (max-width: 700px) { .hud { display: none; } }
     @media (max-width: 560px) {
       .clocks { display: none; } .search { margin-left: auto; }
+      .top { gap: 8px; padding: 8px; } .brand { letter-spacing: 1px; font-size: 14px; } #fs-btn { display: none; }
+      .search input { width: 118px; }
       .readout { display: none; }
       .legend { left: 10px; right: auto; bottom: 10px; font-size: 10px; display: grid; grid-template-columns: auto auto; gap: 3px 10px; }
       .legend div { margin: 0 !important; }
     }
     @media (prefers-reduced-motion: reduce) { .ticker-track, .pin, .pulse, .scan i, path.zone.major, .live-dot { animation: none !important; } }
   </style>
+  <meta name="theme-color" content="#04070c">
+  <meta property="og:title" content="World Watch · Mikaeel">
+  <meta property="og:description" content="A live world map: news, conflicts, earthquakes, storms, the space station, flights, markets and history.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://the1miknoob.github.io/idk/icon-512.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <link rel="apple-touch-icon" href="../apple-touch-icon.png">
+  <script src="../site.js" defer></script>
 </head>
 <body>
   <header class="top">
     <a class="back" href="../" title="Back to Mikaeel's site" aria-label="Back to Mikaeel's site">←</a>
     <div class="brand"><span class="live-dot"></span>WORLD WATCH</div>
     <div class="clocks" id="clocks"></div>
+    <button class="hud-btn" id="share-btn" title="Copy a link to this exact view" aria-label="Copy a link to this view">🔗</button>
+    <button class="hud-btn" id="fs-btn" title="Fullscreen (F)" aria-label="Fullscreen">⛶</button>
     <form class="search" id="search" autocomplete="off">
       <input id="q" placeholder="🔎 Search a place or lat, lon" aria-label="Search a place">
       <div class="results" id="results"></div>
@@ -259,6 +275,10 @@
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
   <script>
   'use strict';
+  if (!window.L) {   // the map library couldn't download (offline or blocked)
+    document.body.insertAdjacentHTML('beforeend', '<div class="fatal"><div>📡 <b>CONNECTION LOST</b><br>The map couldn\'t load. Check your internet and try again.<br><button onclick="location.reload()">↻ Retry</button></div></div>');
+    throw new Error('Leaflet did not load');
+  }
   const $ = id => document.getElementById(id);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const safeUrl = u => /^https?:\/\//i.test(u || '') ? u : '#';
@@ -1277,6 +1297,29 @@
     const showing = status.flights && status.flights.state === 'ok';
     flightTimer = setTimeout(() => runFeed('flights'), showing ? Math.max(1200, (lastRun.flights || 0) + 10000 - Date.now()) : 600);
   });
+
+  // ===================== Shareable view & fullscreen =====================
+  // The link remembers where you're looking: …/world-watch/#lat,lon,zoom
+  const fromHash = () => { const m = location.hash.match(/^#(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?),(\d+(?:\.\d+)?)$/); return m ? [[+m[1], +m[2]], Math.min(18, Math.max(2, +m[3]))] : null; };
+  const startView = fromHash();
+  if (startView) map.setView(startView[0], startView[1], { animate: false });
+  map.on('moveend', () => { const c = map.getCenter(); history.replaceState(null, '', `#${c.lat.toFixed(3)},${wrapLon(c.lng).toFixed(3)},${map.getZoom()}`); });
+  addEventListener('hashchange', () => { const v = fromHash(); if (v) fly(v[0], v[1]); });
+  $('share-btn').addEventListener('click', async () => {
+    const b = $('share-btn');
+    try { await navigator.clipboard.writeText(location.href); b.textContent = '✓'; }
+    catch (e) { prompt('Copy this link:', location.href); }
+    setTimeout(() => b.textContent = '🔗', 1500);
+  });
+  const toggleFS = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(() => {});
+  $('fs-btn').addEventListener('click', toggleFS);
+  if (!document.documentElement.requestFullscreen) $('fs-btn').hidden = true;   // iPhones don't allow it
+  addEventListener('keydown', e => {
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'f' || e.key === 'F') toggleFS();
+    if (e.key === 'l' || e.key === 'L') { S.layersOpen = !S.layersOpen; save(); renderLayerPanel(); }
+  });
+  document.addEventListener('fullscreenchange', () => setTimeout(() => map.invalidateSize(), 100));
 
   // ===================== Start =====================
   setBase(S.base);
