@@ -95,6 +95,11 @@
       display: inline-block; padding: 10px 18px; border-radius: 10px; font-weight: 500;
       border: 1px solid var(--border); color: var(--text); background: var(--surface);
     }
+    button.btn { font: inherit; cursor: pointer; }
+    .nav-icon { background: none; border: none; font-size: 17px; cursor: pointer; padding: 4px; line-height: 1; }
+    .hint { color: var(--muted); font-size: 14px; margin-top: 18px; }
+    .hint kbd { font: 12px ui-monospace, monospace; border: 1px solid var(--border, #8884); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; }
+    @media (hover: none) { .hint { display: none; } }
     .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
     .btn:hover { text-decoration: none; transform: translateY(-1px); }
 
@@ -170,6 +175,9 @@
       header { padding: 56px 0 40px; }
     }
   </style>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <script src="site.js" defer></script>
 </head>
 <body>
 
@@ -183,6 +191,7 @@
         <a href="dashboard/" title="Dashboard">📊<span class="hide-sm"> Dashboard</span></a>
         <a href="games/" title="Games">🎮<span class="hide-sm"> Games</span></a>
         <a href="world-watch/" title="World Watch">🛰️<span class="hide-sm"> World</span></a>
+        <button id="jump-btn" class="nav-icon" aria-label="Jump to a page (Ctrl+K)" title="Jump to a page (Ctrl+K)">🔎</button>
         <button id="theme-toggle" aria-label="Toggle dark mode">🌙</button>
       </div>
     </div>
@@ -201,7 +210,9 @@
       <div class="buttons">
         <a href="#projects" class="btn primary">See my projects</a>
         <a href="https://github.com/the1miknoob" class="btn" target="_blank" rel="noopener">GitHub</a>
+        <button id="install-btn" class="btn" hidden>📲 Install app</button>
       </div>
+      <p class="hint">Tip: press <kbd>Ctrl</kbd> + <kbd>K</kbd> on any page to jump anywhere.</p>
     </header>
 
     <!-- Shows what you were last doing in your apps (only in your own browser) -->
@@ -397,6 +408,15 @@
         cards.push(card('games/chess/', '♟️', 'Chess game in progress', `Move ${n} ${vs}`, chess.status || 'Tap to keep playing'));
       }
 
+      // the last game you played (saved by the games themselves)
+      const GAME_INFO = { blockpop: ['🧩', 'Block Pop', 'block-pop'], mergedrop: ['🪐', 'Merge Drop', 'merge-drop'], wordhunt: ['🔤', 'Word Hunt', 'word-hunt'],
+        nightswarm: ['🌙', 'Night Swarm', 'night-swarm'], skyhop: ['🎈', 'Sky Hop', 'sky-hop'], snake: ['🐍', 'Snake', 'snake'], 2048: ['🔢', '2048', '2048'], reactionlab: ['⚡', 'Reaction Lab', 'reaction-lab'] };
+      const last = read('games-last'), plays = read('games-played') || {};
+      if (last && GAME_INFO[last.id]) {
+        const [emo, name, dir] = GAME_INFO[last.id], n = plays[last.id] || 1;
+        cards.push(card(`games/${dir}/`, emo, 'Last game', name, `Played ${n} time${n === 1 ? '' : 's'} · tap to play again`));
+      } else if (last && last.id === 'typing') cards.push(card('typing-test/', '⌨️', 'Typing Test', 'Beat your speed', 'Tap to take another test'));
+
       if (cards.length) {
         cards.forEach(c => grid.appendChild(c));
         document.getElementById('continue').classList.add('show');
@@ -412,6 +432,14 @@
     } else {
       document.querySelectorAll('.reveal').forEach(el => el.classList.add('in'));
     }
+
+    // ---------- Quick jump + install as an app ----------
+    document.getElementById('jump-btn').addEventListener('click', () => window.SiteJump && SiteJump.open());
+    let installEvt = null;
+    const installBtn = document.getElementById('install-btn');
+    addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; installBtn.hidden = false; });
+    installBtn.addEventListener('click', async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt = null; installBtn.hidden = true; });
+    addEventListener('appinstalled', () => { installBtn.hidden = true; });
 
     // ---------- Back to top ----------
     const toTop = document.getElementById('to-top');

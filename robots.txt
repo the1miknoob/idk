@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://the1miknoob.github.io/idk/sitemap.xml
