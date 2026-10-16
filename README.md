@@ -8,7 +8,7 @@ Live at: https://the1miknoob.github.io/idk/
 - **Music Player** (`music-player/`): play your own songs with skins, visualizers and stickers
 - **Personal Dashboard** (`dashboard/`): clock, weather, to-dos, notes, focus timer and more
 - **World Watch** (`world-watch/`): a live world map with news, conflict zones, war news, earthquakes, storms, the space station, live news TV, markets and famous battles
-- **Armor Pen Sim** (`armor-sim/`): fire shells at armor (angles, ricochets, HEAT, spaced armor, reactive tiles) and knock out made-up tanks on a target range
+- **Armor Pen Sim** (`armor-sim/`): a particle physics sandbox where shells, bullets and darts smash into armor you build yourself (steel, ceramics, glass, reactive tiles…) and plates bend, crack, heat up and spall. Also has a quick calculator, a target range with made-up tanks, and a Learn tab
 - **Typing Test** (`typing-test/`), **Tier List Maker** (`tier-list/`) and **Spin the Wheel** (`spin-wheel/`)
 
 ## Site-wide features

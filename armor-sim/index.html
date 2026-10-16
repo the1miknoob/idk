@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Armor Pen Sim · Mikaeel</title>
-  <meta name="description" content="Fire shells at armor and see what happens: angles, ricochets, shaped charges, spaced armor and reactive tiles. Plus a target range with tanks you can turn and shoot.">
+  <meta name="description" content="A particle physics sandbox: fire bullets, shells, darts and shaped charges at armor and watch it bend, crack, glow and spall. Plus a calculator and a target range.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -105,6 +105,44 @@
     .stack div { display: grid; place-items: center; font: 700 12px var(--mono); color: #101010; min-width: 0; overflow: hidden; }
     .stack div:first-child { border-radius: 4px 0 0 4px; } .stack div:last-child { border-radius: 0 4px 4px 0; }
 
+    /* Sandbox */
+    #sb-controls { display: none; flex-direction: column; gap: 12px; position: sticky; top: 72px; max-height: calc(100vh - 88px); overflow: auto; scrollbar-width: thin; }
+    body.mode-sandbox #sb-controls { display: flex; }
+    body.mode-sandbox .controls { display: none; }
+    .sb-view canvas { display: block; width: 100%; height: 560px; touch-action: pan-y; cursor: crosshair; }
+    .sb-zoom { position: absolute; right: 10px; bottom: 10px; display: flex; flex-direction: column; gap: 4px; }
+    .sb-zoom button { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line-2); background: rgba(9, 12, 15, .85); cursor: pointer; font-size: 17px; }
+    .sb-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .sb-bar .lbl { font: 600 11px var(--mono); letter-spacing: 1.2px; color: var(--muted); text-transform: uppercase; }
+    .seg.sm { margin-top: 0; flex-wrap: wrap; }
+    .seg.sm button { flex: none; padding: 6px 10px; }
+    .btn:disabled { opacity: .45; cursor: not-allowed; filter: none; }
+    .btn.wide { width: 100%; margin-top: 10px; }
+    .sb-art { margin-top: 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; height: 60px; display: grid; place-items: center; }
+    .sb-art svg { width: 200px; height: 50px; }
+    .plate-card { border: 1px solid var(--line); border-radius: 12px; padding: 10px; margin-top: 10px; background: var(--panel-2); }
+    .pc-head { display: flex; align-items: center; gap: 6px; }
+    .pc-head span { color: var(--muted); font: 12px var(--mono); margin-right: auto; margin-left: 4px; }
+    .pc-sub { font-size: 12px; color: var(--muted); margin: 8px 0 2px; }
+    .layer { display: grid; grid-template-columns: 8px minmax(0, 1fr) 62px auto 26px; gap: 6px; align-items: center; margin-top: 5px; }
+    .layer i { width: 8px; height: 26px; border-radius: 3px; }
+    .layer select { margin: 0; padding: 5px 6px; font-size: 13px; }
+    .layer input { width: 100%; background: var(--panel); border: 1px solid var(--line-2); border-radius: 7px; padding: 5px 6px; font: 13px var(--mono); }
+    .layer span { font-size: 12px; color: var(--muted); }
+    .mini { border: 1px solid var(--line-2); background: var(--panel); border-radius: 7px; padding: 3px 8px; cursor: pointer; font-size: 12px; color: var(--text-2); }
+    .mini:hover { border-color: var(--muted); }
+    .mini.wide { width: 100%; margin-top: 8px; padding: 5px; }
+    .mini-gap { width: 26px; }
+    .sb-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; margin-top: 10px; }
+    .sb-stats div { background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px; padding: 6px 9px; }
+    .sb-stats small { display: block; font: 600 10px var(--mono); letter-spacing: 1px; color: var(--muted); text-transform: uppercase; }
+    .sb-stats b { font-size: 17px; }
+    .sb-est { font-size: 13px; color: var(--muted); margin-top: 10px; }
+    .sb-est b { color: var(--text); }
+    .sb-live { font: 12px var(--mono); color: var(--muted); }
+    .sb-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; font-size: 12.5px; color: var(--text-2); }
+    .sb-legend i { display: inline-block; width: 130px; height: 10px; border-radius: 5px; }
+
     /* Target range */
     .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
     .toolbar .toggle { margin-top: 0; }
@@ -154,14 +192,17 @@
       .controls { position: static; }
       canvas.xs { height: 270px; }
       .tank-view canvas { height: 340px; }
+      .sb-view canvas { height: 380px; }
+      #sb-controls { position: static; max-height: none; overflow: visible; }
       .sliders { grid-template-columns: 1fr; gap: 10px; }
     }
     @media (max-width: 560px) {
       .brand { font-size: 13px; letter-spacing: 1px; }
       .top { gap: 8px; padding: 8px 10px; flex-wrap: wrap; }
-      .modes { order: 3; width: 100%; margin-left: 0; }
-      .modes button { flex: 1; padding: 6px 4px; }
+      .modes { order: 3; width: 100%; margin-left: 0; display: grid; grid-template-columns: 1fr 1fr; }
+      .modes button { padding: 6px 4px; }
       #mute { margin-left: auto; }
+      .tag-more { display: none; }   /* keeps the label clear of the clock */
     }
   </style>
   <meta name="theme-color" content="#0d1013">
@@ -178,7 +219,8 @@
     <a class="back" href="../" title="Back to Mikaeel's site" aria-label="Back to Mikaeel's site">←</a>
     <div class="brand">🛡️ ARMOR PEN SIM</div>
     <nav class="modes" id="modes" aria-label="Mode">
-      <button data-mode="lab">🔬 Lab</button>
+      <button data-mode="sandbox">🧪 Sandbox</button>
+      <button data-mode="lab">📈 Calculator</button>
       <button data-mode="range">🎯 Target range</button>
       <button data-mode="learn">📘 Learn</button>
     </nav>
@@ -186,7 +228,26 @@
   </header>
 
   <main class="app">
-    <!-- ===== Controls (shared by the Lab and the Target range) ===== -->
+    <!-- ===== Sandbox controls ===== -->
+    <aside class="sb-controls" id="sb-controls">
+      <section class="card" aria-labelledby="h-sbp">
+        <h2 id="h-sbp"><span>Projectile</span><span>library</span></h2>
+        <select id="sb-proj" aria-label="Projectile" style="margin-top:0"></select>
+        <div class="sb-art" id="sb-proj-art"></div>
+        <p class="blurb" id="sb-proj-info"></p>
+        <div class="field" id="sb-v-field"><label for="sb-v">Impact speed</label><output id="sb-v-out"></output><input type="range" id="sb-v" min="100" max="2100" step="10"></div>
+        <p class="blurb" id="sb-v-note" hidden></p>
+        <div class="field"><label for="sb-aim">Aim higher or lower</label><output id="sb-aim-out"></output><input type="range" id="sb-aim" min="-300" max="300" step="5"></div>
+      </section>
+      <section class="card" aria-labelledby="h-sba">
+        <h2 id="h-sba"><span>Armor</span><span>cutaways</span></h2>
+        <select id="sb-preset" aria-label="Armor setup" style="margin-top:0"></select>
+        <div id="sb-plates"></div>
+        <button class="btn small wide" id="sb-add-plate">+ Add a plate</button>
+      </section>
+    </aside>
+
+    <!-- ===== Controls (shared by the Calculator and the Target range) ===== -->
     <aside class="controls">
       <section class="card" aria-labelledby="h-shell">
         <h2 id="h-shell"><span>Shell</span><span id="shell-kind"></span></h2>
@@ -212,7 +273,30 @@
       </section>
     </aside>
 
-    <!-- ===== Lab ===== -->
+    <!-- ===== Sandbox: everything made of particles ===== -->
+    <section class="stage" id="stage-sandbox" hidden>
+      <div class="view sb-view">
+        <canvas id="sb-canvas" role="img" aria-label="Particle simulation of the projectile and the armor. Drag to look around, scroll to zoom, click the armor to aim."></canvas>
+        <div class="view-tag">PARTICLE SANDBOX · 2D SLICE<span class="tag-more"> · DRAG TO LOOK AROUND</span></div>
+        <div class="sb-zoom"><button id="sb-zoom-in" aria-label="Zoom in">+</button><button id="sb-zoom-out" aria-label="Zoom out">−</button><button id="sb-zoom-fit" aria-label="Fit everything in view" title="Fit">⤢</button></div>
+      </div>
+      <div class="sb-bar">
+        <button class="btn fire" id="sb-fire">🔥 Fire</button>
+        <button class="btn" id="sb-pause">⏸ Pause</button>
+        <button class="btn" id="sb-step" title="Step forward a little (while paused)">⏭ Step</button>
+        <button class="btn" id="sb-reset">↺ Reset</button>
+        <div class="seg sm" id="sb-speed" role="group" aria-label="Playback speed"></div>
+      </div>
+      <div class="sb-bar">
+        <span class="lbl">Color by</span><div class="seg sm" id="sb-view" role="group" aria-label="Color by"></div>
+        <span class="lbl">Particles</span><div class="seg sm" id="sb-quality" role="group" aria-label="How many particles"></div>
+      </div>
+      <div class="sb-legend" id="sb-legend"></div>
+      <div class="card result" id="sb-result" aria-live="polite"></div>
+      <div class="sb-live" id="sb-live"></div>
+    </section>
+
+    <!-- ===== Calculator (the quick formula version) ===== -->
     <section class="stage" id="stage-lab">
       <div class="view">
         <canvas class="xs" id="xs-lab" role="img" aria-label="Cut-away view of the shell and the armor"></canvas>
@@ -339,13 +423,30 @@
         </ul>
       </div>
       <div class="card">
-        <h3>🧮 How this sim works</h3>
+        <h3>🧪 How the Sandbox works</h3>
+        <p>Everything in the Sandbox is made of <b>thousands of particles</b>. Each one has a real material's weight and stiffness and is joined to its neighbors by tiny springs called <b>bonds</b>.</p>
+        <ul>
+          <li><b>Bend:</b> push a bond past the metal's strength and it bends for good (that's a dent).</li>
+          <li><b>Snap:</b> stretch it too far and it breaks (that's a crack or a hole).</li>
+          <li><b>Flow:</b> soft metals re-join as they squeeze past each other, so they flow like hot clay. Brittle things like ceramic and glass just crack.</li>
+          <li><b>Heat:</b> bending and rubbing turn into heat, so the crater glows. Hot metal gets weaker.</li>
+        </ul>
+        <p>Nothing is animated by hand: holes, spall, ricochets and the shaped-charge jet all come from the physics, a few million times a second of simulated time.</p>
+      </div>
+      <div class="card">
+        <h3>📐 Why "2D slice"?</h3>
+        <p>The Sandbox simulates a thin slice through the middle of the shell and the armor. Real armor is 3D, and the metal all around the hole holds it in place, so the Sandbox adds a <b>3D grip</b> to make up for the missing direction.</p>
+        <p>Its strength was tuned so solid shells land close to the classic De Marre formula (for example, a 75 mm shell at 620 m/s stops at about 100 mm of steel). Full-size shells and shaped charges land within about 10% of the classic numbers; thin sub-calibre cores (APCR, APDS) come out lower. It's a physics toy, not real data.</p>
+      </div>
+      <div class="card">
+        <h3>🧮 How the Calculator works</h3>
         <p>This is a <b>simplified, game-style model</b>, like the ones tank games use. Full-size solid shells use the <b>De Marre formula</b> from 1886. Long darts use a simple "wears away as it goes" estimate. Shaped charges get a set amount of penetration for their size.</p>
         <p>Real shells and armor are much more complicated, so the numbers here are for fun and learning, not real data. The vehicles on the target range are made up.</p>
       </div>
     </section>
   </main>
 
+  <script src="engine.js"></script>
   <script>
   'use strict';
   // ===================== Little helpers =====================
@@ -497,11 +598,12 @@
   const STATUS_WORD = { good: '✓ Gets through', warn: '≈ Maybe', crit: '✗ Stopped', serious: '↗ Bounces off' };
 
   // ===================== Settings =====================
-  const DEF = { mode: 'lab', shell: { type: 'ap', cal: 88, v: 780, len: 550, q: 1 }, dist: 500,
+  const DEF = { mode: 'sandbox', shell: { type: 'ap', cal: 88, v: 780, len: 550, q: 1 }, dist: 500,
     lab: { t: 100, ang: 30, mat: 'rha', spaced: false, gap: 300, era: false }, range: { tank: 'badger', yaw: -35, pitch: 14, heat: false } };
   const saved = store.get('armor-sim', {});
   const S = { ...DEF, ...saved, shell: { ...DEF.shell, ...saved.shell }, lab: { ...DEF.lab, ...saved.lab }, range: { ...DEF.range, ...saved.range } };
   if (!TYPES[S.shell.type]) S.shell = { ...DEF.shell };
+  if (store.get('armor-sandbox', null) === null) S.mode = 'sandbox';   // first visit since the Sandbox arrived: start there
   const save = () => store.set('armor-sim', S);
   let muted = store.get('armor-muted', false);
 
@@ -1445,7 +1547,8 @@
     S.mode = m; save();
     document.body.className = 'mode-' + m;
     document.querySelectorAll('#modes button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
-    $('stage-lab').hidden = m !== 'lab'; $('stage-range').hidden = m !== 'range'; $('stage-learn').hidden = m !== 'learn';
+    $('stage-sandbox').hidden = m !== 'sandbox'; $('stage-lab').hidden = m !== 'lab'; $('stage-range').hidden = m !== 'range'; $('stage-learn').hidden = m !== 'learn';
+    if (window.Sandbox) { if (m === 'sandbox') Sandbox.show(); else Sandbox.hide(); }
     refresh();
   }
   $('modes').addEventListener('click', e => { const b = e.target.closest('[data-mode]'); if (b) setMode(b.dataset.mode); });
@@ -1472,7 +1575,8 @@
   renderShellControls(); renderArmorControls(); renderLearn(); syncAngleSliders();
   $('heat').checked = S.range.heat; $('heat-legend').hidden = !S.range.heat;
   newTarget(TANKS[S.range.tank] ? S.range.tank : 'badger');
-  setMode(['lab', 'range', 'learn'].includes(S.mode) ? S.mode : 'lab');
+  setMode(['sandbox', 'lab', 'range', 'learn'].includes(S.mode) ? S.mode : 'sandbox');
   </script>
+  <script src="sandbox.js"></script>
 </body>
 </html>
