@@ -43,6 +43,7 @@
     rubber:   { name: 'Rubber', group: 'Other', rho: 1.1, E: 0.1, Y: 15, ef: 3, ec: 0.9, cp: 1.9, melt: 500, duct: 200, color: '#3a3a3a' },
     concrete: { name: 'Concrete', group: 'Other', rho: 2.4, E: 30, Y: 40, ef: 0.0006, ec: 0.04, cp: 0.88, melt: 1800, duct: 0, color: '#a29d92' },
     wood:     { name: 'Wood', group: 'Other', rho: 0.6, E: 11, Y: 50, ef: 0.03, ec: 0.3, cp: 1.7, melt: 600, duct: 4, color: '#a2723f' },
+    grp:      { name: 'Glass-fibre textolite', group: 'Other', rho: 1.85, E: 25, Y: 350, ef: 0.03, ec: 0.35, cp: 1.0, melt: 600, duct: 4, color: '#c3cf86' },
     era:      { name: 'Reactive explosive', group: 'Explosives', rho: 1.7, E: 8, Y: 30, ef: 0.08, ec: 0.25, cp: 1, melt: 600, duct: 0, color: '#d8a21c', explosive: true },
     fill:     { name: 'Shell explosive', group: 'Explosives', rho: 1.7, E: 8, Y: 30, ef: 0.1, ec: 0.3, cp: 1, melt: 600, duct: 0, color: '#dfc25c' },
   };
@@ -71,6 +72,10 @@
     { id: 'ap100', group: 'Solid shells (AP)', name: '100 mm APBC', kind: 'ke', v: 890, d: { shape: 'shell', cal: 100, len: 340, nose: 1.2, mat: 'shot' } },
     { id: 'ap122', group: 'Solid shells (AP)', name: '122 mm AP', kind: 'ke', v: 800, d: { shape: 'shell', cal: 122, len: 420, nose: 1.4, mat: 'shot' } },
     { id: 'ap128', group: 'Solid shells (AP)', name: '128 mm APCBC', kind: 'ke', v: 920, d: { shape: 'shell', cal: 128, len: 460, nose: 1.5, mat: 'shot', cap: { len: 70, mat: 'cap' } } },
+    { id: 'aphe76', group: 'Explosive-filled AP (APHE)', name: '76 mm APHE', kind: 'ke', v: 660, aphe: { fuse: 900, charge: 1 }, d: { shape: 'shell', cal: 76, len: 280, nose: 1.4, mat: 'shot' } },
+    { id: 'aphe85', group: 'Explosive-filled AP (APHE)', name: '85 mm APHE', kind: 'ke', v: 792, aphe: { fuse: 900, charge: 1.3 }, d: { shape: 'shell', cal: 85, len: 300, nose: 1.4, mat: 'shot' } },
+    { id: 'aphe88', group: 'Explosive-filled AP (APHE)', name: '88 mm APCBC-HE', kind: 'ke', v: 773, aphe: { fuse: 1000, charge: 1.2 }, d: { shape: 'shell', cal: 88, len: 320, nose: 1.5, mat: 'shot', cap: { len: 52, mat: 'cap' } } },
+    { id: 'aphe122', group: 'Explosive-filled AP (APHE)', name: '122 mm APHE', kind: 'ke', v: 780, aphe: { fuse: 1000, charge: 2.2 }, d: { shape: 'shell', cal: 122, len: 440, nose: 1.4, mat: 'shot' } },
     { id: 'cr57', bore: 57, group: 'Hard-core shot (APCR)', name: '57 mm APCR', kind: 'ke', v: 1150, d: { shape: 'shell', cal: 57, len: 170, nose: 1.4, mat: 'alu', core: { r: 13, tip: -14, len: 100, nose: 1.2, mat: 'wc' } } },
     { id: 'cr76', bore: 76, group: 'Hard-core shot (APCR)', name: '76 mm APCR', kind: 'ke', v: 1040, d: { shape: 'shell', cal: 76, len: 230, nose: 1.4, mat: 'alu', core: { r: 18, tip: -18, len: 140, nose: 1.2, mat: 'wc' } } },
     { id: 'cr88', bore: 88, group: 'Hard-core shot (APCR)', name: '88 mm APCR', kind: 'ke', v: 1130, d: { shape: 'shell', cal: 88, len: 260, nose: 1.4, mat: 'alu', core: { r: 21, tip: -20, len: 160, nose: 1.2, mat: 'wc' } } },
@@ -174,8 +179,23 @@
   // ---------- armor geometry ----------
   const plateThickness = p => p.layers.reduce((s, l) => s + l.t, 0);
   function plateFrame(p) {   // inward normal, direction along the plate, and the front-face point on the shot line
-    const a = p.ang * DEG;
-    return { n: [Math.cos(a), -Math.sin(a)], t: [Math.sin(a), Math.cos(a)], o: [p.x + (p.off || 0) * Math.sin(a), (p.off || 0) * Math.cos(a)] };
+    const a = p.ang * DEG, n = [Math.cos(a), -Math.sin(a)], t = [Math.sin(a), Math.cos(a)];
+    if (p.cy != null) return { n, t, o: [p.cx, p.cy] };   // vehicle parts are placed by the middle of their front face
+    return { n, t, o: [p.x + (p.off || 0) * t[0], (p.off || 0) * t[1]] };
+  }
+  // point-in-polygon and distance-to-segment, for plates cut to an exact outline (vehicle parts)
+  function inPoly(poly, x, y) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+  function segDist(x, y, s) {
+    const dx = s[2] - s[0], dy = s[3] - s[1], L2 = dx * dx + dy * dy || 1;
+    const k = Math.max(0, Math.min(1, ((x - s[0]) * dx + (y - s[1]) * dy) / L2)), ex = s[0] + k * dx - x, ey = s[1] + k * dy - y;
+    return Math.sqrt(ex * ex + ey * ey);
   }
   function autoLen(p, proj) {   // tall enough for the crater and for bending, without wasting particles
     const t = plateThickness(p), cal = proj ? projCal(proj) : 100;
@@ -225,8 +245,10 @@
           for (const l of p.layers) { if (u < acc + l.t) { mat = l.mat; break; } acc += l.t; }
           for (let v = -len / 2 + (k % 2) * h / 2; v <= len / 2; v += h) {
             const x = f.o[0] + u * f.n[0] + v * f.t[0], y = f.o[1] + u * f.n[1] + v * f.t[1];
+            if (p.clip && !inPoly(p.clip.poly, x, y)) continue;
             if (pi > 0 && clash(x, y)) continue;
-            P.push([x, y, MAT_INDEX[mat], pi + 1, Math.abs(v) > len / 2 - pin ? 1 : 0, 0, u, Math.abs(v) > len / 2 - 3 * h ? 1 : 0]);
+            const edge = p.clip ? p.clip.ends.some(s => segDist(x, y, s) < 3 * h) : Math.abs(v) > len / 2 - 3 * h;
+            P.push([x, y, MAT_INDEX[mat], pi + 1, Math.abs(v) > len / 2 - pin ? 1 : 0, 0, u, edge ? 1 : 0]);
           }
         }
         for (let i = start; i < P.length; i++) { const kk = tkey(P[i][0], P[i][1]); let a = taken.get(kk); if (!a) taken.set(kk, a = []); a.push(P[i][0], P[i][1]); }
@@ -246,7 +268,9 @@
         let best = Infinity;
         for (const pl of this.plates) {
           const n = pl.f.n, o = pl.f.o; if (Math.abs(n[0]) < 1e-6) continue;
-          const x = o[0] + (n[1] * (o[1] - y)) / n[0] - 1.6 * h / Math.max(0.25, Math.abs(n[0]));
+          const xf = o[0] + (n[1] * (o[1] - y)) / n[0];
+          if (pl.cy != null && Math.abs((xf - o[0]) * pl.f.t[0] + (y - o[1]) * pl.f.t[1]) > pl.len / 2 + 2 * h) continue;   // this short plate isn't at this height
+          const x = xf - 1.6 * h / Math.max(0.25, Math.abs(n[0]));
           if (x < best) best = x;
         }
         return best;
@@ -317,7 +341,9 @@
       // the world box (anything leaving it is gone)
       let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
       for (let i = 0; i < this.n; i++) { x0 = Math.min(x0, this.px[i]); x1 = Math.max(x1, this.px[i]); y0 = Math.min(y0, this.py[i]); y1 = Math.max(y1, this.py[i]); }
-      const span = Math.max(x1 - x0, y1 - y0), pad = Math.max(span * 0.25, 40 * h);
+      const span = Math.max(x1 - x0, y1 - y0);
+      let pad = Math.max(span * 0.25, 40 * h, scene.pad || 0);
+      while (pad > 40 * h && ((span + 2 * pad) / h) ** 2 > 3e6) pad *= 0.8;   // keep the bucket grid a sensible size
       this.box = [x0 - pad, x1 + pad + (sh.x1 - sh.x0), y0 - pad, y1 + pad];
       this.gw = Math.ceil((this.box[1] - this.box[0]) / h) + 1; this.gh = Math.ceil((this.box[3] - this.box[2]) / h) + 1;
       // a grid of buckets, rebuilt every step without clearing (each bucket remembers which step filled it)
@@ -333,7 +359,11 @@
       // A flat slice doesn't have that, so every armor particle gets a "grip" that resists being shoved (and gives way past its strength).
       // It's about the strength of the metal spread over the size of the hole, so it doesn't depend on the particle size.
       const bite = projCal(proj) * (proj.d.shape === 'rod' ? 2.5 : proj.kind === 'heat' ? 0.4 : 1);   // darts dig craters ~2–3× their width; a HEAT jet's hole is ~0.4× the charge
-      for (let i = 0; i < this.n; i++) if (this.body[i] > 0) { const mp = MP[this.mat[i]]; this.ax[i] = this.px[i]; this.ay[i] = this.py[i]; this.ag[i] = K.GRIP * mp.ey * mp.E * K.STRENGTH * volume / bite; this.attached[i] = 1; this.rubble[i] = /Ceramics/.test(MATERIALS[MAT_KEYS[this.mat[i]]].group) || MAT_KEYS[this.mat[i]] === 'concrete' ? 1 : 0; }
+      // Sloped plates: in 3D a shell hitting at a steep angle gets turned and has to tear a longer, wider hole, which a flat slice
+      // underplays, so steep plates hold on harder (tuned to WWII slope-effect tables; nothing changes below about 30°)
+      const slopeK = proj.kind === 'ke' && proj.d.shape !== 'rod' ? K.SLOPE : 0;   // long darts and jets care much less about slope
+      const slopeF = [1, ...this.plates.map(pl => 1 + slopeK * Math.max(0, 1 / Math.max(0.2, Math.abs(pl.f.n[0])) - K.SLOPE0))];
+      for (let i = 0; i < this.n; i++) if (this.body[i] > 0) { const mp = MP[this.mat[i]]; this.ax[i] = this.px[i]; this.ay[i] = this.py[i]; this.ag[i] = K.GRIP * mp.ey * mp.E * K.STRENGTH * volume / bite * slopeF[this.body[i]]; this.attached[i] = 1; this.rubble[i] = /Ceramics/.test(MATERIALS[MAT_KEYS[this.mat[i]]].group) || MAT_KEYS[this.mat[i]] === 'concrete' ? 1 : 0; }
 
       // time step from the fastest sound speed present
       let cmax = 1; for (let i = 0; i < this.n; i++) cmax = Math.max(cmax, MP[this.mat[i]].c);
@@ -343,6 +373,7 @@
       this.kind = proj.kind; this.design = proj.d; this.v0 = v0;
       this.triggered = false; this.events = []; this.detonated = new Set();
       this.maxT = 293; this.res = null;
+      this.gone = scene.trackGone ? [] : null;   // particles that flew out of the world box (vehicles follow them further)
       this.lastPlate = this.plates.reduce((a, b) => (b.f.o[0] + b.T * b.f.n[0] > a.f.o[0] + a.T * a.f.n[0] ? b : a));
       this.firstPlate = this.plates.reduce((a, b) => (b.f.o[0] < a.f.o[0] ? b : a));
       this.hitAt = null; this.residual = 0; this.everBehind = false;
@@ -521,7 +552,7 @@
           const x = px[i] + vxi * dt, y = py[i] + vyi * dt;
           px[i] = x; py[i] = y;
           if (v2 > vmax2) vmax2 = v2;
-          if (x < bx0 || x > bx1 || y < by0 || y > by1) { alive[i] = 0; continue; }
+          if (x < bx0 || x > bx1 || y < by0 || y > by1) { alive[i] = 0; if (this.gone) this.gone.push(i); continue; }
         }
         let Ti = T[i];
         if (Ti > 400) {
@@ -760,8 +791,8 @@
   function frac(x) { return x - Math.floor(x); }
 
   // Tuning knobs, set by calibrating against the classic penetration formulas (see the Learn page)
-  const K = { STRENGTH: 1, STRETCH: 1, COMP: 1, CRUSH: 1, DUCT: 1, GRIP: 0.8, PSTR: 1, PCRUSH: 1, PIN: 0, DAMP: 0.02, CDAMP: 0.05, JET_SCALE: 1, JET_MASS: 1.25, HESH_PUSH: 0.3, HESH_CAP: 1, HE_PUSH: 0.35, ERA_FLY: 0.8 };
+  const K = { STRENGTH: 1, STRETCH: 1, COMP: 1, CRUSH: 1, DUCT: 1, GRIP: 0.8, PSTR: 1, PCRUSH: 1, PIN: 0, DAMP: 0.02, CDAMP: 0.05, JET_SCALE: 1, JET_MASS: 1.25, HESH_PUSH: 0.3, HESH_CAP: 1, HE_PUSH: 0.35, ERA_FLY: 0.8, SLOPE: 3, SLOPE0: 1.15 };
   function tune(o) { Object.assign(K, o); }
 
-  return { MATERIALS, MAT_KEYS, MAT_INDEX, PROJECTILES, ARMORS, Sim, makeShape, plateThickness, autoLen, pickH, sceneArea, projCal, tune };
+  return { MATERIALS, MAT_KEYS, MAT_INDEX, PROJECTILES, ARMORS, Sim, makeShape, plateThickness, autoLen, pickH, sceneArea, projCal, tune, inPoly };
 });

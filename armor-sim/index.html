@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Armor Pen Sim · Mikaeel</title>
-  <meta name="description" content="A particle physics sandbox: fire bullets, shells, darts and shaped charges at armor and watch it bend, crack, glow and spall. Plus a calculator and a target range.">
+  <meta name="description" content="A particle physics sandbox: fire bullets, shells, darts and shaped charges at armor and tank cut-aways, see what happens inside, and build your own vehicles. Plus a calculator and a target range.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -142,6 +142,25 @@
     .sb-live { font: 12px var(--mono); color: var(--muted); }
     .sb-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; font-size: 12.5px; color: var(--text-2); }
     .sb-legend i { display: inline-block; width: 130px; height: 10px; border-radius: 5px; }
+    .sb-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+    .aim-info { font-size: 13px; color: var(--text-2); margin-top: 10px; padding: 8px 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px; line-height: 1.45; }
+    .aim-info b { color: var(--text); }
+    .sb-view.editing canvas { touch-action: none; cursor: default; }
+    .sb-toast { position: absolute; left: 50%; top: 40px; transform: translateX(-50%); background: rgba(9, 12, 15, .92); border: 1px solid var(--line-2); border-radius: 10px; padding: 8px 14px; font-size: 14px; max-width: 90%; text-align: center; pointer-events: none; }
+    .ed-name { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+    .ed-name input, .ed-field input[type=text] { width: 100%; background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 8px; padding: 7px 9px; font: inherit; color: var(--text); }
+    .ed-add { display: flex; flex-wrap: wrap; gap: 5px; }
+    .ed-sel { border: 1px solid var(--accent); border-radius: 12px; padding: 10px; margin-top: 12px; background: var(--panel-2); }
+    .ed-sel .pc-head b { font-size: 14px; }
+    .ed-field { display: grid; gap: 4px; margin-top: 8px; font-size: 13px; color: var(--muted); }
+    .ed-field select { margin-top: 0; color: var(--text); }
+    .ed-link { width: 100%; margin-top: 8px; background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 8px; padding: 6px 8px; font: 12px var(--mono); color: var(--text-2); }
+    .mchips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .mchip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line-2); background: var(--panel-2); border-radius: 8px; padding: 4px 8px; font-size: 13px; color: var(--text-2); }
+    .mchip b { font-family: var(--mono); font-size: 11.5px; letter-spacing: .3px; }
+    .mchip.s1 { border-color: var(--warn); } .mchip.s1 b { color: var(--warn); }
+    .mchip.s2 { border-color: var(--crit); background: rgba(208, 59, 59, .14); } .mchip.s2 b { color: #ff8a80; }
+    .mchip.s0 b { color: var(--muted); }
 
     /* Target range */
     .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
@@ -193,6 +212,7 @@
       canvas.xs { height: 270px; }
       .tank-view canvas { height: 340px; }
       .sb-view canvas { height: 380px; }
+      .sb-view.veh canvas { height: 300px; }
       #sb-controls { position: static; max-height: none; overflow: visible; }
       .sliders { grid-template-columns: 1fr; gap: 10px; }
     }
@@ -237,13 +257,50 @@
         <p class="blurb" id="sb-proj-info"></p>
         <div class="field" id="sb-v-field"><label for="sb-v">Impact speed</label><output id="sb-v-out"></output><input type="range" id="sb-v" min="100" max="2100" step="10"></div>
         <p class="blurb" id="sb-v-note" hidden></p>
-        <div class="field"><label for="sb-aim">Aim higher or lower</label><output id="sb-aim-out"></output><input type="range" id="sb-aim" min="-300" max="300" step="5"></div>
+        <div class="field" id="sb-aim-field"><label for="sb-aim">Aim higher or lower</label><output id="sb-aim-out"></output><input type="range" id="sb-aim" min="-300" max="300" step="5"></div>
       </section>
       <section class="card" aria-labelledby="h-sba">
-        <h2 id="h-sba"><span>Armor</span><span>cutaways</span></h2>
-        <select id="sb-preset" aria-label="Armor setup" style="margin-top:0"></select>
-        <div id="sb-plates"></div>
-        <button class="btn small wide" id="sb-add-plate">+ Add a plate</button>
+        <h2 id="h-sba"><span>Target</span><span id="sb-target-kind">cut-aways</span></h2>
+        <div class="seg sm" id="sb-target" role="group" aria-label="What to shoot at" style="margin-top:0">
+          <button data-target="armor">🧱 Armor plates</button><button data-target="vehicle">🚜 Vehicles</button>
+        </div>
+        <div id="sb-armor-panel">
+          <select id="sb-preset" aria-label="Armor setup"></select>
+          <div id="sb-plates"></div>
+          <button class="btn small wide" id="sb-add-plate">+ Add a plate</button>
+        </div>
+        <div id="sb-veh-panel" hidden>
+          <select id="sb-veh" aria-label="Vehicle"></select>
+          <p class="blurb" id="sb-veh-info"></p>
+          <div class="seg-label">Shot comes from</div>
+          <div class="seg sm" id="sb-from" role="group" aria-label="Shot comes from" style="margin-top:6px">
+            <button data-from="front">⬅ Front</button><button data-from="rear">Behind ➡</button><button data-from="top">⬇ Above</button>
+          </div>
+          <div class="field"><label for="sb-tilt">Tilt the shot</label><output id="sb-tilt-out"></output><input type="range" id="sb-tilt" min="-30" max="30" step="1"></div>
+          <p class="aim-info" id="sb-aim-info"></p>
+          <div class="sb-row">
+            <button class="btn small" id="sb-veh-edit">✏️ Edit this vehicle</button>
+            <button class="btn small" id="sb-veh-new">➕ Build a new one</button>
+          </div>
+        </div>
+        <div id="sb-ed-panel" hidden>
+          <label class="ed-name">Name <input type="text" id="ed-name" maxlength="40" autocomplete="off"></label>
+          <div class="pc-sub">Add to your vehicle</div>
+          <div class="ed-add" id="ed-add">
+            <button class="mini" data-add="plate">🧱 Armor plate</button><button class="mini" data-add="crew">🧑 Crew</button><button class="mini" data-add="ammo">💣 Ammo</button>
+            <button class="mini" data-add="fuel">⛽ Fuel</button><button class="mini" data-add="engine">⚙️ Engine</button><button class="mini" data-add="trans">🔩 Gearbox</button><button class="mini" data-add="gun">🎯 Gun</button>
+          </div>
+          <div id="ed-sel"></div>
+          <label class="toggle"><input type="checkbox" id="ed-tracks"> Tracks and wheels</label>
+          <div class="sb-row">
+            <button class="btn small fire" id="ed-save">✓ Save &amp; try it</button>
+            <button class="btn small" id="ed-share">🔗 Share link</button>
+            <button class="btn small" id="ed-cancel">✕ Cancel</button>
+            <button class="btn small" id="ed-delete">🗑 Delete</button>
+          </div>
+          <input type="text" id="ed-link" class="ed-link" readonly hidden aria-label="Share link">
+          <p class="blurb">Drag the <b>round handles</b> to reshape a plate (drop one onto another to join them). Drag plates and boxes to move them, and the <b>square handle</b> to resize a box. A plate's first layer is its outside.</p>
+        </div>
       </section>
     </aside>
 
@@ -278,6 +335,7 @@
       <div class="view sb-view">
         <canvas id="sb-canvas" role="img" aria-label="Particle simulation of the projectile and the armor. Drag to look around, scroll to zoom, click the armor to aim."></canvas>
         <div class="view-tag">PARTICLE SANDBOX · 2D SLICE<span class="tag-more"> · DRAG TO LOOK AROUND</span></div>
+        <div class="sb-toast" id="sb-toast" role="status" hidden></div>
         <div class="sb-zoom"><button id="sb-zoom-in" aria-label="Zoom in">+</button><button id="sb-zoom-out" aria-label="Zoom out">−</button><button id="sb-zoom-fit" aria-label="Fit everything in view" title="Fit">⤢</button></div>
       </div>
       <div class="sb-bar">
@@ -436,7 +494,18 @@
       <div class="card">
         <h3>📐 Why "2D slice"?</h3>
         <p>The Sandbox simulates a thin slice through the middle of the shell and the armor. Real armor is 3D, and the metal all around the hole holds it in place, so the Sandbox adds a <b>3D grip</b> to make up for the missing direction.</p>
-        <p>Its strength was tuned so solid shells land close to the classic De Marre formula (for example, a 75 mm shell at 620 m/s stops at about 100 mm of steel). Full-size shells and shaped charges land within about 10% of the classic numbers; thin sub-calibre cores (APCR, APDS) come out lower. It's a physics toy, not real data.</p>
+        <p>Its strength was tuned so solid shells land close to the classic De Marre formula (for example, a 75 mm shell at 620 m/s stops at about 100 mm of steel), and steep plates were tuned to match WWII slope tests: an 88 mm shell that beats 154 mm of flat steel only beats about 72 mm sloped at 55°. Full-size shells and shaped charges land within about 10% of the classic numbers; thin sub-calibre cores (APCR, APDS) come out lower. It's a physics toy, not real data.</p>
+      </div>
+      <div class="card">
+        <h3>🚜 Vehicles and the builder</h3>
+        <p>Pick <b>Vehicles</b> in the Sandbox to shoot at side cut-aways of tanks. Only the armor plates the shell actually hits are turned into particles; the rest of the vehicle is drawn solid. After the hit, the shell and every bit of armor it knocked loose fly on through the inside:</p>
+        <ul>
+          <li><b>🧑 Crew</b> get hurt or knocked out. If more than half are out, the vehicle is knocked out.</li>
+          <li><b>💣 Ammo</b> can explode and destroy the whole vehicle, unless it's behind blow-out panels.</li>
+          <li><b>⛽ Fuel</b> can catch fire, and a wrecked <b>⚙️ engine</b> or gearbox stops it moving.</li>
+          <li><b>APHE</b> shells carry a little explosive that goes off just after they get inside.</li>
+        </ul>
+        <p>The real tanks use rough armor numbers from public sources, and their insides are simplified. With <b>Build a new one</b> you can draw your own vehicle, save it, and send it to a friend with a link.</p>
       </div>
       <div class="card">
         <h3>🧮 How the Calculator works</h3>
@@ -447,6 +516,7 @@
   </main>
 
   <script src="engine.js"></script>
+  <script src="vehicles.js"></script>
   <script>
   'use strict';
   // ===================== Little helpers =====================
