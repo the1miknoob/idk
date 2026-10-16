@@ -1,0 +1,1478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Armor Pen Sim · Mikaeel</title>
+  <meta name="description" content="Fire shells at armor and see what happens: angles, ricochets, shaped charges, spaced armor and reactive tiles. Plus a target range with tanks you can turn and shoot.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0d1013; --panel: #151a1f; --panel-2: #1b2128; --line: #29313a; --line-2: #3a4450;
+      --text: #ecf0f3; --text-2: #b7c0c9; --muted: #838e9a;
+      --accent: #ffb020;
+      --good: #0ca30c; --warn: #fab219; --serious: #ec835a; --crit: #d03b3b;   /* status colors: always shown with an icon + words */
+      --series: #3987e5;
+      --mono: "JetBrains Mono", ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    [hidden] { display: none !important; }
+    body { background: var(--bg); color: var(--text); font-family: "Space Grotesk", system-ui, sans-serif; min-height: 100vh; }
+    button, input, select { font: inherit; color: inherit; }
+    a { color: var(--accent); }
+    kbd { font: 11px var(--mono); border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; opacity: .8; }
+
+    /* Top bar */
+    .top { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: rgba(13, 16, 19, .92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+    .back { color: var(--muted); text-decoration: none; font-size: 20px; }
+    .brand { font-family: var(--mono); font-weight: 700; letter-spacing: 2px; color: var(--accent); white-space: nowrap; }
+    .modes { display: flex; gap: 3px; margin-left: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+    .modes button { border: none; background: none; padding: 6px 12px; border-radius: 7px; cursor: pointer; color: var(--text-2); white-space: nowrap; }
+    .modes button.on { background: var(--accent); color: #1d1400; font-weight: 700; }
+    .icon { background: var(--panel); border: 1px solid var(--line); border-radius: 9px; width: 36px; height: 36px; cursor: pointer; flex: none; }
+
+    /* Layout */
+    main.app { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 16px; padding: 16px; max-width: 1500px; margin: 0 auto; align-items: start; }
+    body.mode-learn main.app { grid-template-columns: minmax(0, 1fr); }
+    body.mode-learn .controls { display: none; }
+    body.mode-range .lab-only { display: none; }
+    .controls { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 72px; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+    .card h2 { font-family: var(--mono); font-size: 12px; letter-spacing: 1.8px; color: var(--muted); margin-bottom: 10px; font-weight: 600; text-transform: uppercase; display: flex; justify-content: space-between; gap: 8px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+    .chips button { border: 1px solid var(--line-2); background: var(--panel-2); border-radius: 8px; padding: 5px 9px; cursor: pointer; font-family: var(--mono); font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+    .chips button:hover { border-color: var(--muted); }
+    .chips button.on { border-color: var(--accent); color: var(--accent); background: rgba(255, 176, 32, .1); }
+    .chips.mats { margin-top: 12px; }
+    .chips.mats button { font-family: inherit; font-weight: 500; }
+    .field { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 10px; margin-top: 12px; font-size: 14px; color: var(--text-2); }
+    .field output { font-family: var(--mono); color: var(--text); font-size: 13px; }
+    .field input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+    .field.sub { margin-left: 24px; margin-top: 6px; }
+    select { width: 100%; margin-top: 10px; background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 8px; padding: 7px 9px; }
+    .toggle { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 14px; color: var(--text-2); cursor: pointer; }
+    .toggle input { accent-color: var(--accent); width: 16px; height: 16px; }
+    .blurb { font-size: 13px; color: var(--muted); margin-top: 8px; line-height: 1.45; }
+    .shell-art { margin-top: 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; height: 64px; display: grid; place-items: center; }
+    .shell-art svg { width: 200px; height: 50px; }
+    .big-stat { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .big-stat span { color: var(--text-2); font-size: 13px; }
+    .big-stat b { font-size: 26px; font-weight: 700; white-space: nowrap; }
+    .seg { display: flex; gap: 4px; margin-top: 12px; }
+    .seg button { flex: 1; border: 1px solid var(--line-2); background: var(--panel-2); border-radius: 8px; padding: 6px 4px; cursor: pointer; font-size: 13px; color: var(--text-2); }
+    .seg button.on { border-color: var(--accent); color: var(--accent); }
+    .seg-label { font-size: 14px; color: var(--text-2); margin-top: 12px; }
+
+    /* Stage */
+    .stage { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+    .view { position: relative; background: radial-gradient(ellipse at 50% 40%, #1a2128, #0f1317 75%); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+    canvas.xs { display: block; width: 100%; height: 380px; }
+    canvas.xs.mini { height: 160px; border-radius: 10px; background: #0f1317; border: 1px solid var(--line); margin-bottom: 10px; }
+    .view-tag { position: absolute; left: 12px; top: 10px; font: 600 11px var(--mono); letter-spacing: 1.5px; color: var(--muted); pointer-events: none; }
+    .fire-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .btn { border: 1px solid var(--line-2); background: var(--panel-2); border-radius: 10px; padding: 9px 16px; cursor: pointer; font-weight: 700; }
+    .btn:hover { filter: brightness(1.15); }
+    .btn.fire { background: var(--crit); border-color: var(--crit); color: #fff; }
+    .btn.small { padding: 6px 12px; font-size: 13px; }
+    .chance { margin-left: auto; font-size: 14px; color: var(--text-2); }
+    .chance b { color: var(--text); }
+    .result { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+    .result .txt { flex: 1; min-width: 220px; font-size: 15px; line-height: 1.45; }
+    .result ul { list-style: none; margin-top: 6px; font-size: 13px; color: var(--muted); }
+    .result li { margin-top: 3px; }
+    .badge { flex: none; font-family: var(--mono); font-weight: 700; font-size: 13px; padding: 4px 10px; border-radius: 7px; color: #101010; white-space: nowrap; }
+    .badge.good { background: var(--good); } .badge.warn { background: var(--warn); } .badge.serious { background: var(--serious); } .badge.crit { background: var(--crit); color: #fff; } .badge.idle { background: var(--line-2); color: var(--text); }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .chart { position: relative; }
+    .chart svg { display: block; width: 100%; overflow: visible; }
+    .ctip { position: absolute; pointer-events: none; background: #0b0e11; border: 1px solid var(--line-2); border-radius: 8px; padding: 6px 9px; font-size: 12.5px; white-space: nowrap; z-index: 5; box-shadow: 0 6px 18px rgba(0, 0, 0, .4); }
+    .ctip b { font-size: 14px; }
+    .ctip small { display: block; color: var(--text-2); }
+    .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--text-2); margin-top: 10px; }
+    .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+    .sum { font-size: 14px; color: var(--text-2); margin-top: 8px; }
+    .sum b { color: var(--text); }
+    details { margin-top: 10px; font-size: 13px; color: var(--text-2); }
+    summary { cursor: pointer; color: var(--muted); }
+    table { border-collapse: collapse; margin-top: 6px; width: 100%; font-variant-numeric: tabular-nums; }
+    td, th { text-align: left; padding: 3px 8px 3px 0; border-bottom: 1px solid var(--line); font-weight: 400; }
+    th { color: var(--muted); }
+    .stack { display: flex; gap: 2px; height: 28px; border-radius: 6px; overflow: hidden; margin-top: 4px; }
+    .stack div { display: grid; place-items: center; font: 700 12px var(--mono); color: #101010; min-width: 0; overflow: hidden; }
+    .stack div:first-child { border-radius: 4px 0 0 4px; } .stack div:last-child { border-radius: 0 4px 4px 0; }
+
+    /* Target range */
+    .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .toolbar .toggle { margin-top: 0; }
+    .toolbar .btn { margin-left: auto; }
+    .range-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; align-items: start; }
+    .tank-view canvas { display: block; width: 100%; height: 470px; cursor: crosshair; touch-action: pan-y; }
+    .tank-view canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .hint { position: absolute; left: 12px; top: 10px; font: 600 11px var(--mono); letter-spacing: 1.2px; color: var(--muted); pointer-events: none; }
+    .tip { position: absolute; z-index: 5; pointer-events: none; width: 250px; background: rgba(9, 12, 15, .96); border: 1px solid var(--line-2); border-radius: 10px; padding: 8px 10px; font-size: 13px; line-height: 1.4; }
+    .tip b { font-size: 14px; }
+    .tip .m { color: var(--text-2); }
+    .tip .v { margin-top: 4px; display: flex; gap: 6px; align-items: center; }
+    .overlay-legend { position: absolute; left: 12px; bottom: 10px; margin: 0; background: rgba(9, 12, 15, .85); border: 1px solid var(--line); border-radius: 8px; padding: 5px 9px; }
+    .banner { position: absolute; inset: auto 0 0 0; padding: 14px; text-align: center; background: linear-gradient(transparent, rgba(0, 0, 0, .8) 40%); }
+    .banner b { display: block; font-size: 22px; }
+    .banner .btn { margin-top: 8px; }
+    .side { display: flex; flex-direction: column; gap: 12px; }
+    .tname { font-size: 20px; font-weight: 700; }
+    .tclass { color: var(--muted); font-size: 13px; }
+    .meter { height: 12px; border-radius: 6px; background: #3a1f1f; margin-top: 10px; overflow: hidden; }
+    .meter div { height: 100%; border-radius: 6px; transition: width .4s, background .4s; }
+    .meter-row { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-2); margin-top: 5px; }
+    .flags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-size: 12.5px; }
+    .flags span { background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 6px; padding: 2px 7px; }
+    #range-result .txt { font-size: 14px; }
+    #log { list-style: none; max-height: 230px; overflow: auto; font-size: 13px; }
+    #log li { display: flex; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+    #log li span:first-child { font-family: var(--mono); color: var(--muted); }
+    #log .empty { color: var(--muted); }
+    .sliders { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
+    .sliders .field { margin-top: 0; }
+
+    /* Learn */
+    .learn { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 14px; }
+    .learn .card h3 { font-size: 18px; margin-bottom: 8px; }
+    .learn .card p, .learn li { font-size: 14.5px; line-height: 1.55; color: var(--text-2); }
+    .learn .card p + p { margin-top: 8px; }
+    .learn ul { margin: 6px 0 0 18px; }
+    .learn li { margin-top: 4px; }
+    .learn li b, .learn p b { color: var(--text); }
+    .learn svg { display: block; width: 100%; height: auto; margin: 4px 0 10px; }
+
+    @media (max-width: 1100px) { .range-wrap { grid-template-columns: 1fr; } .grid2 { grid-template-columns: 1fr; } }
+    @media (max-width: 820px) {
+      main.app { grid-template-columns: 1fr; padding: 10px; }
+      .stage { order: -1; }
+      .controls { position: static; }
+      canvas.xs { height: 270px; }
+      .tank-view canvas { height: 340px; }
+      .sliders { grid-template-columns: 1fr; gap: 10px; }
+    }
+    @media (max-width: 560px) {
+      .brand { font-size: 13px; letter-spacing: 1px; }
+      .top { gap: 8px; padding: 8px 10px; flex-wrap: wrap; }
+      .modes { order: 3; width: 100%; margin-left: 0; }
+      .modes button { flex: 1; padding: 6px 4px; }
+      #mute { margin-left: auto; }
+    }
+  </style>
+  <meta name="theme-color" content="#0d1013">
+  <meta property="og:title" content="Armor Pen Sim · Mikaeel">
+  <meta property="og:description" content="Fire shells at armor and see what happens: angles, ricochets, shaped charges, spaced armor and reactive tiles.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://the1miknoob.github.io/idk/icon-512.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <link rel="apple-touch-icon" href="../apple-touch-icon.png">
+  <script src="../site.js" defer></script>
+</head>
+<body class="mode-lab">
+  <header class="top">
+    <a class="back" href="../" title="Back to Mikaeel's site" aria-label="Back to Mikaeel's site">←</a>
+    <div class="brand">🛡️ ARMOR PEN SIM</div>
+    <nav class="modes" id="modes" aria-label="Mode">
+      <button data-mode="lab">🔬 Lab</button>
+      <button data-mode="range">🎯 Target range</button>
+      <button data-mode="learn">📘 Learn</button>
+    </nav>
+    <button class="icon" id="mute" aria-label="Sound on or off" title="Sound on or off">🔊</button>
+  </header>
+
+  <main class="app">
+    <!-- ===== Controls (shared by the Lab and the Target range) ===== -->
+    <aside class="controls">
+      <section class="card" aria-labelledby="h-shell">
+        <h2 id="h-shell"><span>Shell</span><span id="shell-kind"></span></h2>
+        <div class="chips" id="type-chips" role="group" aria-label="Shell type"></div>
+        <p class="blurb" id="type-blurb"></p>
+        <div class="shell-art" id="shell-art" aria-hidden="true"></div>
+        <select id="preset" aria-label="Shell size"></select>
+        <div id="shell-fields"></div>
+        <div class="big-stat"><span id="pen-label">Penetration at this range</span><b id="pen-now">–</b></div>
+      </section>
+      <section class="card">
+        <h2><span>Range</span></h2>
+        <div class="field" style="margin-top:0"><label for="dist">Distance to the target</label><output id="dist-out"></output><input type="range" id="dist" min="0" max="3000" step="50"></div>
+      </section>
+      <section class="card lab-only" aria-labelledby="h-armor">
+        <h2 id="h-armor"><span>Armor plate</span></h2>
+        <div class="field" style="margin-top:0"><label for="thick">Thickness</label><output id="thick-out"></output><input type="range" id="thick" min="5" max="600" step="1"></div>
+        <div class="field"><label for="angle">Angle (0° = facing you flat)</label><output id="angle-out"></output><input type="range" id="angle" min="0" max="85" step="1"></div>
+        <div class="chips mats" id="mat-chips" role="group" aria-label="Armor material"></div>
+        <label class="toggle"><input type="checkbox" id="spaced"> Spaced plate in front</label>
+        <div class="field sub" id="gap-field"><label for="gap">Air gap</label><output id="gap-out"></output><input type="range" id="gap" min="50" max="800" step="10"></div>
+        <label class="toggle"><input type="checkbox" id="era"> Reactive tiles on top</label>
+      </section>
+    </aside>
+
+    <!-- ===== Lab ===== -->
+    <section class="stage" id="stage-lab">
+      <div class="view">
+        <canvas class="xs" id="xs-lab" role="img" aria-label="Cut-away view of the shell and the armor"></canvas>
+        <div class="view-tag">CUT-AWAY VIEW · SHELL NOT TO SCALE</div>
+      </div>
+      <div class="fire-row">
+        <button class="btn fire" id="fire">🔥 Fire <kbd>Space</kbd></button>
+        <button class="btn" id="fire100">🎲 Fire 100 shots</button>
+        <span class="chance" id="chance"></span>
+      </div>
+      <div class="card result" id="lab-result" aria-live="polite"><span class="badge idle">READY</span><div class="txt">Set up a shell and a plate, then press Fire.</div></div>
+      <div class="card" id="many" hidden></div>
+      <div class="grid2">
+        <div class="card">
+          <h2><span>Penetration vs distance</span><span id="dist-unit">mm</span></h2>
+          <div class="chart" id="dist-chart"></div>
+          <details><summary>Show as a table</summary><table id="dist-table"></table></details>
+        </div>
+        <div class="card">
+          <h2><span>Which angles work?</span><span>0° – 85°</span></h2>
+          <div class="chart" id="angle-chart"></div>
+          <p class="sum" id="angle-sum"></p>
+          <div class="legend">
+            <span><i style="background:var(--good)"></i>✓ Gets through</span>
+            <span><i style="background:var(--warn)"></i>≈ Maybe</span>
+            <span><i style="background:var(--crit)"></i>✗ Stopped</span>
+            <span><i style="background:var(--serious)"></i>↗ Bounces off</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Target range ===== -->
+    <section class="stage" id="stage-range" hidden>
+      <div class="toolbar">
+        <div class="chips" id="tank-chips" role="group" aria-label="Target vehicle"></div>
+        <label class="toggle"><input type="checkbox" id="heat"> Show weak spots</label>
+        <button class="btn small" id="repair">↺ Repair</button>
+      </div>
+      <div class="range-wrap">
+        <div class="view tank-view">
+          <canvas id="tank" tabindex="0" aria-label="Target vehicle. Drag to turn it, click a spot to fire. Arrow keys turn it, Enter fires at the middle."></canvas>
+          <div class="hint" id="tank-hint">DRAG TO TURN · CLICK TO FIRE</div>
+          <div class="tip" id="tip" hidden></div>
+          <div class="legend overlay-legend" id="heat-legend" hidden>
+            <span><i style="background:var(--good)"></i>✓ Gets through</span>
+            <span><i style="background:var(--warn)"></i>≈ Maybe</span>
+            <span><i style="background:var(--crit)"></i>✗ Stopped</span>
+            <span><i style="background:var(--serious)"></i>↗ Bounces</span>
+          </div>
+          <div class="banner" id="banner" hidden></div>
+        </div>
+        <div class="side">
+          <div class="card">
+            <div class="tname" id="t-name"></div>
+            <div class="tclass" id="t-class"></div>
+            <div class="meter" role="meter" aria-label="Target health" id="hp-meter"><div id="hp-bar"></div></div>
+            <div class="meter-row"><span id="hp-text"></span><span id="shots-text"></span></div>
+            <div class="flags" id="flags"></div>
+          </div>
+          <div class="card">
+            <h2><span>Last shot</span></h2>
+            <canvas class="xs mini" id="xs-mini" role="img" aria-label="Cut-away view of the last shot"></canvas>
+            <div class="result" id="range-result" aria-live="polite"></div>
+          </div>
+          <div class="card">
+            <h2><span>Shot log</span></h2>
+            <ol id="log"></ol>
+          </div>
+        </div>
+      </div>
+      <div class="card sliders">
+        <div class="field"><label for="yaw">Turn the target</label><output id="yaw-out"></output><input type="range" id="yaw" min="-180" max="180" step="1"></div>
+        <div class="field"><label for="pitch">Look from higher up</label><output id="pitch-out"></output><input type="range" id="pitch" min="0" max="60" step="1"></div>
+      </div>
+    </section>
+
+    <!-- ===== Learn ===== -->
+    <section class="stage learn" id="stage-learn" hidden>
+      <div class="card">
+        <h3>📐 Why tilted armor is stronger</h3>
+        <svg viewBox="0 0 300 110" role="img" aria-label="A flat plate and a tilted plate of the same thickness. The arrow goes through more metal in the tilted one.">
+          <rect x="70" y="10" width="16" height="90" fill="#6b7682"/><line x1="10" y1="55" x2="110" y2="55" stroke="#ffb020" stroke-width="3"/>
+          <g transform="rotate(35 230 55)"><rect x="222" y="0" width="16" height="110" fill="#6b7682"/></g>
+          <line x1="160" y1="55" x2="275" y2="55" stroke="#ffb020" stroke-width="3"/>
+          <line x1="218" y1="55" x2="242" y2="55" stroke="#fff" stroke-width="5"/>
+          <text x="78" y="108" fill="#b7c0c9" font-size="11" text-anchor="middle">flat</text><text x="230" y="108" fill="#b7c0c9" font-size="11" text-anchor="middle">tilted</text>
+        </svg>
+        <p>A shell flies in a straight line. If the plate is tilted, the shell has to travel through <b>more metal</b> to get out the other side.</p>
+        <p>The math: <b>armor in the way = thickness ÷ cos(angle)</b>. Here's 100 mm of steel:</p>
+        <table id="los-table"></table>
+      </div>
+      <div class="card">
+        <h3>↗ Ricochets</h3>
+        <p>If the plate is tilted far enough, the shell can <b>skip off</b> like a stone on water. Each shell type has its own limit:</p>
+        <ul id="rico-list"></ul>
+        <p><b>Overmatch:</b> if a solid shell is more than 3 times wider than the plate is thick, it just bites in and can't bounce.</p>
+      </div>
+      <div class="card">
+        <h3>🚀 Shell types</h3>
+        <ul id="type-list"></ul>
+      </div>
+      <div class="card">
+        <h3>🧱 Special armor</h3>
+        <ul>
+          <li><b>Composite:</b> layers of ceramic and other materials. Much stronger than steel for its thickness, especially against shaped charges.</li>
+          <li><b>Spaced armor:</b> a thin plate with an air gap behind it. It sets off HEAT and HESH early, so the jet weakens and the squash head is wasted.</li>
+          <li><b>Reactive tiles:</b> boxes that explode outward when hit. They wreck shaped-charge jets and shove solid shells a little.</li>
+          <li><b>Aluminium:</b> light and easy to move around, but you need about 3 times more of it to stop the same shell.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>📏 Distance</h3>
+        <p><b>Solid shells</b> (AP, APCR, APDS and darts) slow down in the air, so they punch less from far away. Light shells like APCR slow down the fastest.</p>
+        <p><b>HEAT, HESH and HE</b> do their work with an explosion when they hit, so distance doesn't change how much they can get through.</p>
+      </div>
+      <div class="card">
+        <h3>🎯 Target range tips</h3>
+        <ul>
+          <li>Turn on <b>Show weak spots</b> to see where your shell can get through.</li>
+          <li><b>Turning</b> a tank makes its front armor tilted, so it's harder to get through, but it shows more of its side.</li>
+          <li>Lower front plates, gun mantlets and roofs are often weaker.</li>
+          <li>Hitting the tracks stops the target from moving. Hitting the barrel damages its gun.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>🧮 How this sim works</h3>
+        <p>This is a <b>simplified, game-style model</b>, like the ones tank games use. Full-size solid shells use the <b>De Marre formula</b> from 1886. Long darts use a simple "wears away as it goes" estimate. Shaped charges get a set amount of penetration for their size.</p>
+        <p>Real shells and armor are much more complicated, so the numbers here are for fun and learning, not real data. The vehicles on the target range are made up.</p>
+      </div>
+    </section>
+  </main>
+
+  <script>
+  'use strict';
+  // ===================== Little helpers =====================
+  const $ = id => document.getElementById(id);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const rad = d => d * Math.PI / 180;
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+  };
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Chance that a bell-curve value is below z (used for "how likely is it to get through")
+  function Phi(z) {
+    const t = 1 / (1 + 0.2316419 * Math.abs(z)), d = 0.3989423 * Math.exp(-z * z / 2);
+    const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+    return z > 0 ? 1 - p : p;
+  }
+  function gauss() { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+  const STATUS = { good: '#0ca30c', warn: '#fab219', serious: '#ec835a', crit: '#d03b3b' };
+
+  // ===================== Shells =====================
+  // kind: ke = solid shot (kinetic), ce = shaped charge, hesh = squash head, he = explosive
+  // rico: [angle where ricochets start, angle where every shot bounces]; norm: degrees it "bites" into the plate; drag: how slowly it loses speed (m)
+  const TYPES = {
+    ap:     { short: 'AP', name: 'Armor-piercing', kind: 'ke', rico: [65, 75], norm: 5, drag: 9000,
+              blurb: 'A solid, heavy steel shell. It smashes through with raw momentum.' },
+    apcr:   { short: 'APCR', name: 'Hard-core shot', kind: 'ke', rico: [60, 70], norm: 2, drag: 4500,
+              blurb: 'A light shell with a super-hard core inside. Very fast up close, but it slows down quickly.' },
+    apds:   { short: 'APDS', name: 'Discarding sabot', kind: 'ke', rico: [70, 78], norm: 3, drag: 16000,
+              blurb: 'A thin, hard core wrapped in a "sabot" that falls off after it leaves the gun.' },
+    apfsds: { short: 'APFSDS', name: 'Long-rod dart', kind: 'ke', rico: [76, 84], norm: 1, drag: 25000,
+              blurb: 'A long, thin metal dart with fins, fired extremely fast. It wears itself away as it pushes through.' },
+    heat:   { short: 'HEAT', name: 'Shaped charge', kind: 'ce', rico: [80, 86], norm: 0,
+              blurb: 'Explodes on contact and focuses the blast into a super-fast jet of metal. Speed and distance don\'t matter.' },
+    hesh:   { short: 'HESH', name: 'Squash head', kind: 'hesh', rico: [75, 84], norm: 0,
+              blurb: 'Squishes onto the armor like putty, then explodes. The shock knocks a chunk off the inside.' },
+    he:     { short: 'HE', name: 'High explosive', kind: 'he', rico: [80, 86], norm: 0,
+              blurb: 'A big blast. It only gets through thin armor, but it\'s great against light vehicles and roofs.' },
+  };
+  // ✏️ EDIT: ready-made shells for each type
+  const PRESETS = {
+    ap:     [['Light gun · 37 mm', { cal: 37, v: 880 }], ['Medium gun · 75 mm', { cal: 75, v: 620 }], ['Heavy gun · 88 mm', { cal: 88, v: 780 }], ['Long gun · 100 mm', { cal: 100, v: 890 }], ['Huge gun · 128 mm', { cal: 128, v: 920 }]],
+    apcr:   [['Light gun · 57 mm', { cal: 57, v: 1200 }], ['Medium gun · 76 mm', { cal: 76, v: 1040 }], ['Heavy gun · 90 mm', { cal: 90, v: 1100 }]],
+    apds:   [['Medium gun · 84 mm', { cal: 84, v: 1430 }], ['Big gun · 105 mm', { cal: 105, v: 1470 }], ['Huge gun · 120 mm', { cal: 120, v: 1370 }]],
+    apfsds: [['Early dart · 400 mm rod', { len: 400, v: 1500 }], ['Dart · 550 mm rod', { len: 550, v: 1650 }], ['Long dart · 700 mm rod', { len: 700, v: 1700 }]],
+    heat:   [['Light · 75 mm, early design', { cal: 75, q: 0 }], ['Medium · 105 mm', { cal: 105, q: 1 }], ['Heavy · 120 mm, modern', { cal: 120, q: 2 }], ['Big · 150 mm, modern', { cal: 150, q: 2 }]],
+    hesh:   [['Medium · 105 mm', { cal: 105 }], ['Heavy · 120 mm', { cal: 120 }], ['Huge · 165 mm', { cal: 165 }]],
+    he:     [['Medium · 75 mm', { cal: 75 }], ['Heavy · 122 mm', { cal: 122 }], ['Huge · 152 mm', { cal: 152 }]],
+  };
+  const LIMITS = { ap: { cal: [20, 155], v: [400, 1100] }, apcr: { cal: [20, 128], v: [700, 1400] }, apds: { cal: [40, 125], v: [1000, 1600] },
+    apfsds: { len: [250, 900], v: [1200, 1900] }, heat: { cal: [40, 160] }, hesh: { cal: [75, 170] }, he: { cal: [20, 203] } };
+  const HEAT_Q = [3.2, 4.6, 6.0], HEAT_Q_NAMES = ['Early', 'Improved', 'Modern'];
+
+  const shellMass = cal => 0.016 * Math.pow(cal / 10, 3);   // kg, a typical full-size shell
+  // De Marre's formula (1886): how much steel a solid shell can push through (mm)
+  const deMarre = (D, M, V, K) => 100 * Math.pow(V, 1.4283) * Math.pow(M, 0.7143) / (Math.pow(K, 1.4283) * Math.pow(D / 100, 1.0714));
+  const speedAt = (s, d) => TYPES[s.type].drag ? s.v * Math.exp(-d / TYPES[s.type].drag) : s.v;
+  function penAt(s, d = 0) {
+    const v = speedAt(s, d), m = shellMass(s.cal);
+    switch (s.type) {
+      case 'ap': return deMarre(s.cal, m, v, 2000);
+      case 'apcr': return deMarre(s.cal * 0.47, m * 0.133, v, 1600);        // only the hard core does the work
+      case 'apds': return deMarre(s.cal * 0.57, m * 0.35, v, 2200);
+      case 'apfsds': return s.len * Math.sqrt(17.6 / 7.85) * (1 - Math.exp(-Math.pow(v / 1500, 2)));   // a heavy rod goes about its own length × √(density ratio) when very fast
+      case 'heat': return s.cal * HEAT_Q[s.q];
+      case 'hesh': return s.cal * 1.25;
+      case 'he': return 0.2 * Math.pow(s.cal / 10, 2);
+    }
+    return 0;
+  }
+
+  // ===================== Armor =====================
+  const MAT = {
+    rha:  { name: 'Rolled steel', short: 'steel', ke: 1, ce: 1, fill: '#6b7682', edge: '#b3bec9' },
+    cast: { name: 'Cast steel', short: 'cast steel', ke: 0.94, ce: 0.94, fill: '#626a72', edge: '#a2abb3' },
+    hhs:  { name: 'Hard steel', short: 'hard steel', ke: 1.15, ce: 1.05, fill: '#7b8896', edge: '#cdd6df' },
+    alu:  { name: 'Aluminium', short: 'aluminium', ke: 0.35, ce: 0.4, fill: '#a3adb7', edge: '#e5eaee' },
+    comp: { name: 'Composite', short: 'composite', ke: 1.7, ce: 2.6, fill: '#8c7853', edge: '#d3ba8d' },
+  };
+  const ERA_KE = 0.88, ERA_CE = 0.3, ERA_T = 30;   // reactive tiles: what's left of a solid shot / a jet; how thick they're drawn (mm)
+  const gapF = d => Math.max(0.35, Math.pow(0.94, d / 100));   // a HEAT jet loses ~6% for every 10 cm of air it crosses
+  const P = (t, mat = 'rha') => [{ kind: 'plate', t, mat }];
+  const SKIRT = (s, gap, t, mat = 'rha') => [{ kind: 'plate', t: s, mat: 'rha', skirt: true }, { kind: 'gap', d: gap }, { kind: 'plate', t, mat }];
+  const ERA = (...rest) => [{ kind: 'era' }, ...rest.flat()];
+  const stackText = st => st.map(l => l.kind === 'plate' ? `${l.t} mm ${l.skirt ? 'spaced plate' : MAT[l.mat].short}` : l.kind === 'gap' ? `${l.d} mm air gap` : 'reactive tiles').join(' + ');
+
+  // Everything about one shell meeting one stack of armor at one angle (no dice rolled yet)
+  function analyze(sh, stack, ang, dist) {
+    const T = TYPES[sh.type], kind = T.kind;
+    const power = penAt(sh, dist);
+    const plates = stack.filter(l => l.kind === 'plate');
+    const first = plates[0];
+    const bite = sh.type === 'apfsds' ? sh.len / 22 : sh.cal;   // how wide the front of the shell is
+    const over = kind === 'ke' && !!first && bite >= 3 * first.t;
+    const pRico = over ? 0 : smooth(T.rico[0], T.rico[1], ang);
+    const eff = kind === 'ke' ? Math.max(0, ang - T.norm - (over ? 10 : 0)) : ang;
+    const c = 1 / Math.max(0.05, Math.cos(rad(eff)));
+    let need = 0, blocked = false;
+    if (kind === 'ke' || kind === 'ce') {
+      // work backwards from the inside: how much punch is needed when it arrives?
+      for (let i = stack.length - 1; i >= 0; i--) {
+        const l = stack[i];
+        if (l.kind === 'plate') need += l.t * c * MAT[l.mat][kind];
+        else if (l.kind === 'era') need /= kind === 'ke' ? ERA_KE : ERA_CE;
+        else if (kind === 'ce') need /= gapF(l.d);
+      }
+    } else {
+      // blasts only work on the first thing they touch, so a gap or reactive tiles protect what's behind
+      const i0 = stack.findIndex(l => l.kind !== 'gap');
+      blocked = stack[i0].kind === 'era' || stack.slice(i0 + 1).some(l => l.kind !== 'plate');
+      // and they don't care much about the angle: they work on the plate's real thickness
+      need = plates.reduce((s, l) => s + l.t * (kind === 'hesh' && l.mat === 'comp' ? 2.2 : MAT[l.mat].ke), 0);
+    }
+    const sd = kind === 'ke' || kind === 'ce' ? 0.05 : 0.02;   // shells vary a little from shot to shot
+    const pBeat = blocked ? 0 : Phi((power - need) / (sd * power));
+    return { kind, power, need, pRico, pBeat, pPen: (1 - pRico) * pBeat, eff, c, over, blocked, sd, v: speedAt(sh, dist), ang };
+  }
+  // Follow one shot through the layers (s = distance travelled inside, in mm)
+  function forward(stack, power, kind, c) {
+    let p = power, s = 0;
+    for (const l of stack) {
+      const L = (l.kind === 'plate' ? l.t : l.kind === 'gap' ? l.d : ERA_T) * c;
+      if (l.kind === 'plate') {
+        const m = MAT[l.mat][kind];
+        if (p < L * m) return { pen: false, stopS: s + p / m };
+        p -= L * m;
+      } else if (l.kind === 'era') p *= kind === 'ke' ? ERA_KE : ERA_CE;
+      else if (kind === 'ce') p *= gapF(l.d);
+      s += L;
+    }
+    return { pen: true, exitS: s, rem: p };
+  }
+  const pathLen = (stack, c) => stack.reduce((s, l) => s + (l.kind === 'plate' ? l.t : l.kind === 'gap' ? l.d : ERA_T), 0) * c;
+  // Roll the dice for one real shot
+  function rollShot(sh, stack, info) {
+    const total = pathLen(stack, info.c);
+    if (Math.random() < info.pRico) return { outcome: 'rico', info, power: info.power, total };
+    const power = info.power * (1 + info.sd * gauss());
+    if (info.kind === 'he' || info.kind === 'hesh') {
+      const ok = !info.blocked && power >= info.need;
+      return { outcome: ok ? 'pen' : info.kind === 'hesh' ? 'nofx' : 'stop', info, power, stopS: 0, exitS: total, total };
+    }
+    const f = forward(stack, power, info.kind, info.c);
+    return { outcome: f.pen ? 'pen' : 'stop', info, power, rem: f.rem || 0, stopS: f.stopS, exitS: f.exitS, total };
+  }
+  const statusOf = i => i.pRico >= 0.5 ? 'serious' : i.pPen >= 0.85 ? 'good' : i.pPen >= 0.15 ? 'warn' : 'crit';
+  const STATUS_WORD = { good: '✓ Gets through', warn: '≈ Maybe', crit: '✗ Stopped', serious: '↗ Bounces off' };
+
+  // ===================== Settings =====================
+  const DEF = { mode: 'lab', shell: { type: 'ap', cal: 88, v: 780, len: 550, q: 1 }, dist: 500,
+    lab: { t: 100, ang: 30, mat: 'rha', spaced: false, gap: 300, era: false }, range: { tank: 'badger', yaw: -35, pitch: 14, heat: false } };
+  const saved = store.get('armor-sim', {});
+  const S = { ...DEF, ...saved, shell: { ...DEF.shell, ...saved.shell }, lab: { ...DEF.lab, ...saved.lab }, range: { ...DEF.range, ...saved.range } };
+  if (!TYPES[S.shell.type]) S.shell = { ...DEF.shell };
+  const save = () => store.set('armor-sim', S);
+  let muted = store.get('armor-muted', false);
+
+  // ===================== Sound (made with the Web Audio API, no files) =====================
+  let actx = null;
+  function sound(kind) {
+    if (muted) return;
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      const now = actx.currentTime, out = actx.createGain(); out.connect(actx.destination);
+      const noise = (dur, freq, vol, delay = 0) => {
+        const len = Math.floor(actx.sampleRate * dur), buf = actx.createBuffer(1, len, actx.sampleRate), d = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.5);
+        const src = actx.createBufferSource(), f = actx.createBiquadFilter(), g = actx.createGain();
+        src.buffer = buf; f.type = 'lowpass'; f.frequency.value = freq; g.gain.value = vol;
+        src.connect(f); f.connect(g); g.connect(out); src.start(now + delay);
+      };
+      const ping = (f0, f1, dur, vol, delay = 0) => {
+        const o = actx.createOscillator(), g = actx.createGain();
+        o.type = 'triangle'; o.frequency.setValueAtTime(f0, now + delay); o.frequency.exponentialRampToValueAtTime(f1, now + delay + dur);
+        g.gain.setValueAtTime(vol, now + delay); g.gain.exponentialRampToValueAtTime(0.001, now + delay + dur);
+        o.connect(g); g.connect(out); o.start(now + delay); o.stop(now + delay + dur);
+      };
+      if (kind === 'fire') noise(0.45, 900, 0.5);
+      else if (kind === 'rico') { ping(2400, 700, 0.35, 0.18, 0.02); noise(0.12, 4000, 0.15); }
+      else if (kind === 'pen') { noise(0.3, 2600, 0.4); ping(300, 90, 0.25, 0.25); }
+      else if (kind === 'stop') { ping(420, 160, 0.3, 0.3); noise(0.15, 1500, 0.25); }
+      else if (kind === 'boom') { noise(1.2, 500, 0.8); noise(0.6, 2000, 0.3, 0.05); }
+    } catch (e) {}
+  }
+
+  // ===================== Shell picture (for the controls) =====================
+  function shellSVG(type) {
+    const band = '<rect x="40" y="13" width="7" height="24" rx="1" fill="#c47a3a"/>';
+    const P = {
+      ap: `<path d="M18 15H122Q160 15 182 25Q160 35 122 35H18Z" fill="#8d97a1"/><path d="M146 16Q168 18 182 25Q168 32 146 34Z" fill="#59626b"/>${band}`,
+      apcr: `<path d="M18 15H122Q160 15 182 25Q160 35 122 35H18Z" fill="#c7cdd3"/><path d="M84 20.5H150Q165 21 174 25Q165 29 150 29.5H84Z" fill="#2c3137"/>${band}`,
+      apds: `<path d="M30 19H150Q172 20 186 25Q172 30 150 31H30Z" fill="#c3ccd5"/><path d="M30 12H120V38H30Z" fill="#8a6f4a" opacity=".9"/><path d="M30 25H120" stroke="#5b4930" stroke-width="2"/>`,
+      apfsds: `<rect x="14" y="22.5" width="170" height="5" fill="#c3ccd5"/><path d="M184 22.5L192 25L184 27.5Z" fill="#c3ccd5"/><path d="M14 23L40 23L24 10L14 10Z M14 27L40 27L24 40L14 40Z" fill="#7d868f"/><path d="M70 13H130V37H70Z" fill="#8a6f4a" opacity=".9"/><path d="M70 25H130" stroke="#5b4930" stroke-width="2"/>`,
+      heat: `<path d="M24 15H118L162 21V29L118 35H24Z" fill="#6f7a50"/><rect x="162" y="23" width="22" height="4" fill="#c9ced3"/><path d="M128 18L150 25L128 32Z" fill="#c47a3a"/><path d="M24 15L12 9V41L24 35Z" fill="#59623f"/>`,
+      hesh: `<path d="M20 15H150A14 10 0 0 1 150 35H20Z" fill="#6f8f3c"/><rect x="58" y="15" width="8" height="20" fill="#e6d34a"/>${band}`,
+      he: `<path d="M18 15H120Q158 15 176 25Q158 35 120 35H18Z" fill="#6f7a50"/><rect x="58" y="15" width="8" height="20" fill="#e6d34a"/><path d="M170 22L186 25L170 28Z" fill="#c9ced3"/>${band}`,
+    };
+    return `<svg viewBox="0 0 200 50">${P[type]}</svg>`;
+  }
+
+  // ===================== Shell controls =====================
+  function presetIndex() {
+    const sh = S.shell;
+    return PRESETS[sh.type].findIndex(([, p]) => Object.entries(p).every(([k, v]) => sh[k] === v));
+  }
+  function applyPreset(type, i) {
+    const list = PRESETS[type], p = list[clamp(i, 0, list.length - 1)][1];
+    S.shell = { ...S.shell, type, ...p };
+    if (!p.v && TYPES[type].kind === 'ke') S.shell.v = 800;
+  }
+  function renderShellControls() {
+    const sh = S.shell, T = TYPES[sh.type], L = LIMITS[sh.type];
+    $('type-chips').innerHTML = Object.entries(TYPES).map(([k, t]) => `<button data-type="${k}" class="${k === sh.type ? 'on' : ''}" title="${esc(t.name)}">${t.short}</button>`).join('');
+    $('shell-kind').textContent = T.name;
+    $('type-blurb').textContent = T.blurb;
+    $('shell-art').innerHTML = shellSVG(sh.type);
+    const pi = presetIndex();
+    $('preset').innerHTML = PRESETS[sh.type].map(([n], i) => `<option value="${i}" ${i === pi ? 'selected' : ''}>${esc(n)}</option>`).join('') + (pi < 0 ? '<option value="-1" selected>Custom</option>' : '');
+    let h = '';
+    if (L.cal) h += field('cal', sh.type === 'heat' ? 'Warhead size' : 'Caliber (gun size)', L.cal[0], L.cal[1], 1, sh.cal, ' mm');
+    if (L.len) h += field('len', 'Dart length', L.len[0], L.len[1], 10, sh.len, ' mm');
+    if (L.v) h += field('v', 'Muzzle speed', L.v[0], L.v[1], 10, sh.v, ' m/s');
+    if (sh.type === 'heat') h += `<div class="seg-label">Charge design</div><div class="seg" id="q-seg">${HEAT_Q_NAMES.map((n, i) => `<button data-q="${i}" class="${sh.q === i ? 'on' : ''}">${n}</button>`).join('')}</div>`;
+    $('shell-fields').innerHTML = h;
+    updatePenStat();
+  }
+  const field = (id, label, min, max, step, val, unit) => `<div class="field"><label for="f-${id}">${label}</label><output id="o-${id}">${val.toLocaleString()}${unit}</output><input type="range" id="f-${id}" data-k="${id}" data-unit="${unit}" min="${min}" max="${max}" step="${step}" value="${val}"></div>`;
+  function updatePenStat() {
+    const sh = S.shell, k = TYPES[sh.type].kind, p = Math.round(penAt(sh, S.dist));
+    $('pen-label').textContent = k === 'hesh' ? 'Beats plates up to' : k === 'he' ? 'Blast gets through' : k === 'ce' ? 'Jet penetration (any range)' : `Penetration at ${S.dist.toLocaleString()} m`;
+    $('pen-now').textContent = p + ' mm';
+  }
+  $('type-chips').addEventListener('click', e => {
+    const b = e.target.closest('[data-type]'); if (!b || b.dataset.type === S.shell.type) return;
+    applyPreset(b.dataset.type, Math.min(1, PRESETS[b.dataset.type].length - 1));
+    shellChanged(true);
+  });
+  $('preset').addEventListener('change', e => { const i = +e.target.value; if (i >= 0) { applyPreset(S.shell.type, i); shellChanged(true); } });
+  $('shell-fields').addEventListener('input', e => {
+    const k = e.target.dataset.k; if (!k) return;
+    S.shell[k] = +e.target.value;
+    $('o-' + k).textContent = (+e.target.value).toLocaleString() + e.target.dataset.unit;
+    const pi = presetIndex();   // keep the dropdown honest
+    if (pi < 0 && !$('preset').querySelector('[value="-1"]')) $('preset').insertAdjacentHTML('beforeend', '<option value="-1">Custom</option>');
+    $('preset').value = String(pi);
+    shellChanged(false);
+  });
+  $('shell-fields').addEventListener('click', e => { const b = e.target.closest('[data-q]'); if (b) { S.shell.q = +b.dataset.q; shellChanged(true); } });
+  function shellChanged(redrawControls) {
+    if (redrawControls) renderShellControls(); else updatePenStat();
+    save(); refresh();
+  }
+  $('dist').addEventListener('input', e => { S.dist = +e.target.value; $('dist-out').textContent = S.dist.toLocaleString() + ' m'; updatePenStat(); save(); refresh(); });
+
+  // ===================== Lab: armor controls =====================
+  function labStack() {
+    const st = [];
+    if (S.lab.spaced) st.push({ kind: 'plate', t: 10, mat: 'rha', skirt: true }, { kind: 'gap', d: S.lab.gap });
+    if (S.lab.era) st.push({ kind: 'era' });
+    st.push({ kind: 'plate', t: S.lab.t, mat: S.lab.mat });
+    return st;
+  }
+  function renderArmorControls() {
+    const L = S.lab;
+    $('thick').value = L.t; $('thick-out').textContent = L.t + ' mm';
+    $('angle').value = L.ang; $('angle-out').textContent = L.ang + '°';
+    $('mat-chips').innerHTML = Object.entries(MAT).map(([k, m]) => `<button data-mat="${k}" class="${k === L.mat ? 'on' : ''}">${m.name}</button>`).join('');
+    $('spaced').checked = L.spaced; $('era').checked = L.era;
+    $('gap').value = L.gap; $('gap-out').textContent = L.gap + ' mm'; $('gap-field').hidden = !L.spaced;
+  }
+  $('thick').addEventListener('input', e => { S.lab.t = +e.target.value; $('thick-out').textContent = S.lab.t + ' mm'; labChanged(); });
+  $('angle').addEventListener('input', e => { S.lab.ang = +e.target.value; $('angle-out').textContent = S.lab.ang + '°'; labChanged(); });
+  $('gap').addEventListener('input', e => { S.lab.gap = +e.target.value; $('gap-out').textContent = S.lab.gap + ' mm'; labChanged(); });
+  $('mat-chips').addEventListener('click', e => { const b = e.target.closest('[data-mat]'); if (b) { S.lab.mat = b.dataset.mat; renderArmorControls(); labChanged(); } });
+  $('spaced').addEventListener('change', e => { S.lab.spaced = e.target.checked; renderArmorControls(); labChanged(); });
+  $('era').addEventListener('change', e => { S.lab.era = e.target.checked; labChanged(); });
+  function labChanged() { save(); refresh(); }
+
+  // ===================== Cut-away view (canvas) =====================
+  function drawShell(c, type, x, y, a, s, sep) {
+    c.save(); c.translate(x, y); c.rotate(a); c.scale(s, s);
+    const path = pts => { c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])); c.closePath(); c.fill(); };
+    const petals = (x0, x1, r) => {   // the sabot: two halves that peel away after the gun
+      if (sep >= 1) return;
+      c.save(); c.globalAlpha = 1 - sep;
+      for (const sg of [-1, 1]) {
+        c.save(); c.translate(-sep * 34, sg * sep * 28); c.rotate(sg * sep * 0.7);
+        c.fillStyle = '#8a6f4a'; c.fillRect(x0, sg > 0 ? 0 : -r, x1 - x0, r);
+        c.restore();
+      }
+      c.restore();
+    };
+    if (type === 'apfsds') {
+      c.fillStyle = '#c3ccd5'; c.fillRect(-84, -2.2, 80, 4.4); path([[-4, -2.2], [1, 0], [-4, 2.2]]);
+      c.fillStyle = '#7d868f'; for (const g of [-1, 1]) path([[-84, g * 2], [-70, g * 2], [-86, g * 9], [-92, g * 9]]);
+      petals(-62, -18, 10);
+    } else if (type === 'apds') {
+      c.fillStyle = '#c3ccd5'; c.beginPath(); c.moveTo(-46, -4); c.lineTo(-10, -4); c.quadraticCurveTo(-2, -3, 1, 0); c.quadraticCurveTo(-2, 3, -10, 4); c.lineTo(-46, 4); c.closePath(); c.fill();
+      petals(-46, -8, 10);
+    } else if (type === 'heat') {
+      c.fillStyle = '#59623f'; path([[-52, -8], [-60, -12], [-60, 12], [-52, 8]]);
+      c.fillStyle = '#6f7a50'; path([[-52, -8], [-16, -8], [-4, -4], [-4, 4], [-16, 8], [-52, 8]]);
+      c.fillStyle = '#c9ced3'; c.fillRect(-4, -1.5, 5, 3);
+    } else if (type === 'hesh') {
+      c.fillStyle = '#6f8f3c'; c.beginPath(); c.moveTo(-50, -8); c.lineTo(-10, -8); c.arc(-10, 0, 8, -Math.PI / 2, Math.PI / 2); c.lineTo(-50, 8); c.closePath(); c.fill();
+      c.fillStyle = '#e6d34a'; c.fillRect(-36, -8, 4, 16);
+    } else {   // ap, apcr, he: body with a pointed nose
+      c.fillStyle = type === 'apcr' ? '#c7cdd3' : type === 'he' ? '#6f7a50' : '#8d97a1';
+      c.beginPath(); c.moveTo(-52, -8); c.lineTo(-22, -8); c.quadraticCurveTo(-6, -8, 1, 0); c.quadraticCurveTo(-6, 8, -22, 8); c.lineTo(-52, 8); c.closePath(); c.fill();
+      if (type === 'apcr') { c.fillStyle = '#2c3137'; c.beginPath(); c.moveTo(-34, -3); c.lineTo(-14, -3); c.quadraticCurveTo(-6, -3, -3, 0); c.quadraticCurveTo(-6, 3, -14, 3); c.lineTo(-34, 3); c.closePath(); c.fill(); }
+      if (type === 'he') { c.fillStyle = '#e6d34a'; c.fillRect(-40, -8, 4, 16); }
+      if (type === 'ap') { c.fillStyle = '#59626b'; c.beginPath(); c.moveTo(-12, -6.5); c.quadraticCurveTo(-4, -5, 1, 0); c.quadraticCurveTo(-4, 5, -12, 6.5); c.closePath(); c.fill(); }
+      c.fillStyle = '#c47a3a'; c.fillRect(-46, -8.5, 5, 17);
+    }
+    c.restore();
+  }
+
+  class CutAway {
+    constructor(canvas, compact = false) { this.cv = canvas; this.ctx = canvas.getContext('2d'); this.compact = compact; this.parts = []; this.shot = null; this.raf = 0; this.last = 0; }
+    resize() {
+      const r = this.cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+      const w = Math.max(10, Math.round(r.width * dpr)), h = Math.max(10, Math.round(r.height * dpr));
+      if (this.cv.width !== w || this.cv.height !== h) { this.cv.width = w; this.cv.height = h; }
+      this.W = r.width; this.H = r.height; this.dpr = dpr;
+    }
+    set(sh, stack, info) {
+      this.sh = { ...sh }; this.stack = stack; this.info = info;
+      let d = 0;
+      this.layers = stack.map(l => { const t = l.kind === 'plate' ? l.t : l.kind === 'gap' ? l.d : ERA_T; const o = { ...l, d0: d, d1: d + t }; d += t; return o; });
+      this.depth = d;
+      cancelAnimationFrame(this.raf); this.shot = null; this.parts = [];
+      this.draw();
+    }
+    fire(shot) {
+      this.shot = { ...shot, start: performance.now() - (reduceMotion ? 5000 : 0), hit: false, exited: false, extra: false };
+      this.parts = []; this.last = performance.now();
+      cancelAnimationFrame(this.raf);
+      const step = now => { if (this.draw(now)) this.raf = requestAnimationFrame(step); };
+      this.raf = requestAnimationFrame(step);
+    }
+    geom() {
+      const th = rad(this.info.ang), eff = rad(this.info.eff), aIn = th - eff;
+      const nIn = [Math.cos(th), Math.sin(th)], u = [-Math.sin(th), Math.cos(th)], dir = [Math.cos(aIn), Math.sin(aIn)];
+      const los = this.depth * this.info.c;
+      const k = clamp(this.W * (this.compact ? 0.34 : 0.36) / los, 0.05, 3.2);   // pixels per mm
+      return { th, eff, aIn, nIn, u, dir, k, P0: [this.W * 0.4, this.H * 0.52] };
+    }
+    burst(x, y, n, ang, spread, speed, colors, size = 2.2, life = 0.7, grav = 0) {
+      for (let i = 0; i < n; i++) {
+        const a = ang + (Math.random() - 0.5) * spread, v = speed * (0.35 + Math.random() * 0.75);
+        this.parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: life * (0.5 + Math.random() * 0.7), age: 0, size: size * (0.6 + Math.random() * 0.8), color: colors[i % colors.length], grav });
+      }
+    }
+    draw(now = performance.now()) {
+      this.resize();
+      const c = this.ctx, W = this.W, H = this.H;
+      c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+      c.clearRect(0, 0, W, H);
+      if (W < 30) return false;
+      if (!this.layers) {
+        c.fillStyle = '#838e9a'; c.font = '13px "Space Grotesk", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText('Your last shot shows up here', W / 2, H / 2);
+        return false;
+      }
+      const g = this.geom(), sm = this.compact ? 0.7 : 1, sh = this.sh, kind = this.info.kind;
+      const at = s => [g.P0[0] + g.k * s * g.dir[0], g.P0[1] + g.k * s * g.dir[1]];
+      const pt = (a, d) => [g.P0[0] + g.k * (a * g.u[0] + d * g.nIn[0]), g.P0[1] + g.k * (a * g.u[1] + d * g.nIn[1])];
+      const poly = (pts) => { c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])); c.closePath(); };
+      // range grid
+      c.strokeStyle = 'rgba(255,255,255,.035)'; c.lineWidth = 1;
+      for (let x = 0; x < W; x += 32) { c.beginPath(); c.moveTo(x + .5, 0); c.lineTo(x + .5, H); c.stroke(); }
+      for (let y = 0; y < H; y += 32) { c.beginPath(); c.moveTo(0, y + .5); c.lineTo(W, y + .5); c.stroke(); }
+      // the armor
+      const A = Math.max(W, H) * 2 / g.k;
+      for (const l of this.layers) {
+        if (l.kind === 'gap') continue;
+        const band = [pt(-A, l.d0), pt(A, l.d0), pt(A, l.d1), pt(-A, l.d1)];
+        poly(band);
+        c.fillStyle = l.kind === 'era' ? '#8f7f37' : MAT[l.mat].fill; c.fill();
+        c.save(); poly(band); c.clip();
+        if (l.kind === 'era') {   // boxes of explosive tiles
+          c.strokeStyle = 'rgba(20,16,4,.55)'; c.lineWidth = 2;
+          for (let a = -A; a < A; a += 26 / g.k) { const p = pt(a, l.d0), q = pt(a, l.d1); c.beginPath(); c.moveTo(p[0], p[1]); c.lineTo(q[0], q[1]); c.stroke(); }
+        } else if (l.mat === 'comp') {   // layers inside composite
+          c.strokeStyle = 'rgba(40,30,15,.45)'; c.lineWidth = 1.5;
+          for (let d = l.d0 + 6 / g.k; d < l.d1; d += 7 / g.k) { const p = pt(-A, d), q = pt(A, d); c.beginPath(); c.moveTo(p[0], p[1]); c.lineTo(q[0], q[1]); c.stroke(); }
+        } else if (l.mat === 'cast') {   // rough cast texture
+          c.fillStyle = 'rgba(0,0,0,.12)';
+          for (let i = 0; i < 90; i++) { const p = pt((Math.sin(i * 12.9898) * 0.5) * A * 0.3, l.d0 + (l.d1 - l.d0) * ((Math.sin(i * 78.233) + 1) / 2)); c.fillRect(p[0], p[1], 2, 2); }
+        }
+        c.restore();
+        c.strokeStyle = l.kind === 'era' ? '#e3cd6d' : MAT[l.mat].edge; c.lineWidth = 1.5;
+        let p = pt(-A, l.d0), q = pt(A, l.d0); c.beginPath(); c.moveTo(p[0], p[1]); c.lineTo(q[0], q[1]); c.stroke();
+        c.strokeStyle = 'rgba(0,0,0,.35)'; p = pt(-A, l.d1); q = pt(A, l.d1); c.beginPath(); c.moveTo(p[0], p[1]); c.lineTo(q[0], q[1]); c.stroke();
+      }
+
+      // ----- the shot -----
+      let busy = false;
+      const shot = this.shot, dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
+      const HIT = 0.36;
+      if (!shot) {
+        drawShell(c, sh.type, g.P0[0] - 70 * sm, g.P0[1], 0, sm, 0);
+      } else {
+        const t = (now - shot.start) / 1000, tt = t - HIT;
+        busy = t < 2.2 || this.parts.length > 0;
+        const channel = (s, w) => { const e = at(s); c.strokeStyle = '#08090b'; c.lineWidth = w; c.lineCap = 'round'; c.beginPath(); c.moveTo(g.P0[0], g.P0[1]); c.lineTo(e[0], e[1]); c.stroke(); };
+        const holeW = clamp((sh.type === 'apfsds' ? sh.len / 22 : sh.type === 'apcr' ? sh.cal * 0.47 : sh.type === 'apds' ? sh.cal * 0.57 : sh.cal) * g.k, 3, 16 * sm);
+        if (tt < 0) {   // flying in
+          const f = t / HIT;
+          drawShell(c, sh.type, -40 + (g.P0[0] + 40) * f, g.P0[1], 0, sm, clamp((t - 0.04) / 0.22, 0, 1));   // flies in from the left edge
+        } else {
+          if (!shot.hit) {   // the moment it hits
+            shot.hit = true;
+            if (shot.outcome === 'rico') this.burst(g.P0[0], g.P0[1], 26, Math.atan2(-Math.sin(2 * g.th), -Math.cos(2 * g.th)), 0.9, 380, ['#fff6c8', '#ffd25a', '#ffb020'], 2, 0.45);
+            else if (kind === 'ce' || kind === 'he' || kind === 'hesh') this.burst(g.P0[0], g.P0[1], 40, Math.PI, Math.PI * 1.6, kind === 'he' ? 300 : 220, ['#fff2b0', '#ffb020', '#ff7a1a', '#ffdf80'], 3, 0.55);
+            else this.burst(g.P0[0], g.P0[1], 14, Math.PI, Math.PI * 0.8, 220, ['#ffd25a', '#fff6c8'], 1.8, 0.35);
+          }
+          if (shot.outcome === 'rico') {
+            const r = [-Math.cos(2 * g.th), -Math.sin(2 * g.th)], d = tt * 820 * sm;   // bounce off the surface
+            drawShell(c, sh.type, g.P0[0] + r[0] * d, g.P0[1] + r[1] * d, Math.atan2(r[1], r[0]) + tt * 9, sm, 1);
+            this.scuff(g, pt);
+          } else if (kind === 'ke') {
+            if (shot.outcome === 'pen') {
+              const s = tt * 760 / g.k, end = Math.min(s, shot.exitS);
+              channel(end, holeW);
+              if (s >= shot.exitS && !shot.exited) { shot.exited = true; const e = at(shot.exitS); this.burst(e[0], e[1], 46, g.aIn, 0.9, 420, ['#ffb020', '#ffd25a', '#fff2c0', '#ff7a1a'], 2.4, 0.8); }
+              const n = at(s); drawShell(c, sh.type, n[0], n[1], g.aIn, sm, 1);
+            } else {
+              const f = 1 - Math.pow(1 - clamp(tt / 0.2, 0, 1), 3), s = shot.stopS * f;
+              channel(s, holeW);
+              const n = at(s); drawShell(c, sh.type, n[0], n[1], g.aIn, sm, 1);
+              if (f >= 1) this.cracks(n, g, shot);
+            }
+          } else if (kind === 'ce') {
+            const jetEnd = shot.outcome === 'pen' ? shot.exitS + 140 / g.k : shot.stopS;
+            const s = Math.min(jetEnd, tt * 2600 / g.k);
+            channel(Math.min(s, shot.outcome === 'pen' ? shot.exitS : shot.stopS), Math.max(2.5, holeW * 0.35));
+            if (tt < 0.5) {   // the jet: a thin, super-fast line of metal
+              const e = at(s); c.save(); c.globalCompositeOperation = 'lighter'; c.strokeStyle = `rgba(160,230,255,${1 - tt * 2})`; c.lineWidth = 3; c.shadowColor = '#9be7ff'; c.shadowBlur = 12;
+              c.beginPath(); c.moveTo(g.P0[0], g.P0[1]); c.lineTo(e[0], e[1]); c.stroke(); c.restore();
+            }
+            if (shot.outcome === 'pen' && s >= shot.exitS && !shot.exited) { shot.exited = true; const e = at(shot.exitS); this.burst(e[0], e[1], 50, g.aIn, 0.8, 480, ['#ffb020', '#fff2c0', '#ff7a1a'], 2.2, 0.8); }
+            this.flash(g.P0, tt, 46 * sm);
+          } else if (kind === 'hesh') {
+            const f = clamp(tt / 0.12, 0, 1);   // squash onto the plate
+            c.save(); c.translate(g.P0[0], g.P0[1]); c.rotate(g.th); c.fillStyle = '#6f8f3c';
+            c.beginPath(); c.ellipse(-4 * sm, 0, (5 + 3 * (1 - f)) * sm, (8 + 14 * f) * sm, 0, 0, Math.PI * 2); c.fill(); c.restore();
+            if (tt > 0.12) this.flash(g.P0, tt - 0.12, 54 * sm);
+            if (shot.outcome === 'pen') {
+              const back = pt(0, this.depth);
+              if (tt > 0.18 && !shot.exited) { shot.exited = true; this.burst(back[0], back[1], 34, g.th, 1.1, 260, ['#8b96a3', '#b3bec9', '#ffb020'], 3.2, 1.0, 300); }
+              if (tt > 0.18) this.scab(back, g);
+            }
+          } else {   // HE
+            this.flash(g.P0, tt, 70 * sm);
+            if (shot.outcome === 'pen') {
+              channel(shot.exitS * clamp(tt / 0.1, 0, 1), Math.max(4, sh.cal * 0.25 * g.k));
+              if (tt > 0.08 && !shot.exited) { shot.exited = true; const e = at(shot.exitS); this.burst(e[0], e[1], 40, 0, 1.2, 380, ['#ffb020', '#ff7a1a', '#fff2c0'], 2.4, 0.7); }
+            }
+            if (tt > 0.05 && !shot.extra) { shot.extra = true; this.burst(g.P0[0], g.P0[1], 12, Math.PI, 1.8, 60, ['rgba(120,120,120,.5)'], 14, 1.4, -30); }
+          }
+        }
+      }
+      // particles
+      if (this.parts.length) {
+        c.save(); c.globalCompositeOperation = 'lighter';
+        this.parts = this.parts.filter(p => (p.age += dt) < p.life);
+        for (const p of this.parts) {
+          p.vy += p.grav * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.985; p.vy *= 0.985;
+          c.globalAlpha = 1 - p.age / p.life; c.fillStyle = p.color;
+          c.beginPath(); c.arc(p.x, p.y, p.size, 0, Math.PI * 2); c.fill();
+        }
+        c.restore();
+        busy = true;
+      }
+      // labels when nothing is moving
+      if (!shot || !busy) this.labels(g, pt, at);
+      return busy;
+    }
+    flash(P0, t, r) {
+      if (t < 0 || t > 0.35) return;
+      const c = this.ctx, f = t / 0.35, rr = r * (0.4 + f);
+      const grad = c.createRadialGradient(P0[0], P0[1], 0, P0[0], P0[1], rr);
+      grad.addColorStop(0, `rgba(255,250,220,${1 - f})`); grad.addColorStop(0.4, `rgba(255,176,32,${0.8 * (1 - f)})`); grad.addColorStop(1, 'rgba(255,120,20,0)');
+      c.save(); c.globalCompositeOperation = 'lighter'; c.fillStyle = grad; c.beginPath(); c.arc(P0[0], P0[1], rr, 0, Math.PI * 2); c.fill(); c.restore();
+    }
+    scuff(g, pt) {   // a bright scrape where it bounced
+      const c = this.ctx, b = pt(-60 / g.k, 0);
+      c.save(); c.strokeStyle = 'rgba(255,255,255,.75)'; c.lineWidth = 2.5; c.lineCap = 'round'; c.beginPath(); c.moveTo(g.P0[0], g.P0[1]); c.lineTo(b[0], b[1]); c.stroke(); c.restore();
+    }
+    cracks(n, g, shot) {
+      const c = this.ctx; c.save(); c.strokeStyle = 'rgba(15,17,20,.8)'; c.lineWidth = 1.2;
+      for (let i = 0; i < 7; i++) { const a = (i / 7) * Math.PI * 2 + shot.power % 1, r = 10 + (i * 37 % 13); c.beginPath(); c.moveTo(n[0], n[1]); c.lineTo(n[0] + Math.cos(a) * r, n[1] + Math.sin(a) * r); c.stroke(); }
+      c.restore();
+    }
+    scab(back, g) {   // the chunk knocked off the inside by HESH
+      const c = this.ctx; c.save(); c.translate(back[0], back[1]); c.rotate(g.th);
+      c.fillStyle = '#0f1317'; c.beginPath(); c.ellipse(0, 0, 6 * (this.compact ? 0.7 : 1), 16 * (this.compact ? 0.7 : 1), 0, -Math.PI / 2, Math.PI / 2, true); c.fill(); c.restore();
+    }
+    labels(g, pt, at) {
+      const c = this.ctx, small = this.compact || this.W < 520, fs = small ? 11 : 12.5;
+      c.font = `600 ${fs}px "JetBrains Mono", monospace`; c.textBaseline = 'middle';
+      const placed = [];   // boxes already used, so labels never sit on top of each other
+      const box = (text, x, y, align) => {
+        const w = c.measureText(text).width + 12, h = fs + 9;
+        const x0 = align === 'center' ? x - w / 2 : align === 'right' ? x - w : x;
+        return { x0, y0: y - h / 2, w, h };
+      };
+      const free = b => b.x0 >= 4 && b.y0 >= 4 && b.x0 + b.w <= this.W - 4 && b.y0 + b.h <= this.H - 4 &&
+        !placed.some(o => b.x0 < o.x0 + o.w + 4 && o.x0 < b.x0 + b.w + 4 && b.y0 < o.y0 + o.h + 3 && o.y0 < b.y0 + b.h + 3);
+      const paint = (text, b, color) => {
+        placed.push(b);
+        c.fillStyle = 'rgba(9,12,15,.88)'; c.strokeStyle = 'rgba(255,255,255,.12)'; c.lineWidth = 1;
+        c.beginPath(); c.roundRect ? c.roundRect(b.x0, b.y0, b.w, b.h, 6) : c.rect(b.x0, b.y0, b.w, b.h); c.fill(); c.stroke();
+        c.fillStyle = color; c.textAlign = 'left'; c.fillText(text, b.x0 + 6, b.y0 + b.h / 2 + 0.5);
+      };
+      const pill = (text, x, y, color = '#ecf0f3', align = 'center') => {   // always drawn, nudged inside the view
+        const b = box(text, x, y, align);
+        b.x0 = clamp(b.x0, 4, this.W - b.w - 4); b.y0 = clamp(b.y0, 4, this.H - b.h - 4);
+        paint(text, b, color);
+      };
+      const pillAt = (text, spots, color) => {   // drawn at the first spot that fits, or skipped
+        for (const [x, y] of spots) { const b = box(text, x, y, 'center'); if (free(b)) { paint(text, b, color); return; } }
+      };
+      const P0 = g.P0, info = this.info;
+      // the plate's "straight-out" line and the angle
+      if (info.ang > 0.5) {
+        const nOut = [-g.nIn[0], -g.nIn[1]], L = small ? 46 : 64;
+        c.save(); c.setLineDash([3, 4]); c.strokeStyle = 'rgba(236,240,243,.55)'; c.lineWidth = 1;
+        c.beginPath(); c.moveTo(P0[0], P0[1]); c.lineTo(P0[0] + nOut[0] * L, P0[1] + nOut[1] * L); c.stroke(); c.restore();
+        c.strokeStyle = '#ffb020'; c.lineWidth = 2; c.beginPath(); c.arc(P0[0], P0[1], small ? 26 : 34, Math.PI, Math.PI + g.th); c.stroke();
+        const mid = Math.PI + g.th / 2, rr = small ? 44 : 56;
+        pill(`${Math.round(info.ang)}°`, P0[0] + Math.cos(mid) * rr, P0[1] + Math.sin(mid) * rr, '#ecf0f3');
+      }
+      // the path through the armor
+      const total = this.depth * info.c, e = at(total);
+      placed.push({ x0: Math.min(P0[0], e[0]) - 60, y0: Math.min(P0[1], e[1]) - 7, w: Math.abs(e[0] - P0[0]) + 60, h: Math.abs(e[1] - P0[1]) + 14 });
+      c.save(); c.setLineDash([6, 5]); c.strokeStyle = 'rgba(255,176,32,.85)'; c.lineWidth = 1.5;
+      c.beginPath(); c.moveTo(P0[0] - 60, P0[1]); c.lineTo(P0[0], P0[1]); c.lineTo(e[0], e[1]); c.stroke(); c.restore();
+      if (!this.compact) {
+        const kind = info.kind, need = Math.round(info.need);
+        const txt = info.blocked ? 'Spaced armor stops blasts' : kind === 'he' || kind === 'hesh' ? `${need} mm (flat) to beat` : `${isFinite(need) ? need : '∞'} mm in the way`;
+        pill(txt, (P0[0] + e[0]) / 2 + 8, Math.min(P0[1], e[1]) - 26, '#ecf0f3');
+        // name each layer
+        this.layers.forEach(l => {
+          const mid = (l.d0 + l.d1) / 2, H = this.H;
+          const spots = [0.22, -0.24, 0.32, -0.34, 0.13, -0.15, 0.42, -0.44].map(f => pt(f * H / g.k, mid));
+          const name = l.kind === 'era' ? 'Reactive tiles' : l.kind === 'gap' ? `Air gap ${l.d} mm` : l.skirt ? `Spaced plate ${l.t} mm` : `${l.t} mm ${MAT[l.mat].short}`;
+          pillAt(name, spots, '#b7c0c9');
+        });
+      } else {
+        pill(`${Math.round(info.ang)}° · ${isFinite(info.need) ? Math.round(info.need) : '∞'} mm`, this.W - 8, 16, '#ecf0f3', 'right');
+      }
+    }
+  }
+  const xsLab = new CutAway($('xs-lab'));
+  const xsMini = new CutAway($('xs-mini'), true);
+
+  // ===================== Results text =====================
+  function describe(shot, sh) {
+    const i = shot.info, pw = Math.round(shot.power), nd = Math.round(i.need), kind = i.kind;
+    let st, badge, text;
+    if (shot.outcome === 'rico') { st = 'serious'; badge = '↗ RICOCHET'; text = `At ${Math.round(i.ang)}° the armor is so steep that the shell skipped off.`; }
+    else if (kind === 'hesh') {
+      if (shot.outcome === 'pen') { st = 'good'; badge = '✓ SPALLED'; text = `The shock wave knocked a chunk of metal off the inside of the ${nd} mm plate.`; }
+      else { st = 'crit'; badge = '✗ NO EFFECT'; text = i.blocked ? 'The squash head flattened against spaced armor or reactive tiles, so the main plate was safe.' : `The plate was too thick (${nd} mm) for the shock wave (up to ${pw} mm).`; }
+    } else if (kind === 'he') {
+      if (shot.outcome === 'pen') { st = 'good'; badge = '✓ BLAST GOT THROUGH'; text = `The explosion (${pw} mm of punch) broke through ${nd} mm of armor.`; }
+      else { st = 'crit'; badge = '✗ BLAST STOPPED'; text = i.blocked ? 'Spaced armor or reactive tiles took the blast, so it never reached the main armor.' : `The explosion only had ${pw} mm of punch against ${nd} mm of armor.`; }
+    } else if (shot.outcome === 'pen') { st = 'good'; badge = '✓ PENETRATED'; text = `It had ${pw} mm of punch against ${nd} mm of armor in the way, with ${Math.max(1, pw - nd)} mm to spare.`; }
+    else { st = 'crit'; badge = '✗ STOPPED'; text = `The armor was ${nd} mm thick along the shell's path, but the shell only had ${pw} mm of punch. It needed ${Math.max(1, nd - pw)} mm more.`; }
+    const notes = [], T = TYPES[sh.type], stack = shot.stack || [];
+    if (i.over) notes.push('🦷 Overmatch: the shell is over 3× wider than the plate is thick, so it can\'t bounce and bites in harder.');
+    else if (kind === 'ke' && T.norm && i.ang > 0 && shot.outcome !== 'rico') notes.push(`↘ The shell turned ${T.norm}° into the plate when it hit (that's called normalization).`);
+    if (T.drag && S.dist > 0) notes.push(`💨 Flying ${S.dist.toLocaleString()} m slowed it from ${sh.v.toLocaleString()} to ${Math.round(i.v).toLocaleString()} m/s.`);
+    if (stack.some(l => l.kind === 'era') && kind === 'ce') notes.push('💥 Reactive tiles exploded and wrecked most of the jet.');
+    if (stack.some(l => l.kind === 'era') && kind === 'ke') notes.push('💥 Reactive tiles shoved the shell a little (12% less punch).');
+    if (stack.some(l => l.kind === 'gap') && kind === 'ce') notes.push('🌬️ The air gap let the jet spread out and weaken.');
+    if (stack.some(l => l.kind === 'plate' && l.mat === 'comp') && kind === 'ce') notes.push('🧱 Composite armor is extra strong against shaped charges.');
+    if (i.pRico > 0.02 && i.pRico < 0.98) notes.push(`🎲 Ricochet chance at this angle: ${Math.round(i.pRico * 100)}%.`);
+    return { st, badge, text, notes };
+  }
+  function resultHTML(d, extra = []) {
+    return `<span class="badge ${d.st}">${d.badge}</span><div class="txt">${esc(d.text)}<ul>${[...extra, ...d.notes].map(n => `<li>${esc(n)}</li>`).join('')}</ul></div>`;
+  }
+
+  // ===================== Lab =====================
+  let labInfo = null, manyKey = '';
+  function refreshLab() {
+    const stack = labStack();
+    labInfo = analyze(S.shell, stack, S.lab.ang, S.dist);
+    xsLab.set(S.shell, stack, labInfo);
+    const key = JSON.stringify([S.shell, S.lab, S.dist]);
+    if (key !== manyKey) $('many').hidden = true;
+    const st = statusOf(labInfo);
+    $('chance').innerHTML = `${STATUS_WORD[st]} · <b>${Math.round(labInfo.pPen * 100)}%</b> chance per shot`;
+    drawDistChart(); drawAngleChart();
+  }
+  function labFire() {
+    const stack = labStack(), info = analyze(S.shell, stack, S.lab.ang, S.dist), shot = rollShot(S.shell, stack, info);
+    shot.stack = stack;
+    xsLab.set(S.shell, stack, info); xsLab.fire(shot);
+    sound('fire'); setTimeout(() => sound(shot.outcome === 'rico' ? 'rico' : shot.outcome === 'pen' ? 'pen' : 'stop'), 330);
+    $('lab-result').innerHTML = resultHTML(describe(shot, S.shell));
+    countPlay();
+  }
+  function labFire100() {
+    const stack = labStack(), info = analyze(S.shell, stack, S.lab.ang, S.dist), n = { pen: 0, stop: 0, rico: 0 };
+    for (let i = 0; i < 100; i++) { const o = rollShot(S.shell, stack, info).outcome; n[o === 'nofx' ? 'stop' : o]++; }
+    const seg = (k, st, label) => n[k] ? `<div style="flex:${n[k]};background:var(--${st})" title="${label}: ${n[k]}">${n[k] >= 12 ? n[k] : ''}</div>` : '';
+    $('many').hidden = false; manyKey = JSON.stringify([S.shell, S.lab, S.dist]);
+    $('many').innerHTML = `<h2><span>100 shots, same settings</span></h2><div class="stack" role="img" aria-label="${n.pen} got through, ${n.stop} stopped, ${n.rico} bounced off">${seg('pen', 'good', 'Got through')}${seg('stop', 'crit', 'Stopped')}${seg('rico', 'serious', 'Bounced off')}</div>
+      <div class="legend"><span><i style="background:var(--good)"></i>✓ Got through: <b>${n.pen}</b></span><span><i style="background:var(--crit)"></i>✗ Stopped: <b>${n.stop}</b></span><span><i style="background:var(--serious)"></i>↗ Bounced off: <b>${n.rico}</b></span></div>`;
+    sound('fire'); countPlay();
+  }
+  $('fire').addEventListener('click', labFire);
+  $('fire100').addEventListener('click', labFire100);
+
+  // ----- charts (SVG) -----
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(svgNS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (parent) parent.appendChild(e); return e; };
+  const niceMax = v => { const p = Math.pow(10, Math.floor(Math.log10(Math.max(v, 1)))); return [1, 2, 2.5, 5, 10].map(m => m * p).find(x => x >= v); };
+  const SERIES = '#3987e5';   // the chart's one data color
+  const INK = { text: '#ecf0f3', text2: '#b7c0c9', muted: '#838e9a', grid: '#262d35', axis: '#3a4450', surface: '#151a1f' };
+  function chartTip(box, html, x, y) {
+    let t = box.querySelector('.ctip');
+    if (!t) { t = document.createElement('div'); t.className = 'ctip'; box.appendChild(t); }
+    t.innerHTML = html; t.hidden = false;
+    const w = t.offsetWidth; t.style.left = clamp(x + 12, 0, box.clientWidth - w) + 'px'; t.style.top = Math.max(0, y - 46) + 'px';
+  }
+  function drawDistChart() {
+    const box = $('dist-chart'), W = Math.max(260, box.clientWidth), H = 200, m = { l: 46, r: 14, t: 12, b: 26 };
+    box.innerHTML = '';
+    const sh = S.shell, need = labInfo.blocked ? Infinity : labInfo.need;
+    const pts = []; for (let d = 0; d <= 3000; d += 50) pts.push([d, penAt(sh, d)]);
+    const ymax = niceMax(Math.max(isFinite(need) ? need : 0, pts[0][1]) * 1.12);
+    const X = d => m.l + d / 3000 * (W - m.l - m.r), Y = v => m.t + (1 - v / ymax) * (H - m.t - m.b);
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, height: H, role: 'img', 'aria-label': `Penetration from ${Math.round(pts[0][1])} mm at the muzzle to ${Math.round(pts[pts.length - 1][1])} mm at 3,000 m` }, box);
+    for (let i = 0; i <= 4; i++) {
+      const v = ymax * i / 4, y = Y(v);
+      el('line', { x1: m.l, x2: W - m.r, y1: y, y2: y, stroke: i ? INK.grid : INK.axis, 'stroke-width': 1 }, svg);
+      el('text', { x: m.l - 6, y: y + 4, 'text-anchor': 'end', fill: INK.muted, 'font-size': 11, style: 'font-variant-numeric: tabular-nums' }, svg).textContent = Math.round(v);
+    }
+    for (let d = 0; d <= 3000; d += 1000) el('text', { x: X(d), y: H - 6, 'text-anchor': d === 0 ? 'start' : d === 3000 ? 'end' : 'middle', fill: INK.muted, 'font-size': 11 }, svg).textContent = d ? `${d / 1000} km` : '0 m';
+    // armor line (the threshold to beat)
+    if (isFinite(need) && need <= ymax) {
+      el('line', { x1: m.l, x2: W - m.r, y1: Y(need), y2: Y(need), stroke: INK.text2, 'stroke-width': 1.5 }, svg);
+      const lineAbove = penAt(sh, 2400) > need;   // put the words on the side of the line where the curve isn't
+      el('text', { x: W - m.r, y: Y(need) + (lineAbove ? 15 : -6), 'text-anchor': 'end', fill: INK.text2, 'font-size': 11.5 }, svg).textContent = `Armor to beat: ${Math.round(need)} mm`;
+    }
+    el('path', { d: 'M' + pts.map(p => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join('L') + `L${X(3000)},${Y(0)}L${X(0)},${Y(0)}Z`, fill: 'rgba(57,135,229,.10)' }, svg);
+    el('path', { d: 'M' + pts.map(p => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join('L'), fill: 'none', stroke: SERIES, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, svg);
+    const cur = penAt(sh, S.dist);
+    el('circle', { cx: X(S.dist), cy: Y(cur), r: 5, fill: SERIES, stroke: INK.surface, 'stroke-width': 2 }, svg);
+    el('text', { x: clamp(X(S.dist), m.l + 30, W - m.r - 30), y: Math.max(12, Y(cur) - 11), 'text-anchor': 'middle', fill: INK.text, 'font-size': 12, 'font-weight': 700 }, svg).textContent = `${Math.round(cur)} mm`;
+    // hover: a crosshair that snaps to the nearest 50 m
+    const cross = el('line', { y1: m.t, y2: H - m.b, stroke: INK.text2, 'stroke-width': 1, visibility: 'hidden' }, svg);
+    const dot = el('circle', { r: 4.5, fill: SERIES, stroke: INK.surface, 'stroke-width': 2, visibility: 'hidden' }, svg);
+    const hit = el('rect', { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, fill: 'transparent' }, svg);
+    hit.addEventListener('pointermove', e => {
+      const r = svg.getBoundingClientRect(), px = (e.clientX - r.left) * W / r.width;
+      const d = clamp(Math.round(((px - m.l) / (W - m.l - m.r) * 3000) / 50) * 50, 0, 3000), v = penAt(sh, d);
+      cross.setAttribute('x1', X(d)); cross.setAttribute('x2', X(d)); cross.setAttribute('visibility', 'visible');
+      dot.setAttribute('cx', X(d)); dot.setAttribute('cy', Y(v)); dot.setAttribute('visibility', 'visible');
+      const ok = isFinite(need) && v >= need;
+      chartTip(box, `<b>${Math.round(v)} mm</b><small>at ${d.toLocaleString()} m · ${isFinite(need) ? (ok ? '✓ beats' : '✗ can\'t beat') + ` ${Math.round(need)} mm` : 'blocked by spaced armor'}</small>`, X(d) * r.width / W, Y(v) * r.height / H);
+    });
+    hit.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); dot.setAttribute('visibility', 'hidden'); const t = box.querySelector('.ctip'); if (t) t.hidden = true; });
+    // the same numbers as a table
+    $('dist-table').innerHTML = '<tr><th>Distance</th><th>Penetration</th><th>vs this armor</th></tr>' + [0, 500, 1000, 1500, 2000, 2500, 3000].map(d => {
+      const v = penAt(sh, d); return `<tr><td>${d.toLocaleString()} m</td><td>${Math.round(v)} mm</td><td>${isFinite(need) ? (v >= need ? '✓ beats it' : '✗ stopped') : '✗ blocked'}</td></tr>`;
+    }).join('');
+  }
+  function drawAngleChart() {
+    const box = $('angle-chart'), W = Math.max(260, box.clientWidth), H = 64, top = 18, bh = 26;
+    box.innerHTML = '';
+    const stack = labStack(), cells = [];
+    for (let a = 0; a <= 85; a++) cells.push(analyze(S.shell, stack, a, S.dist));
+    const cw = (W - 2) / 86;
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, height: H, role: 'img', 'aria-label': 'Outcome for every angle from 0 to 85 degrees' }, box);
+    cells.forEach((ci, a) => el('rect', { x: 1 + a * cw, y: top, width: Math.max(1, cw - 0.6), height: bh, fill: STATUS[statusOf(ci)] }, svg));
+    for (const a of [0, 15, 30, 45, 60, 75, 85]) el('text', { x: 1 + (a + 0.5) * cw, y: top + bh + 14, 'text-anchor': 'middle', fill: INK.muted, 'font-size': 11 }, svg).textContent = a + '°';
+    const mx = 1 + (S.lab.ang + 0.5) * cw;   // where the plate is now
+    el('path', { d: `M${mx - 6},2L${mx + 6},2L${mx},${top - 3}Z`, fill: INK.text }, svg);
+    const hl = el('rect', { y: top - 2, height: bh + 4, width: cw + 2, fill: 'none', stroke: INK.text, 'stroke-width': 1.5, visibility: 'hidden', rx: 2 }, svg);
+    const hit = el('rect', { x: 0, y: 0, width: W, height: H, fill: 'transparent' }, svg);
+    hit.addEventListener('pointermove', e => {
+      const r = svg.getBoundingClientRect(), a = clamp(Math.floor(((e.clientX - r.left) * W / r.width - 1) / cw), 0, 85), ci = cells[a];
+      hl.setAttribute('x', a * cw); hl.setAttribute('visibility', 'visible');
+      chartTip(box, `<b>${Math.round(ci.pPen * 100)}%</b> <small>at ${a}° · ${STATUS_WORD[statusOf(ci)]}${ci.pRico > 0.02 ? ` · ${Math.round(ci.pRico * 100)}% bounce` : ''}</small>`, (a * cw) * r.width / W, top);
+    });
+    hit.addEventListener('pointerleave', () => { hl.setAttribute('visibility', 'hidden'); const t = box.querySelector('.ctip'); if (t) t.hidden = true; });
+    hit.addEventListener('click', e => { const r = svg.getBoundingClientRect(); S.lab.ang = clamp(Math.floor(((e.clientX - r.left) * W / r.width - 1) / cw), 0, 85); renderArmorControls(); labChanged(); });
+    // sum it up in words
+    let best = -1; for (let a = 0; a <= 85; a++) if (cells[a].pPen >= 0.5) best = a; else if (best >= 0) break;
+    const firstOk = cells.findIndex(ci => ci.pPen >= 0.5);
+    $('angle-sum').innerHTML = firstOk < 0 ? '✗ This shell <b>can\'t beat this armor</b> at any angle.' : firstOk > 0 ? `✓ Gets through from <b>${firstOk}°</b> to <b>${best}°</b>. Overmatch helps it bite into steeper plates.` : best >= 85 ? '✓ Gets through at <b>every angle</b> up to 85°.' : `✓ Gets through from <b>0°</b> up to <b>${best}°</b>. Steeper than that and it's stopped or bounces.`;
+  }
+
+  // ===================== Target range: the vehicles =====================
+  // A turret seen from above: front, cheeks, sides and rear (x = forward, y = left), listed counter-clockwise
+  const tp = (fx, rx, fw, w, ch, rw) => [[fx, -fw / 2], [fx, fw / 2], [fx - ch, w / 2], [rx, rw / 2], [rx, -rw / 2], [fx - ch, -w / 2]];
+  // ✏️ EDIT: made-up target vehicles (sizes in meters, armor in mm, slopes in degrees from straight up)
+  const TANKS = {
+    hornet: { name: 'Hornet', emoji: '🐝', cls: 'Light scout · aluminium hull', hp: 70, color: '#a39a6d', wheels: 5,
+      hull: { L: 4.8, W: 1.7, H: 1.55, clear: 0.4, trackTop: 0.85, trackW: 0.42, frontTop: 1.75, noseZ: 0.95,
+        ufp: { ang: 62, armor: P(30, 'alu') }, lfp: { ang: 45, armor: P(25, 'alu') }, side: P(25, 'alu'), rear: P(15, 'alu'), roof: P(12, 'alu'), track: P(15) },
+      turret: { x: 0.1, h: 0.62, poly: tp(0.75, -0.75, 0.9, 1.5, 0.35, 1.3), front: { slope: 30, armor: P(30) }, cheek: { slope: 30, armor: P(25) }, side: { slope: 25, armor: P(18) }, rear: { slope: 15, armor: P(15) }, roof: P(10) },
+      gun: { mW: 0.5, mH: 0.32, mD: 0.18, mantlet: P(35), len: 2.6, dia: 0.09, barrel: P(15) } },
+    badger: { name: 'Badger', emoji: '🦡', cls: 'Medium tank · old-school steel', hp: 100, color: '#5f6b45', wheels: 6,
+      hull: { L: 5.8, W: 1.95, H: 1.85, clear: 0.45, trackTop: 1.0, trackW: 0.55, frontTop: 2.05, noseZ: 1.05,
+        ufp: { ang: 55, armor: P(80) }, lfp: { ang: 52, armor: P(60) }, side: SKIRT(5, 350, 45), rear: P(40), roof: P(16), track: P(20) },
+      turret: { x: -0.1, h: 0.85, poly: tp(1.0, -1.0, 1.2, 1.9, 0.45, 1.6), front: { slope: 12, armor: P(90) }, cheek: { slope: 25, armor: P(75) }, side: { slope: 20, armor: P(50) }, rear: { slope: 12, armor: P(45) }, roof: P(20) },
+      gun: { mW: 0.75, mH: 0.45, mD: 0.22, mantlet: P(110, 'cast'), len: 3.6, dia: 0.12, barrel: P(20) } },
+    mammoth: { name: 'Mammoth', emoji: '🦣', cls: 'Heavy tank · thick cast armor', hp: 130, color: '#6c757b', wheels: 7,
+      hull: { L: 6.8, W: 2.3, H: 2.0, clear: 0.5, trackTop: 1.05, trackW: 0.7, frontTop: 2.3, noseZ: 1.15,
+        ufp: { ang: 45, armor: P(150) }, lfp: { ang: 48, armor: P(120) }, side: P(90), rear: P(80), roof: P(30), track: P(25) },
+      turret: { x: -0.3, h: 1.0, poly: tp(1.25, -1.35, 1.6, 2.4, 0.55, 2.1), front: { slope: 8, armor: P(200, 'cast') }, cheek: { slope: 18, armor: P(180, 'cast') }, side: { slope: 10, armor: P(110, 'cast') }, rear: { slope: 8, armor: P(90) }, roof: P(40) },
+      gun: { mW: 0.95, mH: 0.55, mD: 0.3, mantlet: P(220, 'cast'), len: 4.4, dia: 0.16, barrel: P(25) } },
+    titan: { name: 'Titan', emoji: '🗿', cls: 'Modern-style tank · composite + reactive tiles', hp: 150, color: '#7d8261', wheels: 7,
+      hull: { L: 7.2, W: 2.2, H: 1.85, clear: 0.48, trackTop: 0.98, trackW: 0.68, frontTop: 1.3, noseZ: 1.35,
+        ufp: { ang: 78, armor: ERA(P(60, 'hhs'), P(40, 'comp')) }, lfp: { ang: 30, armor: P(80) }, side: SKIRT(10, 450, 50), rear: P(35), roof: P(40), track: P(25) },
+      turret: { x: -0.2, h: 0.85, poly: tp(1.6, -1.6, 0.8, 2.6, 0.9, 2.3), front: { slope: 5, armor: [...P(60), ...P(380, 'comp')] }, cheek: { slope: 10, armor: [...P(50), ...P(420, 'comp')] }, side: { slope: 8, armor: P(80) }, rear: { slope: 5, armor: P(50) }, roof: P(45) },
+      gun: { mW: 0.7, mH: 0.42, mD: 0.25, mantlet: P(180), len: 5.0, dia: 0.15, barrel: P(25) } },
+  };
+
+  // ----- 3D helpers -----
+  const V = {
+    sub: (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]],
+    dot: (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2],
+    norm: a => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; },
+    avg: pts => { const s = [0, 0, 0]; pts.forEach(p => { s[0] += p[0]; s[1] += p[1]; s[2] += p[2]; }); return s.map(v => v / pts.length); },
+  };
+  function newell(pts) {   // the direction a flat polygon faces
+    const n = [0, 0, 0];
+    for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; n[0] += (a[1] - b[1]) * (a[2] + b[2]); n[1] += (a[2] - b[2]) * (a[0] + b[0]); n[2] += (a[0] - b[0]) * (a[1] + b[1]); }
+    return V.norm(n);
+  }
+  function clipAbove(poly, z) {   // keep the part of a side outline that's above the tracks
+    const out = [];
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i], b = poly[(i + 1) % poly.length], ia = a[1] >= z, ib = b[1] >= z;
+      if (ia) out.push(a);
+      if (ia !== ib) { const t = (z - a[1]) / (b[1] - a[1]); out.push([a[0] + (b[0] - a[0]) * t, z]); }
+    }
+    return out;
+  }
+  function offsetPoly(Pt, d) {   // shrink a turret outline inward by d[i] on each side (that's what makes sloped faces)
+    const n = Pt.length, lines = Pt.map((a, i) => {
+      const b = Pt[(i + 1) % n], ex = b[0] - a[0], ey = b[1] - a[1], L = Math.hypot(ex, ey), m = [ey / L, -ex / L];
+      return { m, k: m[0] * a[0] + m[1] * a[1] - d[i] };
+    });
+    return Pt.map((p, i) => {
+      const A = lines[(i - 1 + n) % n], B = lines[i], det = A.m[0] * B.m[1] - A.m[1] * B.m[0];
+      if (Math.abs(det) < 1e-9) return [p[0] - B.m[0] * d[i], p[1] - B.m[1] * d[i]];
+      return [(A.k * B.m[1] - A.m[1] * B.k) / det, (A.m[0] * B.k - A.k * B.m[0]) / det];
+    });
+  }
+  const circle3 = (c, r, axis, n = 14) => Array.from({ length: n }, (_, i) => { const a = i / n * Math.PI * 2, s = Math.sin(a) * r, k = Math.cos(a) * r; return axis === 'y' ? [c[0] + k, c[1], c[2] + s] : [c[0] + k, c[1] + s, c[2]]; });
+  function buildTank(sp) {
+    const faces = [];
+    const face = (pts, layers, name, part, group, center, extra = {}) => {
+      let n = newell(pts); const c = V.avg(pts);
+      if (V.dot(n, V.sub(c, center)) < 0) n = n.map(v => -v);   // make sure it faces outward
+      faces.push({ pts, n, c, layers, name, part, group, ...extra });
+    };
+    const h = sp.hull, W = h.W / 2, zt = h.H, zb = h.clear, tt = h.trackTop;
+    const xr = -h.L / 2, xft = h.frontTop;
+    const xn = xft + (zt - h.noseZ) * Math.tan(rad(h.ufp.ang)), xfb = xn - (h.noseZ - zb) * Math.tan(rad(h.lfp.ang));
+    const hc = [(xr + xn) / 2, 0, (zb + zt) / 2];
+    face([[xft, W, zt], [xn, W, h.noseZ], [xn, -W, h.noseZ], [xft, -W, zt]], h.ufp.armor, 'Upper front plate', 'hull', 'low', hc);
+    face([[xn, W, h.noseZ], [xfb, W, zb], [xfb, -W, zb], [xn, -W, h.noseZ]], h.lfp.armor, 'Lower front plate', 'hull', 'low', hc);
+    face([[xr, W, zt], [xft, W, zt], [xft, -W, zt], [xr, -W, zt]], h.roof, 'Hull roof', 'hull', 'low', hc);
+    face([[xr, W, zb], [xr, W, zt], [xr, -W, zt], [xr, -W, zb]], h.rear, 'Hull rear', 'hull', 'low', hc);
+    const prof = clipAbove([[xr, zb], [xfb, zb], [xn, h.noseZ], [xft, zt], [xr, zt]], tt);
+    for (const s of [1, -1]) face(prof.map(([x, z]) => [x, s * W, z]), h.side, 'Hull side', 'hull', 'low', hc);
+    const tw = h.trackW, x0 = xr + 0.05, x1 = xn + 0.08;
+    for (const s of [1, -1]) {
+      const yi = s * W, yo = s * (W + tw), tc = [(x0 + x1) / 2, (yi + yo) / 2, tt / 2], n = sp.wheels;
+      const wheels = Array.from({ length: n }, (_, i) => circle3([x0 + 0.42 + i * (x1 - x0 - 0.84) / (n - 1), yo + s * 0.01, 0.42], Math.min(0.32, (x1 - x0) / n / 2.3), 'y'));
+      face([[x0, yo, 0], [x1, yo, 0], [x1, yo, tt], [x0, yo, tt]], h.track, 'Track', 'track', 'low', tc, { tint: 0.5, deco: wheels });
+      face([[x0, yi, tt], [x1, yi, tt], [x1, yo, tt], [x0, yo, tt]], h.track, 'Track', 'track', 'low', tc, { tint: 0.55 });
+      face([[x1, yi, 0.12], [x1, yo, 0.12], [x1, yo, tt], [x1, yi, tt]], h.track, 'Track', 'track', 'low', tc, { tint: 0.5 });
+      face([[x0, yi, 0.12], [x0, yo, 0.12], [x0, yo, tt], [x0, yi, tt]], h.track, 'Track', 'track', 'low', tc, { tint: 0.5 });
+    }
+    // turret
+    const t = sp.turret, base = t.poly.map(([x, y]) => [x + t.x, y]);
+    const tf = [t.front, t.cheek, t.side, t.rear, t.side, t.cheek], names = ['Turret front', 'Turret cheek', 'Turret side', 'Turret rear', 'Turret side', 'Turret cheek'];
+    const top = offsetPoly(base, tf.map(f => t.h * Math.tan(rad(f.slope))));
+    const z1 = zt + t.h, tcen = [V.avg(base.map(p => [p[0], p[1], 0]))[0], 0, (zt + z1) / 2];
+    base.forEach((p, i) => { const j = (i + 1) % base.length; face([[p[0], p[1], zt], [base[j][0], base[j][1], zt], [top[j][0], top[j][1], z1], [top[i][0], top[i][1], z1]], tf[i].armor, names[i], 'turret', 'up', tcen); });
+    face(top.map(p => [p[0], p[1], z1]), t.roof, 'Turret roof', 'turret', 'up', tcen, { deco: [circle3([tcen[0] - 0.25, 0.32, z1 + 0.01], 0.26, 'z')] });
+    // gun
+    const g = sp.gun, fx = Math.max(...base.map(p => p[0])), mz = zt + t.h * 0.5;
+    const box = (a0, a1, b0, b1, c0, c1, layers, name, part) => {
+      const cen = [(a0 + a1) / 2, (b0 + b1) / 2, (c0 + c1) / 2];
+      face([[a1, b0, c0], [a1, b1, c0], [a1, b1, c1], [a1, b0, c1]], layers, name, part, 'up', cen);
+      face([[a0, b0, c1], [a1, b0, c1], [a1, b1, c1], [a0, b1, c1]], layers, name, part, 'up', cen);
+      face([[a0, b1, c0], [a1, b1, c0], [a1, b1, c1], [a0, b1, c1]], layers, name, part, 'up', cen);
+      face([[a0, b0, c0], [a1, b0, c0], [a1, b0, c1], [a0, b0, c1]], layers, name, part, 'up', cen);
+    };
+    box(fx - 0.25, fx + g.mD, -g.mW / 2, g.mW / 2, mz - g.mH / 2, mz + g.mH / 2, g.mantlet, 'Gun mantlet', 'mantlet');
+    box(fx + g.mD, fx + g.mD + g.len, -g.dia / 2, g.dia / 2, mz - g.dia / 2, mz + g.dia / 2, g.barrel, 'Gun barrel', 'gun');
+    return faces;
+  }
+
+  // ----- drawing the vehicle -----
+  const hex = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  class TankView {
+    constructor(cv) { this.cv = cv; this.ctx = cv.getContext('2d'); this.hits = []; this.parts = []; this.flashes = []; this.scale = 0; this.raf = 0; this.hover = null; this.deadAt = 0; this.last = performance.now(); }
+    setTank(id) {
+      this.tank = TANKS[id]; this.faces = buildTank(this.tank); this.hits = []; this.parts = []; this.flashes = []; this.deadAt = 0;
+      const all = this.faces.flatMap(f => f.pts), mn = [0, 1, 2].map(i => Math.min(...all.map(p => p[i]))), mx = [0, 1, 2].map(i => Math.max(...all.map(p => p[i])));
+      this.center = mn.map((v, i) => (v + mx[i]) / 2); this.scale = 0;
+      this.request();
+    }
+    request() { if (!this.raf) this.raf = requestAnimationFrame(now => { this.raf = 0; if (this.draw(now)) this.request(); }); }
+    view() {
+      const ps = rad(S.range.yaw), ph = rad(S.range.pitch), cy = Math.cos(ps), sy = Math.sin(ps), cp = Math.cos(ph), sp = Math.sin(ph);
+      const rot = p => [p[0] * cy - p[1] * sy, p[0] * sy + p[1] * cy, p[2]];
+      const unrot = p => [p[0] * cy + p[1] * sy, -p[0] * sy + p[1] * cy, p[2]];
+      return { rot, unrot, f: [-cp, 0, -sp], up: [-sp, 0, cp], right: [0, 1, 0] };
+    }
+    resize() {
+      const r = this.cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+      const w = Math.max(10, Math.round(r.width * dpr)), h = Math.max(10, Math.round(r.height * dpr));
+      if (this.cv.width !== w || this.cv.height !== h) { this.cv.width = w; this.cv.height = h; }
+      this.W = r.width; this.H = r.height; this.dpr = dpr;
+    }
+    draw(now = performance.now()) {
+      this.resize();
+      const c = this.ctx, W = this.W, H = this.H, v = this.view(), cen = this.center;
+      const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
+      c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0); c.clearRect(0, 0, W, H);
+      if (!this.faces || W < 30) return false;
+      const toW = p => v.rot(V.sub(p, cen));
+      // fit the vehicle in the view (eases toward the new size as you turn it)
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (const f of this.faces) for (const p of f.pts) { const q = toW(p), sx = q[1], sy = -V.dot(q, v.up); x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy); y1 = Math.max(y1, sy); }
+      const target = Math.min((W - 40) / (x1 - x0), (H - 70) / (y1 - y0)), tcx = (x0 + x1) / 2, tcy = (y0 + y1) / 2;
+      let busy = false;
+      if (!this.scale) { this.scale = target; this.ox = tcx; this.oy = tcy; }
+      else { const k = 0.22; this.scale += (target - this.scale) * k; this.ox += (tcx - this.ox) * k; this.oy += (tcy - this.oy) * k; if (Math.abs(target - this.scale) / target > 0.002 || Math.abs(tcx - this.ox) * this.scale > 0.5) busy = true; }
+      const sc = this.scale, cxp = W / 2, cyp = H / 2 + 8;
+      const proj = q => [cxp + (q[1] - this.ox) * sc, cyp + (-V.dot(q, v.up) - this.oy) * sc];
+      this.proj = proj; this.v = v; this.toW = toW;
+      // ground shadow
+      c.fillStyle = 'rgba(0,0,0,.28)'; c.beginPath();
+      const gpts = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => proj(toW([cen[0] + a * (x1 - x0) * 0.42, b * (this.tank.hull.W / 2 + this.tank.hull.trackW + 0.2), 0])));
+      gpts.forEach((p, i) => i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])); c.closePath(); c.fill();
+      // which faces can we see, and in what order to paint them (far ones first)
+      const L = V.norm([0.6, -0.35, 0.75]), base = hex(this.tank.color), heat = S.range.heat;
+      const dead = this.deadAt ? clamp((now - this.deadAt) / 1500, 0, 1) : 0;
+      const list = [];
+      this.faces.forEach((f, i) => {
+        const nw = v.rot(f.n), facing = -V.dot(nw, v.f);
+        if (facing <= 0.02) return;
+        list.push({ f, i, nw, depth: V.dot(toW(f.c), v.f), scr: f.pts.map(p => proj(toW(p))), theta: Math.acos(clamp(facing, -1, 1)) * 180 / Math.PI });
+      });
+      list.sort((a, b) => (a.f.group === b.f.group ? b.depth - a.depth : a.f.group === 'low' ? -1 : 1));
+      this.drawn = list;
+      for (const d of list) {
+        const f = d.f, light = (0.42 + 0.58 * Math.max(0, V.dot(d.nw, L))) * (f.tint || 1) * (1 - dead * 0.6);
+        const col = f.part === 'track' ? [52, 56, 60].map(x => x * light * 1.6) : base.map(x => x * light);
+        c.beginPath(); d.scr.forEach((p, i) => i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])); c.closePath();
+        c.fillStyle = `rgb(${col.map(x => clamp(Math.round(x), 0, 255)).join(',')})`; c.fill();
+        if (heat && !this.deadAt) {
+          d.info = analyze(S.shell, f.layers, d.theta, S.dist);
+          c.globalAlpha = 0.72; c.fillStyle = STATUS[statusOf(d.info)]; c.fill(); c.globalAlpha = 1;
+        }
+        c.strokeStyle = 'rgba(0,0,0,.45)'; c.lineWidth = 1; c.stroke();
+        if (this.hover && this.hover.i === d.i) { c.strokeStyle = '#ffb020'; c.lineWidth = 2; c.stroke(); }
+        if (f.deco) {
+          c.fillStyle = `rgba(0,0,0,${f.part === 'track' ? 0.35 : 0.25})`;
+          for (const dc of f.deco) { c.beginPath(); dc.forEach((p, i) => { const q = proj(toW(p)); i ? c.lineTo(q[0], q[1]) : c.moveTo(q[0], q[1]); }); c.closePath(); c.fill(); }
+        }
+        // marks from earlier shots, painted with their face so things in front still cover them
+        for (const hm of this.hits) if (hm.fi === d.i) {
+          const q = proj(toW(hm.p)), r = clamp(sc * 0.07, 3, 7);
+          c.beginPath(); c.arc(q[0], q[1], r, 0, Math.PI * 2);
+          if (hm.outcome === 'pen') { c.fillStyle = '#0a0a0a'; c.fill(); c.strokeStyle = '#ff9a3c'; c.lineWidth = 2; c.stroke(); }
+          else if (hm.outcome === 'rico') { c.fillStyle = 'rgba(255,255,255,.85)'; c.fill(); }
+          else { c.fillStyle = 'rgba(210,214,218,.9)'; c.fill(); c.strokeStyle = 'rgba(0,0,0,.5)'; c.lineWidth = 1; c.stroke(); }
+        }
+      }
+      // numbers on big faces when showing weak spots
+      if (heat && !this.deadAt) {
+        c.font = '700 11px "JetBrains Mono", monospace'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        const placed = [];
+        for (const d of list.slice().reverse()) {   // front-most faces get their number first
+          let area = 0; for (let i = 0; i < d.scr.length; i++) { const a = d.scr[i], b = d.scr[(i + 1) % d.scr.length]; area += a[0] * b[1] - b[0] * a[1]; }
+          if (Math.abs(area) / 2 < 1300 || !d.info) continue;
+          const q = proj(toW(d.f.c)), txt = d.info.blocked ? '∞' : String(Math.round(d.info.need)), st = statusOf(d.info);
+          if (placed.some(o => Math.abs(o[0] - q[0]) < 30 && Math.abs(o[1] - q[1]) < 15)) continue;
+          placed.push(q);
+          c.fillStyle = st === 'crit' ? '#fff' : '#101010'; c.fillText(txt, q[0], q[1]);
+        }
+      }
+      // flashes & sparks
+      this.flashes = this.flashes.filter(fl => (fl.age += dt) < 0.5);
+      for (const fl of this.flashes) {
+        const f = fl.age / 0.5, r = fl.r * (0.4 + f);
+        const grad = c.createRadialGradient(fl.x, fl.y, 0, fl.x, fl.y, r);
+        grad.addColorStop(0, `rgba(255,250,220,${1 - f})`); grad.addColorStop(0.5, `rgba(255,176,32,${0.7 * (1 - f)})`); grad.addColorStop(1, 'rgba(255,120,20,0)');
+        c.save(); c.globalCompositeOperation = 'lighter'; c.fillStyle = grad; c.beginPath(); c.arc(fl.x, fl.y, r, 0, Math.PI * 2); c.fill(); c.restore();
+        busy = true;
+      }
+      if (this.deadAt && now - this.deadAt < 6000 && Math.random() < 0.6) {   // smoke rising after it's knocked out
+        const q = proj(toW([this.tank.turret.x, 0, this.tank.hull.H + this.tank.turret.h]));
+        this.parts.push({ x: q[0] + (Math.random() - 0.5) * 20, y: q[1], vx: (Math.random() - 0.3) * 20, vy: -40 - Math.random() * 40, life: 2.5, age: 0, size: 8 + Math.random() * 10, color: 'rgba(60,60,60,.55)', grav: 0, smoke: true });
+      }
+      if (this.parts.length) {
+        this.parts = this.parts.filter(p => (p.age += dt) < p.life);
+        for (const p of this.parts) {
+          p.vy += p.grav * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+          c.save(); if (!p.smoke) c.globalCompositeOperation = 'lighter';
+          c.globalAlpha = 1 - p.age / p.life; c.fillStyle = p.color; c.beginPath(); c.arc(p.x, p.y, p.smoke ? p.size * (1 + p.age) : p.size, 0, Math.PI * 2); c.fill(); c.restore();
+        }
+        busy = true;
+      }
+      if (this.deadAt && now - this.deadAt < 6000) busy = true;
+      return busy;
+    }
+    pick(x, y) {
+      if (!this.drawn) return null;
+      for (let k = this.drawn.length - 1; k >= 0; k--) {
+        const d = this.drawn[k];
+        if (inside(x, y, d.scr)) {
+          // where exactly on the plate (in the vehicle's own coordinates), so the mark turns with it
+          const v = this.v, a = (x - this.W / 2) / this.scale + this.ox, b = -((y - this.H / 2 - 8) / this.scale + this.oy);
+          const P0 = this.toW(d.f.pts[0]), base = [v.right[0] * a + v.up[0] * b, v.right[1] * a + v.up[1] * b, v.right[2] * a + v.up[2] * b];
+          const lam = (V.dot(d.nw, P0) - V.dot(d.nw, base)) / V.dot(d.nw, v.f);
+          const pw = [base[0] + lam * v.f[0], base[1] + lam * v.f[1], base[2] + lam * v.f[2]], pv = v.unrot(pw);
+          return { ...d, point: [pv[0] + this.center[0], pv[1] + this.center[1], pv[2] + this.center[2]] };
+        }
+      }
+      return null;
+    }
+    boom(x, y, big) {
+      this.flashes.push({ x, y, r: big ? 120 : 40, age: 0 });
+      const n = big ? 90 : 26;
+      for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, s = (big ? 260 : 160) * (0.3 + Math.random()); this.parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - (big ? 80 : 0), life: 0.5 + Math.random() * (big ? 1.1 : 0.4), age: 0, size: big ? 3 + Math.random() * 4 : 2, color: ['#ffd25a', '#ffb020', '#ff7a1a', '#fff2c0'][i % 4], grav: big ? 180 : 0 }); }
+      this.request();
+    }
+  }
+  function inside(x, y, poly) {
+    let ins = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const [xi, yi] = poly[i], [xj, yj] = poly[j];
+      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) ins = !ins;
+    }
+    return ins;
+  }
+
+  // ===================== Target range: game =====================
+  const tv = new TankView($('tank'));
+  let R = null;   // the current target's state
+  function newTarget(id) {
+    S.range.tank = id; save();
+    const T = TANKS[id];
+    R = { id, hp: T.hp, max: T.hp, shots: 0, track: false, gun: false, dead: false, log: [] };
+    tv.setTank(id);
+    $('banner').hidden = true;
+    $('range-result').innerHTML = '<span class="badge idle">READY</span><div class="txt">Pick a spot on the target and click to fire.</div>';
+    xsMini.layers = null; xsMini.draw();
+    renderTarget();
+  }
+  function renderTankChips() {
+    const best = store.get('armor-best', {});
+    $('tank-chips').innerHTML = Object.entries(TANKS).map(([k, t]) => `<button data-tank="${k}" class="${k === S.range.tank ? 'on' : ''}">${t.emoji} ${t.name}${best[k] ? ` · 🏆 ${best[k]}` : ''}</button>`).join('');
+  }
+  function renderTarget() {
+    const T = TANKS[R.id], f = R.hp / R.max;
+    $('t-name').textContent = `${T.emoji} ${T.name}`; $('t-class').textContent = T.cls;
+    const bar = $('hp-bar'); bar.style.width = (f * 100) + '%'; bar.style.background = f > 0.6 ? 'var(--good)' : f > 0.3 ? 'var(--warn)' : 'var(--crit)';
+    $('hp-meter').setAttribute('aria-valuenow', Math.round(R.hp)); $('hp-meter').setAttribute('aria-valuemax', R.max);
+    $('hp-text').textContent = R.dead ? '💥 Destroyed' : `❤️ ${Math.max(0, Math.round(R.hp))} / ${R.max} health`;
+    $('shots-text').textContent = `${R.shots} shot${R.shots === 1 ? '' : 's'}`;
+    $('flags').innerHTML = [R.dead && '💥 Knocked out', R.track && '🔧 Track broken', R.gun && '🎯 Gun damaged', !R.dead && R.hp < R.max && '🩹 Crew hit'].filter(Boolean).map(t => `<span>${t}</span>`).join('') || '<span>✅ No damage yet</span>';
+    $('log').innerHTML = R.log.length ? R.log.map(l => `<li><span>#${l.n}</span><span>${esc(l.text)}</span></li>`).join('') : '<li class="empty">No shots yet.</li>';
+    renderTankChips();
+  }
+  function damageFor(shot, part) {
+    const sh = S.shell, k = TYPES[sh.type].kind;
+    let d = k === 'ke' ? 16 + (sh.type === 'apfsds' ? 22 : sh.cal * 0.14) + Math.min(20, Math.max(0, shot.rem || 0) * 0.08)
+      : k === 'ce' ? 18 + sh.cal * 0.1 + Math.min(12, Math.max(0, shot.rem || 0) * 0.02)
+      : k === 'hesh' ? 22 + sh.cal * 0.12 : 18 + sh.cal * 0.18;
+    if (part === 'mantlet') d *= 0.6;
+    return Math.round(clamp(d * (0.85 + Math.random() * 0.3), 8, 70));
+  }
+  function rangeFire(x, y) {
+    if (!R || R.dead) return;
+    const hit = tv.pick(x, y); if (!hit) return;
+    const f = hit.f, info = analyze(S.shell, f.layers, hit.theta, S.dist), shot = rollShot(S.shell, f.layers, info);
+    shot.stack = f.layers;
+    R.shots++; countPlay();
+    tv.hits.push({ fi: hit.i, p: hit.point, outcome: shot.outcome === 'nofx' ? 'stop' : shot.outcome });
+    tv.boom(x, y, false);
+    xsMini.set(S.shell, f.layers, info); xsMini.fire(shot);
+    const d = describe(shot, S.shell), extra = [];
+    let logText = `${f.name}: ${d.badge.replace(/^[^A-Z]+/, '').toLowerCase()}`;
+    if (shot.outcome === 'pen') {
+      if (f.part === 'track') { if (!R.track) extra.push('🔧 Track broken! The target can\'t move now.'); R.track = true; logText += ' (track broken)'; }
+      else if (f.part === 'gun') { if (!R.gun) extra.push('🎯 Gun barrel hit! Its gun is damaged.'); R.gun = true; logText += ' (gun damaged)'; }
+      else { const dmg = damageFor(shot, f.part); R.hp -= dmg; extra.push(`💥 The shell got inside: −${dmg} health.`); logText += ` (−${dmg})`; }
+    }
+    $('range-result').innerHTML = resultHTML(d, extra);
+    R.log.unshift({ n: R.shots, text: logText });
+    sound('fire'); setTimeout(() => sound(shot.outcome === 'rico' ? 'rico' : shot.outcome === 'pen' ? 'pen' : 'stop'), 300);
+    if (R.hp <= 0 && !R.dead) {
+      R.dead = true; R.hp = 0;
+      setTimeout(() => {
+        tv.deadAt = performance.now();
+        const q = tv.proj(tv.toW([TANKS[R.id].turret.x, 0, TANKS[R.id].hull.H + TANKS[R.id].turret.h * 0.6]));
+        tv.boom(q[0], q[1], true); sound('boom');
+        const best = store.get('armor-best', {}), prev = best[R.id];
+        if (!prev || R.shots < prev) { best[R.id] = R.shots; store.set('armor-best', best); }
+        store.set('game-best-armor', (store.get('game-best-armor', 0) || 0) + 1);   // targets destroyed, shown on the games page
+        const ids = Object.keys(TANKS), next = ids[(ids.indexOf(R.id) + 1) % ids.length];
+        $('banner').innerHTML = `<b>💥 Target destroyed in ${R.shots} shot${R.shots === 1 ? '' : 's'}!</b>${!prev || R.shots < prev ? '<span>🏆 New best for this target</span>' : `<span>Best: ${prev} shots</span>`}<br><button class="btn fire" id="next-target" data-next="${next}">Next target: ${TANKS[next].emoji} ${TANKS[next].name} →</button> <button class="btn" id="again">↺ Again</button>`;
+        $('banner').hidden = false;
+        renderTarget();
+      }, 450);
+    }
+    renderTarget(); tv.request();
+  }
+  $('banner').addEventListener('click', e => { if (e.target.id === 'next-target') newTarget(e.target.dataset.next); if (e.target.id === 'again') newTarget(R.id); });
+  $('tank-chips').addEventListener('click', e => { const b = e.target.closest('[data-tank]'); if (b) newTarget(b.dataset.tank); });
+  $('repair').addEventListener('click', () => newTarget(R.id));
+  $('heat').addEventListener('change', e => { S.range.heat = e.target.checked; $('heat-legend').hidden = !S.range.heat; save(); tv.request(); });
+
+  // pointer: drag turns the target, a click fires, hovering shows what's there
+  const cv = $('tank'), tip = $('tip');
+  let drag = null;
+  const local = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, yaw: S.range.yaw, pitch: S.range.pitch, moved: false }; });
+  cv.addEventListener('pointermove', e => {
+    if (drag && (e.buttons || e.pointerType !== 'mouse')) {
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (!drag.moved && Math.hypot(dx, dy) > 6) { drag.moved = true; try { cv.setPointerCapture(e.pointerId); } catch (err) {} }
+      if (drag.moved) {
+        S.range.yaw = ((drag.yaw + dx * 0.5 + 540) % 360) - 180;
+        if (e.pointerType === 'mouse') S.range.pitch = clamp(drag.pitch + dy * 0.25, 0, 60);
+        syncAngleSliders(); tip.hidden = true; tv.request();
+      }
+      return;
+    }
+    const [x, y] = local(e);
+    showTip(x, y);
+  });
+  cv.addEventListener('pointerup', e => { if (drag && !drag.moved) { const [x, y] = local(e); rangeFire(x, y); showTip(x, y); } else if (drag) save(); drag = null; });
+  cv.addEventListener('pointercancel', () => { drag = null; });
+  cv.addEventListener('pointerleave', () => { tip.hidden = true; tv.hover = null; tv.request(); });
+  cv.addEventListener('keydown', e => {
+    const k = e.key;
+    if (k === 'ArrowLeft' || k === 'ArrowRight') { S.range.yaw = ((S.range.yaw + (k === 'ArrowLeft' ? -5 : 5) + 540) % 360) - 180; }
+    else if (k === 'ArrowUp' || k === 'ArrowDown') { S.range.pitch = clamp(S.range.pitch + (k === 'ArrowUp' ? 3 : -3), 0, 60); }
+    else if (k === 'Enter' || k === ' ') { rangeFire(tv.W / 2, tv.H / 2 + 8); }
+    else return;
+    e.preventDefault(); syncAngleSliders(); save(); tv.request();
+  });
+  function showTip(x, y) {
+    const hit = tv.pick(x, y);
+    tv.hover = hit; tv.request();
+    if (!hit || (R && R.dead)) { tip.hidden = true; return; }
+    const f = hit.f, info = analyze(S.shell, f.layers, hit.theta, S.dist), st = statusOf(info);
+    tip.innerHTML = `<b>${esc(f.name)}</b><div class="m">${esc(stackText(f.layers))}</div><div class="m">Hit at ${Math.round(hit.theta)}° · ${info.blocked ? 'blocks blasts' : `${Math.round(info.need)} mm ${info.kind === 'he' || info.kind === 'hesh' ? 'to beat' : 'in the way'}`}</div>
+      <div class="v"><span class="badge ${st}">${STATUS_WORD[st]}</span><span>${Math.round(info.pPen * 100)}% with ${Math.round(info.power)} mm</span></div>`;
+    tip.hidden = false;
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    tip.style.left = clamp(x + 16, 4, tv.W - w - 4) + 'px'; tip.style.top = clamp(y + 16, 4, tv.H - h - 4) + 'px';
+  }
+  function syncAngleSliders() {
+    $('yaw').value = Math.round(S.range.yaw); $('yaw-out').textContent = `${Math.round(S.range.yaw)}°`;
+    $('pitch').value = Math.round(S.range.pitch); $('pitch-out').textContent = `${Math.round(S.range.pitch)}°`;
+  }
+  $('yaw').addEventListener('input', e => { S.range.yaw = +e.target.value; syncAngleSliders(); save(); tv.request(); });
+  $('pitch').addEventListener('input', e => { S.range.pitch = +e.target.value; syncAngleSliders(); save(); tv.request(); });
+
+  // ===================== Learn =====================
+  function renderLearn() {
+    $('los-table').innerHTML = '<tr><th>Angle</th><th>Armor in the way</th></tr>' + [0, 30, 45, 60, 70, 80].map(a => `<tr><td>${a}°</td><td>${Math.round(100 / Math.cos(rad(a)))} mm</td></tr>`).join('');
+    $('rico-list').innerHTML = Object.values(TYPES).map(t => `<li><b>${t.short}</b>: starts bouncing around ${t.rico[0]}°, always bounces past ${t.rico[1]}°</li>`).join('');
+    $('type-list').innerHTML = Object.values(TYPES).map(t => `<li><b>${t.short} (${esc(t.name)}):</b> ${esc(t.blurb)}</li>`).join('');
+  }
+
+  // ===================== Modes, playing stats & start =====================
+  let counted = false;
+  function countPlay() {   // feeds "Jump back in" on the homepage and the games page
+    if (counted) return; counted = true;
+    const p = store.get('games-played', {}); p.armor = (p.armor || 0) + 1; store.set('games-played', p);
+    store.set('games-last', { id: 'armor', at: Date.now() });
+  }
+  function setMode(m) {
+    S.mode = m; save();
+    document.body.className = 'mode-' + m;
+    document.querySelectorAll('#modes button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+    $('stage-lab').hidden = m !== 'lab'; $('stage-range').hidden = m !== 'range'; $('stage-learn').hidden = m !== 'learn';
+    refresh();
+  }
+  $('modes').addEventListener('click', e => { const b = e.target.closest('[data-mode]'); if (b) setMode(b.dataset.mode); });
+  function refresh() {
+    if (S.mode === 'lab') refreshLab();
+    if (S.mode === 'range') { tv.request(); if (xsMini.layers) xsMini.draw(); }
+  }
+  $('mute').addEventListener('click', () => { muted = !muted; store.set('armor-muted', muted); $('mute').textContent = muted ? '🔇' : '🔊'; });
+  $('mute').textContent = muted ? '🔇' : '🔊';
+  addEventListener('keydown', e => {
+    if (e.key !== ' ' || S.mode !== 'lab') return;
+    const a = document.activeElement;
+    if (a && (a.tagName === 'BUTTON' || a.tagName === 'SELECT' || a.tagName === 'A' || (a.tagName === 'INPUT' && a.type !== 'range'))) return;
+    e.preventDefault(); labFire();
+  });
+  let resizeTimer = 0, lastW = 0;
+  new ResizeObserver(([e]) => {
+    const w = Math.round(e.contentRect.width);
+    if (w === lastW) return;   // only width matters; the page getting taller mustn't restart an animation
+    lastW = w; clearTimeout(resizeTimer); resizeTimer = setTimeout(refresh, 60);
+  }).observe(document.querySelector('main.app'));
+
+  $('dist').value = S.dist; $('dist-out').textContent = S.dist.toLocaleString() + ' m';
+  renderShellControls(); renderArmorControls(); renderLearn(); syncAngleSliders();
+  $('heat').checked = S.range.heat; $('heat-legend').hidden = !S.range.heat;
+  newTarget(TANKS[S.range.tank] ? S.range.tank : 'badger');
+  setMode(['lab', 'range', 'learn'].includes(S.mode) ? S.mode : 'lab');
+  </script>
+</body>
+</html>
