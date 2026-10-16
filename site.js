@@ -9,7 +9,7 @@
     ['🎵', 'Music Player', 'music-player/', 'songs audio play skins stickers'],
     ['📊', 'Dashboard', 'dashboard/', 'clock weather todo notes timer countdown'],
     ['🛰️', 'World Watch', 'world-watch/', 'map news war conflicts earthquakes space live tv'],
-    ['🛡️', 'Armor Pen Sim', 'armor-sim/', 'tank shell armor penetration ricochet heat sim'],
+    ['🛡️', 'Armor Pen Sim', 'armor-sim/', 'tank shell armor penetration ricochet heat sim sandbox physics particles'],
     ['🎮', 'Games Arcade', 'games/', 'all games play'],
     ['🧩', 'Block Pop', 'games/block-pop/', 'puzzle blocks'],
     ['🪐', 'Merge Drop', 'games/merge-drop/', 'planets merge puzzle'],
