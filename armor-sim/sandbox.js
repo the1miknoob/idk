@@ -2,8 +2,8 @@
 // engine.js does the physics and vehicles.js knows the vehicles; this file is the controls, the builders and the drawing.
 (function () {
   'use strict';
-  const E = window.ImpactEngine, V = window.Vehicles;
-  if (!E || !V) return;
+  const E = window.ImpactEngine, V = window.Vehicles, B = window.Ballistics;
+  if (!E || !V || !B) return;
   const $ = id => document.getElementById(id);
   const clone = o => JSON.parse(JSON.stringify(o));
   const DEG = Math.PI / 180;
@@ -12,10 +12,11 @@
   const SPEEDS = { slow: ['🐢 Slow-mo', 40], normal: ['▶ Normal', 150], fast: ['⏩ Fast', Infinity] };              // simulated µs per real second
   const INSIDE_MAX = { slow: 20000, normal: 4500, fast: 2500 };   // ms of real time for the bits flying inside, so slow computers don't wait forever
   const VIEWS = { mat: '🎨 Material', heat: '🔥 Heat', damage: '💔 Damage', speed: '💨 Speed' };
+  const SOLVERS = { particles: '🧪 Particles', formulas: '⚡ Formulas' };   // full physics, or the instant answer from the formulas (ballistics.js)
   const FROM = ['front', 'rear', 'top'];
   const weak = innerWidth < 700 || (navigator.hardwareConcurrency || 8) <= 4;
   const DEF = { proj: 'ap88', v: null, aim: 0, preset: 'plate', plates: clone(E.ARMORS[0].plates), view: 'mat', speed: 'normal', quality: weak ? 'low' : 'med',
-    target: 'armor', veh: 'tiger', from: 'front', tilt: 0, vaim: null, count: 1, pattern: 'spread', gap: 40 };
+    target: 'armor', veh: 'tiger', from: 'front', tilt: 0, vaim: null, count: 1, pattern: 'spread', gap: 40, solver: 'particles' };
   const COUNTS = [1, 2, 3, 5, 8];   // shots at once
   const SB = Object.assign(clone(DEF), store.get('armor-sandbox', {}) || {});
   if (!E.PROJECTILES.some(p => p.id === SB.proj)) SB.proj = DEF.proj;
@@ -25,6 +26,7 @@
   if (!QUALITY[SB.quality]) SB.quality = DEF.quality;
   if (!SPEEDS[SB.speed]) SB.speed = 'normal';
   if (!VIEWS[SB.view]) SB.view = 'mat';
+  if (!SOLVERS[SB.solver]) SB.solver = 'particles';
   if (SB.target !== 'vehicle') SB.target = 'armor';
   if (!FROM.includes(SB.from)) SB.from = 'front';
   SB.tilt = clamp(Math.round(+SB.tilt || 0), -30, 30);
@@ -56,6 +58,7 @@
   // → blast + debris (only if ammo explodes) → done.
   let sim = null, state = 'idle', approachT0 = 0, verdict = null, verdictAt = 0, runStart = 0, flashes = [], seenEvents = 0, visible = false, raf = 0, stepsPerSec = 0;
   let VR = null;     // the vehicle: { veh, run, shots, last, fl, deb, … }
+  let FR = null;     // plain armor, ⚡ Formulas: the last answer (with t0, when it was worked out, for drawing it growing in)
   let ED = null;     // the vehicle builder
   let paused = null; // which phase a pause interrupted
   const IDENT = V.frameFor({ from: 'front', tilt: 0, at: [0, 0] });
@@ -74,7 +77,7 @@
     }
   }
   function rebuild(keepView) {
-    flashes = []; seenEvents = 0; verdict = null; paused = null;
+    flashes = []; seenEvents = 0; verdict = null; paused = null; FR = null;
     const P = projDef();
     if (ED) { VR = { veh: ED.veh, run: null }; sim = null; fr = IDENT; state = 'edit'; }
     else if (SB.target === 'vehicle') {
@@ -111,7 +114,15 @@
       if (VR.missed) toast(`${VR.missed} of the ${SB.count} shots miss the armor.`);
       seenEvents = sim.events.length; flashes = []; verdict = null;
       glideTo(impactView(), 450);
-    } else if (!sim || state !== 'ready') rebuild(true);
+    } else {
+      if (!sim || state !== 'ready') rebuild(true);
+      if (SB.solver === 'formulas') {   // no particles: the formulas work it out at once
+        FR = formulasForPlates(); FR.t0 = performance.now(); verdict = FR.verdict; state = 'done';
+        sound(FR.verdict === 'rico' ? 'rico' : FR.verdict === 'pen' ? 'pen' : FR.verdict === 'spall' ? 'boom' : 'stop');
+        countPlay(); renderResult(); renderControlsState(); loop();
+        return;
+      }
+    }
     state = 'approach'; approachT0 = performance.now(); runStart = 0;
     sound('fire'); countPlay(); renderControlsState(); renderResult();
     loop();
@@ -129,7 +140,7 @@
   function noteVerdict() {   // remember how this shot went at the armor (later phases keep moving things)
     const v = verdict || sim.settleVerdict() || 'stop', r = sim.res || sim.measure();
     verdict = v;
-    VR.last = { v, resid: r.residual, depth: r.depth, group: VR.run.group, P: projDef(), maxT: r.maxT, tally: sim.tally, missed: VR.missed };
+    VR.last = { v, resid: r.residual, depth: r.depth, group: VR.run.group, P: projDef(), vel: speedOf(), maxT: r.maxT, tally: sim.tally, missed: VR.missed };
     sound(v === 'rico' ? 'rico' : v === 'pen' ? 'pen' : v === 'spall' ? 'boom' : 'stop');
   }
   function toInside() {
@@ -258,7 +269,7 @@
     draw(now);
     if (busyNow() || flashes.length || glide || effectsOn(now)) loop();
   }
-  const effectsOn = now => VR && VR.run && ((VR.boom && now - VR.boom.at < 7000) || fireLit() && now - (VR.fireAt || 0) < 9000);
+  const effectsOn = now => (FR && !VR && now - FR.t0 < 900) || VR && VR.run && ((VR.boom && now - VR.boom.at < 7000) || fireLit() && now - (VR.fireAt || 0) < 9000);
   const fireLit = () => VR && VR.run && VR.veh.modules.some((m, k) => m.type === 'fuel' && shownState(k, performance.now()) === 2);
 
   // ===================== Drawing =====================
@@ -548,6 +559,7 @@
       c.beginPath(); c.arc(x, y, 7, 0, Math.PI * 2); c.moveTo(x - 11, y); c.lineTo(x + 11, y); c.moveTo(x, y - 11); c.lineTo(x, y + 11); c.stroke();
     }
     if (VR && VR.run) drawEffects(c, now);
+    if (FR && !VR && sim) drawFormulas(c, now);
     // flashes from explosions
     for (const f of flashes) {
       const life = f.big ? 1400 : 700, a = (now - f.at) / life, r = Math.max(8, (f.r || 40) * cam.s) * (0.4 + a * 0.9), x = toSX(f.x), y = toSY(f.y);
@@ -566,9 +578,46 @@
     if (!sim) return;
     c.textAlign = 'right'; c.textBaseline = 'top'; c.font = '700 13px "JetBrains Mono", monospace';
     c.fillStyle = 'rgba(9,12,15,.8)';
-    const tt = state === 'flight' ? '⏩ following the bits' : state === 'debris' ? '⏩ real time' : `t = ${(sim.time - (VR && VR.run ? sim.shotT0 || 0 : 0)).toFixed(1)} µs`, tw = c.measureText(tt).width;
+    const tt = FR && !VR ? '⚡ solved by formulas' : state === 'flight' ? '⏩ following the bits' : state === 'debris' ? '⏩ real time' : `t = ${(sim.time - (VR && VR.run ? sim.shotT0 || 0 : 0)).toFixed(1)} µs`, tw = c.measureText(tt).width;
     const cy = W - tw - 22 < tagEnd + 8 ? 30 : 8;   // narrow screen: drop below the label
     c.fillRect(W - tw - 22, cy, tw + 14, 24); c.fillStyle = '#ffb020'; c.fillText(tt, W - 15, cy + 5);
+  }
+  function drawFormulas(c, now) {   // the formulas' answer drawn on the plates: how far it got, its speed after each plate, the fragments behind
+    const r = FR, st = B.stationsFromPlates(SB.plates, SB.aim);
+    if (!st.length || r.verdict === 'miss') return;
+    const k = Math.min(1, (now - r.t0) / 700), y = SB.aim, x0 = st[0].x, P = projDef();
+    const w = Math.max(3, (r.heat ? 12 : r.dia || 20) * cam.s);
+    c.save(); c.lineCap = 'round';
+    if (r.verdict === 'rico') {   // glances off the face of the first plate (the shot line mirrored in it)
+      const a = st[0].tilt * DEG, n = [Math.cos(a), -Math.sin(a)], d = [1 - 2 * n[0] * n[0], -2 * n[0] * n[1]], L = 1200 * k;
+      c.strokeStyle = 'rgba(255,140,40,.85)'; c.lineWidth = w; c.setLineDash([w * 2, w * 1.4]);
+      c.beginPath(); c.moveTo(toSX(x0 - 300), toSY(y)); c.lineTo(toSX(x0), toSY(y)); c.lineTo(toSX(x0 + d[0] * L), toSY(y + d[1] * L)); c.stroke(); c.restore(); return;
+    }
+    const end = x0 + r.depth * k;
+    c.strokeStyle = r.heat ? 'rgba(255,214,90,.9)' : 'rgba(255,140,40,.85)'; c.lineWidth = w;
+    c.beginPath(); c.moveTo(toSX(x0 - 30), toSY(y)); c.lineTo(toSX(end), toSY(y)); c.stroke();
+    const g = c.createRadialGradient(toSX(end), toSY(y), 0, toSX(end), toSY(y), w * 2.2);
+    g.addColorStop(0, 'rgba(255,250,220,.95)'); g.addColorStop(1, 'rgba(255,150,40,0)');
+    c.fillStyle = g; c.beginPath(); c.arc(toSX(end), toSY(y), w * 2.2, 0, Math.PI * 2); c.fill();
+    if (k >= 1) {   // its speed (or what's left of the jet) after each plate it got through
+      c.font = '600 11px "JetBrains Mono", monospace'; c.textAlign = 'left'; c.textBaseline = 'bottom';
+      st.forEach(s => {
+        const row = r.rows.filter(q => q.plate === s.name && q.plateEnd).pop() || r.rows.filter(q => q.plate === s.name).pop();
+        if (!row || row.result === 'stop' || row.result === 'spall') return;
+        const back = s.x + s.layers.reduce((a, l) => a + l.t, 0) / Math.max(0.05, Math.cos(s.tilt * DEG)), txt = r.heat ? `jet ${row.jetOut} mm` : `${Math.round(row.vOut).toLocaleString()} m/s`;
+        const tx = toSX(back) + 6, ty = toSY(y) - w / 2 - 6, tw = c.measureText(txt).width;
+        c.fillStyle = 'rgba(9,12,15,.8)'; c.fillRect(tx - 3, ty - 15, tw + 6, 17); c.fillStyle = '#ffb020'; c.fillText(txt, tx, ty);
+      });
+      if (r.verdict === 'pen' || r.verdict === 'spall') {   // fragments flying out of the back
+        const n = Math.min(70, r.frags ? r.frags.n : 12), reach = r.verdict === 'pen' ? 250 + Math.min(900, (r.resid || (r.jetLeft || 0) * 3) * 0.5) : 160;
+        c.fillStyle = 'rgba(255,214,90,.9)';
+        for (let i = 0; i < n; i++) {
+          const a = ((i * 0.618) % 1 - 0.5) * (r.verdict === 'pen' ? 0.9 : 1.6), d = reach * (0.35 + 0.65 * ((i * 0.37) % 1));
+          c.fillRect(toSX(end + Math.cos(a) * d) - 1.5, toSY(y + Math.sin(a) * d) - 1.5, 3, 3);
+        }
+      }
+    }
+    c.restore();
   }
   function reticle(c, from, at, color, miss, small) {
     c.save(); c.setLineDash([6, 6]); c.strokeStyle = miss ? 'rgba(232,106,92,.7)' : `rgba(255,176,32,${small ? 0.45 : 0.7})`; c.lineWidth = 1.5;
@@ -629,6 +678,52 @@
     const bits = ['pen', 'spall', 'rico', 'stop'].filter(k => t[k]).map(k => `${t[k] === t.n ? (t.n === 2 ? 'both' : `all ${t.n}`) : t[k]} ${W[k][t[k] === 1 ? 0 : 1]}`);
     return bits.length > 1 ? `${bits.slice(0, -1).join(', ')} and ${bits[bits.length - 1]}` : bits[0];
   }
+  // ---------- ⚡ Formulas (ballistics.js) ----------
+  const fxCache = new Map();
+  const cached = (key, f) => { if (!fxCache.has(key)) { if (fxCache.size > 60) fxCache.clear(); fxCache.set(key, f()); } return fxCache.get(key); };
+  function formulasForPlates() {
+    const P = { ...projDef(), v: speedOf() }, t0 = performance.now();
+    const r = cached(JSON.stringify([P.id, P.v, SB.plates, SB.aim]), () => B.solve(P, B.stationsFromPlates(SB.plates, SB.aim)));
+    return { ...r, ms: Math.max(0.1, performance.now() - t0) };
+  }
+  const formulasForGroup = (veh, P, group) => cached(JSON.stringify([veh.id, P.id, P.v, group.map(h => [h.i, Math.round(h.x), +h.cos.toFixed(4)])]), () => B.solve(P, B.stationsFromGroup(group)));
+  const FX_RESULT = { through: '✓ through', stop: '✗ stopped', rico: '↗ bounced', spall: '💥 spalled', era: '💥 reactive' };
+  const low = t => t.charAt(0).toLowerCase() + t.slice(1);
+  function fxSummary(r) {
+    const rows = r.rows, last = rows[rows.length - 1], n = new Set(rows.map(q => q.plate)).size, all = n === 2 ? 'both plates' : n > 1 ? `all ${n} plates` : 'the armor';
+    if (r.verdict === 'miss' || !last) return 'The shot line misses the armor.';
+    if (r.verdict === 'rico') return `It bounces off ${low(last.plate)} (${last.note}).`;
+    if (r.blast) return r.verdict === 'pen' ? `The blast breaks through (${last.note}).` : r.verdict === 'spall' ? `The shock wave knocks a scab off the inside (${last.note}).` : `It doesn't get through (${last.note}).`;
+    if (r.heat) return r.verdict === 'pen' ? `The jet gets through ${all} with about ${r.jetLeft} mm of punch to spare.` : `The jet is used up ${r.depth} mm in, in ${low(last.plate)} (${low(last.mat)}).`;
+    const lim = rows.filter(q => q.plateEnd).pop();
+    if (r.verdict === 'pen') return `It gets through ${all} and comes out at ${r.resid.toLocaleString()} m/s${r.rod ? ` with ${r.lenLeft} of its ${r.len0} mm left` : ''}.${r.frags ? ` About ${r.frags.n.toLocaleString()} fragments of roughly ${r.frags.size < 2 ? r.frags.size.toFixed(1) : Math.round(r.frags.size)} mm fly out behind it.` : ''}`;
+    return `${r.depth < 1 ? `It doesn't get in at all: it stops on the face of ${low(last.plate)} (${low(last.mat)})` : `Stopped ${r.depth} mm in, in ${low(last.plate)} (${low(last.mat)})`}${r.verdict === 'spall' ? ', but the back of the plate bulges and cracks bits off' : ''}.${lim && lim.vbl ? ` It would need about ${lim.vbl.toLocaleString()} m/s to get through that plate.` : ' No speed would get it through that plate.'}`;
+  }
+  function fxTable(r) {
+    if (!r.rows.length) return '';
+    const name = q => esc(q.plate) + (q.layer ? ` · ${q.layer}` : ''), thick = q => `${q.t} mm${q.ang ? ` at ${q.ang}° = ${q.los} mm` : ''}`;
+    const res = q => `<span class="res ${q.result}">${FX_RESULT[q.result] || esc(q.result)}</span>`;
+    let head, body;
+    if (r.heat) {
+      head = '<th>Plate</th><th>Material</th><th>Thickness</th><th>Jet in → out</th><th>Result</th>';
+      body = r.rows.map(q => `<tr class="${q.plateEnd ? 'pend' : ''}"><td>${name(q)}</td><td>${esc(q.mat)}</td><td class="n">${thick(q)}</td><td class="n">${q.jetIn} → ${q.jetOut} mm</td><td>${res(q)}</td></tr>`);
+    } else if (r.blast) {
+      head = '<th>Plate</th><th>Material</th><th>Thickness</th><th>Result</th>';
+      body = r.rows.map(q => `<tr><td>${name(q)}</td><td>${esc(q.mat)}</td><td class="n">${thick(q)}</td><td>${res(q)}</td></tr>`);
+    } else {
+      head = '<th>Plate</th><th>Material</th><th>Thickness</th><th>Speed in → out</th><th>Worn away</th><th title="The slowest speed that still gets through this plate">Needs</th><th>Result</th>';
+      body = r.rows.map(q => `<tr class="${q.plateEnd ? 'pend' : ''}"><td>${name(q)}</td><td>${esc(q.mat)}</td><td class="n">${q.result === 'rico' ? '–' : thick(q)}</td>
+        <td class="n">${Math.round(q.vIn).toLocaleString()} → ${q.result === 'stop' || q.result === 'spall' ? '0' : Math.round(q.vOut).toLocaleString()} m/s</td>
+        <td class="n">${q.wear ? Math.round(q.wear * 100) + '%' : '–'}</td><td class="n">${q.plateEnd && q.vbl ? q.vbl.toLocaleString() + ' m/s' : q.plateEnd && q.result !== 'rico' ? 'more than any gun' : ''}</td><td>${res(q)}</td></tr>`);
+    }
+    return `<div class="fx-wrap"><table class="fx"><thead><tr>${head}</tr></thead><tbody>${body.join('')}</tbody></table></div>`;
+  }
+  function fxNotes(r, P) {
+    const notes = r.notes.concat(r.rows.filter(q => q.note && q.result === 'era').map(q => cap(q.note) + '.'));
+    return `${notes.length ? `<p class="fx-note">${notes.map(esc).join(' ')}</p>` : ''}<p class="fx-note">Models: ${esc(B.MODELS[P.kind] || B.MODELS.ke)}. <b>Needs</b> = the slowest speed that still gets through that plate (its ballistic limit).</p>`;
+  }
+  const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
+  const fxDetails = (r, P) => r && r.rows.length ? `<details class="fx-more"><summary>⚡ What the formulas say: ${esc(fxSummary(r))}</summary>${fxTable(r)}${fxNotes(r, P)}</details>` : '';
   function formulaEstimate(P, v) {   // the classic formulas from the Calculator, for comparison
     const d = P.d, g = P.group;
     if (P.kind === 'heat') return Math.round(d.q * d.cal);   // a shaped charge goes about its design depth
@@ -656,8 +751,17 @@
     if (ED) { box.innerHTML = '<span class="badge idle">BUILDING</span><div class="txt">You\'re building a vehicle. Press <b>Save &amp; try it</b> to shoot at it.</div>'; $('sb-live').textContent = ''; return; }
     if (!sim) return;
     if (VR && VR.run) { renderVehResult(); return; }
+    if (FR) {   // ⚡ Formulas
+      const [st, badge] = SB_WORDS[FR.verdict] || ['idle', 'MISS'], plates = FR.rows.filter(q => q.plateEnd).length;
+      const stats = [['Solved in', `${FR.ms < 10 ? FR.ms.toFixed(1) : Math.round(FR.ms)} ms`], FR.verdict === 'pen' && !FR.heat && !FR.blast ? ['Exit speed', `${FR.resid.toLocaleString()} m/s`] : ['Got', `${FR.depth} mm in`],
+        FR.rod && FR.verdict !== 'rico' ? [FR.verdict === 'pen' ? 'Rod left' : 'Rod left', `${FR.lenLeft} of ${FR.len0} mm`] : null, FR.frags && FR.verdict === 'pen' ? ['Fragments', `~${FR.frags.n.toLocaleString()}`] : null].filter(Boolean);
+      box.innerHTML = `<span class="badge ${st}">${badge}</span><div class="txt">${esc(fxSummary(FR))}${SB.count > 1 ? ' (The formulas work out one shot at a time.)' : ''}
+        <div class="sb-stats">${stats.map(([k, val]) => `<div><small>${k}</small><b>${val}</b></div>`).join('')}</div>${fxTable(FR)}${fxNotes(FR, P)}</div>`;
+      $('sb-live').textContent = `⚡ Solved with formulas in ${FR.ms < 10 ? FR.ms.toFixed(1) : Math.round(FR.ms)} ms · ${plates} plate${plates === 1 ? '' : 's'} · no particles were moved`;
+      return;
+    }
     if (state !== 'done') {
-      const msg = state === 'ready' ? 'Press <b>Fire</b> (or Space). Click the armor to aim somewhere else.' : 'Simulating… every particle is doing its own physics.';
+      const msg = state === 'ready' ? (SB.solver === 'formulas' ? 'Press <b>Fire</b> (or Space) for an instant answer from the formulas, plate by plate. Click the armor to aim somewhere else.' : 'Press <b>Fire</b> (or Space). Click the armor to aim somewhere else.') : 'Simulating… every particle is doing its own physics.';
       box.innerHTML = `<span class="badge idle">${state === 'ready' ? 'READY' : 'LIVE'}</span><div class="txt">${msg}</div>`;
       $('sb-live').textContent = state === 'ready' ? `${sim.n.toLocaleString()} particles · ${sim.nb.toLocaleString()} bonds · particle size ${sim.h.toFixed(sim.h < 1 ? 2 : 1)} mm` : liveLine();
       return;
@@ -681,7 +785,7 @@
     ].filter(Boolean);
     box.innerHTML = `<span class="badge ${st}">${badge}</span><div class="txt">${esc(text)}
       <div class="sb-stats">${stats.map(([k, val]) => `<div><small>${k}</small><b>${val}</b></div>`).join('')}</div>
-      ${estHTML(P, est)}</div>`;
+      ${estHTML(P, est)}${fxDetails(formulasForPlates(), P)}</div>`;
     $('sb-live').textContent = liveLine();
   }
   function armorLine(L) {   // what happened at the armor on the last shot, in words
@@ -722,7 +826,7 @@
     box.innerHTML = `<span class="badge ${fate.st}">${fate.badge}</span><div class="txt">${esc(line)} ${esc(fate.text)}${fate.id === 'fine' || fate.id === 'damaged' ? ' Fire again: the damage stays.' : ''}
       <div class="mchips">${chips}</div>
       <div class="sb-stats">${stats.map(([k, val]) => `<div><small>${k}</small><b>${val}</b></div>`).join('')}</div>
-      ${estHTML(P, formulaEstimate(P, speedOf()))}</div>`;
+      ${estHTML(P, formulaEstimate(P, speedOf()))}${L && L.group && L.group.length ? fxDetails(formulasForGroup(veh, { ...L.P, v: L.vel || speedOf() }, L.group), L.P) : ''}</div>`;
     $('sb-live').textContent = liveLine();
   }
 
@@ -844,9 +948,17 @@
     const veh = vehDef(), shot = hoverPt ? { ...shotOf(veh), at: hoverPt } : shotOf(veh), pr = V.probe(veh, shot, VR && VR.veh === veh ? VR.run : null);
     const aims = !hoverPt && VR && VR.aims && VR.aims.length ? VR.aims : null, miss = aims ? aims.filter(a => !a.e).length : 0;
     const many = aims ? ` <br>${SB.pattern === 'row' ? `${aims.length} shots, one after another` : `${aims.length} shots side by side`}${miss ? `: <b>${miss} of them miss the armor</b>` : ''}.` : '';
+    let fx = '';
+    if (!hoverPt && VR && VR.run && VR.veh === veh) {   // the formulas' quick prediction for this shot
+      const g = V.firstArmor(veh, shotOf(veh), VR.run.geo, VR.run.gone);
+      if (g.length) {
+        const P = { ...projDef(), v: speedOf() }, r = formulasForGroup(veh, P, g);
+        fx = `<br>⚡ Formulas: ${r.verdict === 'pen' ? `gets through${r.heat || r.blast ? '' : ` (out at ${r.resid.toLocaleString()} m/s)`}` : r.verdict === 'rico' ? 'bounces off' : r.verdict === 'spall' ? (r.blast ? 'knocks a scab off the inside' : 'stopped, with spall') : `stopped about ${r.depth} mm in`}.`;
+      }
+    }
     $('sb-aim-info').innerHTML = (pr
       ? `🎯 ${hoverPt ? 'Pointing at' : 'Aiming at'} ${pr.map(p => `<b>${esc(p.name)}</b>: ${p.T} mm at ${p.ang}° → <b>${p.los} mm</b> in the way`).join(', then ')}`
-      : `🎯 ${hoverPt ? 'No armor there.' : 'Not aimed at the armor.'} Click the vehicle where you want to hit.`) + many;
+      : `🎯 ${hoverPt ? 'No armor there.' : 'Not aimed at the armor.'} Click the vehicle where you want to hit.`) + many + fx;
   }
   function renderControlsState() {
     const running = busyNow();
@@ -857,7 +969,8 @@
     $('sb-step').disabled = state !== 'paused';
     $('sb-reset').disabled = !!ED || running;
     $('sb-reset').textContent = VR && VR.run ? '🔧 Repair' : '↺ Reset';
-    seg('sb-view', VIEWS, SB.view, 'view'); seg('sb-speed', SPEEDS, SB.speed, 'speed'); seg('sb-quality', QUALITY, SB.quality, 'quality');
+    seg('sb-view', VIEWS, SB.view, 'view'); seg('sb-speed', SPEEDS, SB.speed, 'speed'); seg('sb-quality', QUALITY, SB.quality, 'quality'); seg('sb-solver', SOLVERS, SB.solver, 'solver');
+    $('sb-solver').hidden = $('sb-solver-lbl').hidden = !!VR;   // vehicles always use particles (they work out what happens inside)
     $('sb-legend').innerHTML = legendHTML();
   }
   function legendHTML() {
@@ -877,6 +990,10 @@
   const projChanged = () => { if (vehMode()) { if (!busyNow()) renderResult(); aimChanged(); } else rebuildSoon(); };   // a vehicle keeps its damage: the new shell is used for the next shot
   $('sb-proj').addEventListener('change', e => { SB.proj = e.target.value; SB.v = null; renderProjControls(); saveSB(); projChanged(); });
   $('sb-v').addEventListener('input', e => { SB.v = +e.target.value; $('sb-v-out').textContent = SB.v.toLocaleString() + ' m/s'; saveSB(); projChanged(); });
+  $('sb-solver').addEventListener('click', e => {
+    const b = e.target.closest('[data-solver]'); if (!b || busyNow() || VR) return;
+    SB.solver = b.dataset.solver; saveSB(); rebuild(true);
+  });
   $('sb-count').addEventListener('click', e => {
     const b = e.target.closest('[data-count]'); if (!b) return;
     SB.count = +b.dataset.count; renderVolley(); saveSB(); projChanged();

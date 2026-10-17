@@ -139,6 +139,18 @@
     .sb-stats b { font-size: 17px; }
     .sb-est { font-size: 13px; color: var(--muted); margin-top: 10px; }
     .sb-est b { color: var(--text); }
+    .fx-wrap { overflow-x: auto; margin-top: 10px; }
+    .fx { border-collapse: collapse; width: 100%; min-width: 600px; font-size: 12.5px; }
+    .fx th { text-align: left; font: 600 10px var(--mono); letter-spacing: .8px; text-transform: uppercase; color: var(--muted); padding: 4px 6px; border-bottom: 1px solid var(--line-2); white-space: nowrap; }
+    .fx td { padding: 5px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    .fx td.n { font-family: var(--mono); white-space: nowrap; }
+    .fx tr.pend td { border-bottom-color: var(--line-2); }
+    .fx .res { font-weight: 700; white-space: nowrap; }
+    .fx .res.through { color: #5fd35f; } .fx .res.stop { color: #ff7d73; } .fx .res.rico { color: var(--serious); } .fx .res.spall, .fx .res.era { color: var(--warn); }
+    .fx-note { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+    details.fx-more { margin-top: 10px; font-size: 13px; }
+    details.fx-more summary { cursor: pointer; color: var(--text-2); }
+    details.fx-more[open] summary { margin-bottom: 4px; }
     .sb-live { font: 12px var(--mono); color: var(--muted); }
     .sb-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; font-size: 12.5px; color: var(--text-2); }
     .sb-legend i { display: inline-block; width: 130px; height: 10px; border-radius: 5px; }
@@ -368,6 +380,7 @@
         <div class="seg sm" id="sb-speed" role="group" aria-label="Playback speed"></div>
       </div>
       <div class="sb-bar">
+        <span class="lbl" id="sb-solver-lbl">Solver</span><div class="seg sm" id="sb-solver" role="group" aria-labelledby="sb-solver-lbl"></div>
         <span class="lbl">Color by</span><div class="seg sm" id="sb-view" role="group" aria-label="Color by"></div>
         <span class="lbl">Particles</span><div class="seg sm" id="sb-quality" role="group" aria-label="How many particles"></div>
       </div>
@@ -542,6 +555,15 @@
         </ul>
       </div>
       <div class="card">
+        <h3>⚡ Two ways to solve a shot</h3>
+        <p>The Sandbox can work a shot out two ways. Pick one under <b>Solver</b>.</p>
+        <ul>
+          <li><b>🧪 Particles</b> is the full physics: every bit of shell and armor moves on its own. It's slower, but you see it happen.</li>
+          <li><b>⚡ Formulas</b> gives the answer instantly with the equations real terminal-ballistics tools use, plate by plate. Darts follow the <b>Alekseevskii–Tate</b> model: the rod's nose wears away as it pushes the armor aside. Shells are solid bodies slowed by the armor's resistance, and thin plates get a plug punched out. <b>Rosenberg's</b> rule says when a dart bounces off, <b>Recht–Ipson</b> gives the exit speed from the speed needed to get through, and <b>Grady's</b> formula estimates the fragments behind the armor.</li>
+        </ul>
+        <p>For each plate the formulas table shows how much of the shell wore away, the slowest speed that would still get through (the "ballistic limit"), and the speed coming out. After a particle shot, open <b>What the formulas say</b> to compare the two.</p>
+      </div>
+      <div class="card">
         <h3>☢️ Strange darts and old-time guns</h3>
         <p>The <b>strange darts</b> are the 550 mm tungsten dart made of other things. Plutonium, gold and osmium all go about as deep as tungsten (roughly 500 mm of steel). At 1.6 km/s a dart flows almost like a liquid, so what counts most is how dense it is, and these are all about as dense. Tungsten is a little better because it's also strong and hard to melt.</p>
         <ul>
@@ -569,6 +591,7 @@
   </main>
 
   <script src="engine.js"></script>
+  <script src="ballistics.js"></script>
   <script src="vehicles.js"></script>
   <script>
   'use strict';
