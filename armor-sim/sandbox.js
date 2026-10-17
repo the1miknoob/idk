@@ -15,7 +15,8 @@
   const FROM = ['front', 'rear', 'top'];
   const weak = innerWidth < 700 || (navigator.hardwareConcurrency || 8) <= 4;
   const DEF = { proj: 'ap88', v: null, aim: 0, preset: 'plate', plates: clone(E.ARMORS[0].plates), view: 'mat', speed: 'normal', quality: weak ? 'low' : 'med',
-    target: 'armor', veh: 'tiger', from: 'front', tilt: 0, vaim: null };
+    target: 'armor', veh: 'tiger', from: 'front', tilt: 0, vaim: null, count: 1, pattern: 'spread', gap: 40 };
+  const COUNTS = [1, 2, 3, 5, 8];   // shots at once
   const SB = Object.assign(clone(DEF), store.get('armor-sandbox', {}) || {});
   if (!E.PROJECTILES.some(p => p.id === SB.proj)) SB.proj = DEF.proj;
   if (!Array.isArray(SB.plates) || !SB.plates.length) SB.plates = clone(DEF.plates);
@@ -28,9 +29,13 @@
   if (!FROM.includes(SB.from)) SB.from = 'front';
   SB.tilt = clamp(Math.round(+SB.tilt || 0), -30, 30);
   if (!(Array.isArray(SB.vaim) && SB.vaim.length === 2 && SB.vaim.every(Number.isFinite))) SB.vaim = null;
+  SB.count = COUNTS.includes(+SB.count) ? +SB.count : 1;
+  if (SB.pattern !== 'row') SB.pattern = 'spread';
+  SB.gap = clamp(Math.round(+SB.gap || 0), 0, 300);
   const saveSB = () => store.set('armor-sandbox', SB);
   const projDef = () => E.PROJECTILES.find(p => p.id === SB.proj);
   const speedOf = () => SB.v || projDef().v;
+  const vol = () => ({ n: SB.count, pattern: SB.pattern, gap: SB.gap });   // several shots at once (engine.js: volleyRounds)
 
   // Your own vehicles (saved in this browser)
   let mine = (store.get('armor-vehicles', []) || []).map(V.sanitize).filter(Boolean);
@@ -40,6 +45,10 @@
   const vehDef = () => allVeh().find(v => v.id === SB.veh) || V.VEHICLES[0];
   function defaultAim(veh) { if (veh.aim) return veh.aim; const b = V.bbox(veh, false); return [b[0], b[2] + (b[3] - b[2]) * 0.45]; }
   const shotOf = veh => ({ from: SB.from, tilt: SB.tilt, at: SB.vaim || defaultAim(veh) });
+  function volleyAims(veh, run) {   // where each shot of a volley would hit the vehicle (null: it misses the armor)
+    const shot = shotOf(veh), f = V.frameFor(shot);
+    return (E.volleyRounds(projDef(), vol()) || []).map(r => { const at = f.toV([0, r.dy]); return { dy: r.dy, e: V.entryPoint(veh, { ...shot, at }, run) }; });
+  }
 
   // ===================== The simulation =====================
   // Plain armor: one shot per build. Vehicles: the whole vehicle is particles and stays damaged between shots, until you repair it.
@@ -75,7 +84,7 @@
       aimChanged();
     } else {
       VR = null; tidyPlates();
-      const scene = { plates: clone(SB.plates), proj: { ...P, v: speedOf(), aim: SB.aim } };
+      const scene = { plates: clone(SB.plates), proj: { ...P, v: speedOf(), aim: SB.aim }, volley: vol() };
       scene.h = E.pickH(scene, QUALITY[SB.quality][1]);
       sim = new E.Sim(scene); fr = IDENT; state = 'ready';
     }
@@ -86,7 +95,7 @@
   const rebuildSoon = keepView => { clearTimeout(rbTimer); rbTimer = setTimeout(() => { rebuild(keepView); saveSB(); }, 160); };
   function aimChanged() {   // the vehicle stays as it is; only the planned shot moves
     if (!VR || ED) return;
-    VR.entry = V.entryPoint(VR.veh, shotOf(VR.veh), VR.run);
+    VR.entry = V.entryPoint(VR.veh, shotOf(VR.veh), VR.run); VR.aims = volleyAims(VR.veh, VR.run);
     renderAimInfo(); draw();
   }
 
@@ -95,9 +104,11 @@
     const P = { ...projDef(), v: speedOf() };
     if (VR) {
       if (!VR.run) rebuild(true);
-      if (!VR.entry) { toast('That shot misses the armor. Click on the vehicle where you want to hit.'); return; }
-      if (!V.aimShot(VR.run, shotOf(VR.veh), P)) { toast('That shot misses the armor.'); return; }
-      fr = VR.run.frame; sim = VR.run.sim; VR.shots++; VR.fl = null; VR.reveal = null; VR.last = null; VR.burst = false;
+      if (!VR.entry && !(VR.aims || []).some(a => a.e)) { toast(`That ${SB.count > 1 ? 'volley misses' : 'shot misses'} the armor. Click on the vehicle where you want to hit.`); return; }
+      const hits = V.aimShot(VR.run, shotOf(VR.veh), P, vol());
+      if (!hits) { toast('That shot misses the armor.'); return; }
+      fr = VR.run.frame; sim = VR.run.sim; VR.shots += SB.count; VR.missed = SB.count - hits; VR.fl = null; VR.reveal = null; VR.last = null; VR.burst = 0;
+      if (VR.missed) toast(`${VR.missed} of the ${SB.count} shots miss the armor.`);
       seenEvents = sim.events.length; flashes = []; verdict = null;
       glideTo(impactView(), 450);
     } else if (!sim || state !== 'ready') rebuild(true);
@@ -106,7 +117,7 @@
     loop();
   }
   function finish() {   // plain armor: the shot is over
-    const v = verdict || sim.verdict() || 'stop';
+    const v = verdict || sim.settleVerdict() || 'stop';
     verdict = v;
     sound(v === 'rico' ? 'rico' : v === 'pen' ? 'pen' : v === 'spall' ? 'boom' : 'stop');
     state = 'done';
@@ -116,9 +127,9 @@
 
   // ---------- vehicle phases ----------
   function noteVerdict() {   // remember how this shot went at the armor (later phases keep moving things)
-    const v = verdict || sim.verdict() || 'stop', r = sim.res || sim.measure();
+    const v = verdict || sim.settleVerdict() || 'stop', r = sim.res || sim.measure();
     verdict = v;
-    VR.last = { v, resid: r.residual, depth: r.depth, group: VR.run.group, P: projDef(), maxT: r.maxT };
+    VR.last = { v, resid: r.residual, depth: r.depth, group: VR.run.group, P: projDef(), maxT: r.maxT, tally: sim.tally, missed: VR.missed };
     sound(v === 'rico' ? 'rico' : v === 'pen' ? 'pen' : v === 'spall' ? 'boom' : 'stop');
   }
   function toInside() {
@@ -140,7 +151,7 @@
       for (const f of fl.frags) for (const h of f.hits) if (h.k === k) t = Math.min(t, ((f.delay || 0) + h.t) / vs);
       reveal[k] = isFinite(t) ? t : 0;
     });
-    VR.fl = fl; VR.vs = vs; VR.before = before; VR.reveal = reveal; VR.flT0 = performance.now(); VR.flEnd = far / vs + 0.45; VR.burstShown = false;
+    VR.fl = fl; VR.vs = vs; VR.before = before; VR.reveal = reveal; VR.flT0 = performance.now(); VR.flEnd = far / vs + 0.45;
     // ammo set off by the flying bits explodes when they get there
     VR.flBooms = [];
     run.veh.modules.forEach((m, k) => { if (m.type === 'ammo' && after[k] === 2 && !run.boomed.includes(k)) { run.boomed.push(k); VR.flBooms.push({ k, t: reveal[k] }); } });
@@ -170,7 +181,7 @@
     state = 'done';
     renderResult(); renderControlsState(); draw();
     const { states, fate } = V.fateOf(VR.run), f = fate.id;
-    checkChallenges({ veh: VR.veh.id, modern: /^Modern/.test(VR.veh.group), from: SB.from, P: VR.last.P, v: VR.last.v, fate: f, out: f === 'destroyed' || f === 'knocked',
+    checkChallenges({ veh: VR.veh.id, modern: /^Modern/.test(VR.veh.group), from: SB.from, P: VR.last.P, v: VR.last.v, tally: VR.last.tally, fate: f, out: f === 'destroyed' || f === 'knocked',
       turret: !!VR.turret, shots: VR.shots, fuelFire: VR.veh.modules.some((m, k) => m.type === 'fuel' && states[k] === 2) });
   }
 
@@ -201,7 +212,7 @@
     const zones = () => {   // vehicles: bits flying through crew, ammo, fuel and engines (and ammo that goes off)
       if (!VR || sim.steps % 4) return false;
       const o = V.zoneTick(VR.run, 4);
-      if (o.burst) { flashes.push({ type: 'flash', x: o.burst[0], y: o.burst[1], r: 400, at: performance.now(), big: true }); VR.burst = true; sound('stop'); }
+      if (o.bursts) { for (const b of o.bursts) flashes.push({ type: 'flash', x: b[0], y: b[1], r: 400, at: performance.now(), big: true }); VR.burst += o.bursts.length; sound('stop'); }
       if (o.booms) { boom = o.booms[0]; return true; }
       return false;
     };
@@ -231,7 +242,7 @@
     } else if (state === 'flight') {
       const tp = (now - VR.flT0) / 1000;
       V.placeFlight(VR.run, VR.fl, p => tp * VR.vs);
-      if (VR.fl.burst && !VR.burstShown && tp >= VR.fl.burst.at / VR.vs) { VR.burstShown = true; VR.burst = true; flashes.push({ type: 'flash', x: VR.fl.burst.x, y: VR.fl.burst.y, r: 420, at: now, big: true }); sound('stop'); }
+      for (const b of VR.fl.bursts) if (!b.shown && tp >= b.at / VR.vs) { b.shown = true; VR.burst++; flashes.push({ type: 'flash', x: b.x, y: b.y, r: 420, at: now, big: true }); sound('stop'); }
       if (VR.flBooms.length && tp >= VR.flBooms[0].t) toBlast(VR.flBooms.shift().k);
       else if (tp >= VR.flEnd) finishVehicle();
     } else if (state === 'blast') {   // the explosion tears things loose (real physics, as fast as it goes)
@@ -265,9 +276,13 @@
   }
   function bounds() {   // plain armor: everything that's there, plus room for the shell to fly in
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-    for (let i = 0; i < sim.n; i++) { if (!sim.alive[i]) continue; const x = sim.px[i], y = sim.py[i]; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
-    const sh = sim.shape, len = sh.x1 - sh.x0;
-    x0 = Math.min(x0, sim.noseX - len * 1.15); y0 = Math.min(y0, sim.aimY - sh.r * 1.5); y1 = Math.max(y1, sim.aimY + sh.r * 1.5);
+    const sh = sim.shape, len = sh.x1 - sh.x0, rs = sim.rounds, near = rs.filter(R => R.noseX >= rs[0].noseX - 2.2 * len);   // a long row: frame the first shots, the rest fly in
+    const later = rs.filter(R => !near.includes(R)).flatMap(R => R.parts);
+    for (let i = 0; i < sim.n; i++) {
+      if (!sim.alive[i] || (later.length && later.some(([a, b]) => i >= a && i < b))) continue;
+      const x = sim.px[i], y = sim.py[i]; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+    for (const R of near) { x0 = Math.min(x0, R.noseX - len * 1.15); y0 = Math.min(y0, R.aimY - sh.r * 1.5); y1 = Math.max(y1, R.aimY + sh.r * 1.5); }
     return [x0, x1, y0, y1];
   }
   function viewOf(x0, x1, y0, y1, pad = 1.12) {
@@ -298,13 +313,14 @@
     return out;
   }
   function impactView() {   // close up on the plates the shot hits
-    const pts = VR.run.group.flatMap(g => VR.run.geo[g.i].poly), sh = sim.shape;
+    const pts = VR.run.groups.flat().flatMap(g => VR.run.geo[g.i].poly), sh = sim.shape;
     if (sh) pts.push(fr.toV([sim.noseX - (sh.x1 - sh.x0) * 0.6, 0]));
     const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
     let x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
     const grow = (a, b, min, max) => { const m = (a + b) / 2, h = Math.min(max, Math.max((b - a) / 2, min)) / 1; return [m - h, m + h]; };
-    const e = VR.entry || [(x0 + x1) / 2, (y0 + y1) / 2];
-    [x0, x1] = grow(Math.max(x0, e[0] - 900), Math.min(x1, e[0] + 900), 300, 700); [y0, y1] = grow(Math.max(y0, e[1] - 700), Math.min(y1, e[1] + 700), 250, 600);
+    const es = sim.rounds.map(R => fr.toV([R.hitX, R.aimY])), ex = es.map(p => p[0]), ey = es.map(p => p[1]);   // where each shot meets the armor
+    const ex0 = Math.min(...ex), ex1 = Math.max(...ex), ey0 = Math.min(...ey), ey1 = Math.max(...ey);
+    [x0, x1] = grow(Math.max(x0, ex0 - 900), Math.min(x1, ex1 + 900), 300, 700 + (ex1 - ex0) / 2); [y0, y1] = grow(Math.max(y0, ey0 - 700), Math.min(y1, ey1 + 700), 250, 600 + (ey1 - ey0) / 2);
     return viewOf(x0, x1, y0, y1, 1.35);
   }
   function fit() {
@@ -465,25 +481,36 @@
   function fitText(c, t, w) { if (c.measureText(t).width <= w) return t; while (t.length > 2 && c.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; }
 
   function overlays(c, now) {
-    const P = projDef(), sh = sim && sim.shape;
-    // chemical rounds are drawn as a picture while they fly in
-    if (sim && sh && P.kind !== 'ke' && (state === 'ready' && !VR || state === 'approach')) {
-      const len = (sh.x1 - sh.x0) * cam.s, sc = Math.max(0.2, len / 60);
+    const sh = sim && sim.shape;
+    // chemical rounds are drawn as a picture while they fly in (each one until it goes off)
+    if (sim && sh && sim.kind !== 'ke' && (state === 'ready' && !VR || state === 'approach' || state === 'running')) {
+      const len = (sh.x1 - sh.x0) * cam.s, sc = Math.max(0.2, len / 60), kind = sim.kind === 'heat' ? 'heat' : sim.kind === 'hesh' ? 'hesh' : 'he';
       let off = 0; if (state === 'approach') { const f = Math.min(1, (now - approachT0) / 450); off = -(1 - (1 - Math.pow(1 - f, 2))) * Math.max(W / cam.s, 400); }
-      const p = fr.toV([sim.noseX + off, sim.aimY]);
+      const fly = state === 'running' ? sim.v0 * (sim.time - sim.shotT0) : 0;
       c.save(); c.globalAlpha = state === 'ready' ? 0.9 : 1;
-      drawShell(c, P.kind === 'heat' ? 'heat' : P.kind === 'hesh' ? 'hesh' : 'he', toSX(p[0]), toSY(p[1]), Math.atan2(-fr.s, fr.c), sc, 1);
+      for (const R of sim.rounds) {
+        if (R.hitAt) continue;
+        const p = fr.toV([R.noseX + off + fly, R.aimY]);
+        drawShell(c, kind, toSX(p[0]), toSY(p[1]), Math.atan2(-fr.s, fr.c), sc, 1);
+      }
       c.restore();
     }
-    // the aim line before firing
+    // the aim line before firing (one for each shot side by side; a row all comes down the same line)
     if (sim && state === 'ready' && !VR) {
-      const far = 3 * Math.max(W, H) / cam.s, h0 = fr.toV([sim.hitX, sim.aimY]), s0 = fr.toV([sim.hitX - far, sim.aimY]);
-      reticle(c, s0, h0, '#ffb020', false);
+      const far = 3 * Math.max(W, H) / cam.s, R0 = sim.rounds[0];
+      sim.rounds.forEach((R, k) => { if (!k || R.aimY !== R0.aimY) reticle(c, fr.toV([R.hitX - far, R.aimY]), fr.toV([R.hitX, R.aimY]), '#ffb020', false, k > 0); });
+      if (SB.pattern === 'row' && sim.rounds.length > 1) countTag(c, fr.toV([R0.hitX, R0.aimY]), sim.rounds.length);
     }
     if (VR && VR.run && (state === 'ready' || state === 'done')) {
       const f = V.frameFor(shotOf(VR.veh)), far = 3 * Math.max(W, H) / cam.s;
+      for (const a of VR.aims || []) {   // the other shots of a volley, side by side
+        if (!a.dy) continue;
+        if (a.e) { const e = f.toE(a.e); reticle(c, f.toV([e[0] - far, a.dy]), a.e, '#ffb020', false, true); }
+        else reticle(c, f.toV([-far, a.dy]), f.toV([far, a.dy]), '#e86a5c', true);
+      }
       if (VR.entry) { const e = f.toE(VR.entry); reticle(c, f.toV([e[0] - far, 0]), VR.entry, '#ffb020', false); }
       else reticle(c, f.toV([-far, 0]), f.toV([far, 0]), '#e86a5c', true);
+      if (SB.pattern === 'row' && SB.count > 1 && VR.entry) countTag(c, VR.entry, SB.count);
     }
     if (hover && VR && VR.run && (state === 'ready' || state === 'done')) {
       c.strokeStyle = 'rgba(255,255,255,.55)'; c.lineWidth = 1.5; const x = toSX(hover[0]), y = toSY(hover[1]);
@@ -512,12 +539,18 @@
     const cy = W - tw - 22 < tagEnd + 8 ? 30 : 8;   // narrow screen: drop below the label
     c.fillRect(W - tw - 22, cy, tw + 14, 24); c.fillStyle = '#ffb020'; c.fillText(tt, W - 15, cy + 5);
   }
-  function reticle(c, from, at, color, miss) {
-    c.save(); c.setLineDash([6, 6]); c.strokeStyle = miss ? 'rgba(232,106,92,.7)' : 'rgba(255,176,32,.7)'; c.lineWidth = 1.5;
+  function reticle(c, from, at, color, miss, small) {
+    c.save(); c.setLineDash([6, 6]); c.strokeStyle = miss ? 'rgba(232,106,92,.7)' : `rgba(255,176,32,${small ? 0.45 : 0.7})`; c.lineWidth = 1.5;
     c.beginPath(); c.moveTo(toSX(from[0]), toSY(from[1])); c.lineTo(toSX(at[0]), toSY(at[1])); c.stroke(); c.restore();
     if (miss) return;
-    const x = toSX(at[0]), y = toSY(at[1]);
-    c.strokeStyle = color; c.lineWidth = 2; c.beginPath(); c.arc(x, y, 9, 0, Math.PI * 2); c.moveTo(x - 15, y); c.lineTo(x + 15, y); c.moveTo(x, y - 15); c.lineTo(x, y + 15); c.stroke();
+    const x = toSX(at[0]), y = toSY(at[1]), r = small ? 5 : 9, a = small ? 9 : 15;
+    c.strokeStyle = color; c.lineWidth = 2; c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.moveTo(x - a, y); c.lineTo(x + a, y); c.moveTo(x, y - a); c.lineTo(x, y + a); c.stroke();
+  }
+  function countTag(c, at, n) {   // "×5" next to the aim point: that many shots come down this line
+    const x = toSX(at[0]) + 14, y = toSY(at[1]) - 14;
+    c.font = '700 13px "JetBrains Mono", monospace'; c.textAlign = 'left'; c.textBaseline = 'bottom';
+    c.fillStyle = 'rgba(9,12,15,.8)'; c.fillRect(x - 3, y - 17, c.measureText(`×${n}`).width + 6, 18);
+    c.fillStyle = '#ffb020'; c.fillText(`×${n}`, x, y);
   }
   function drawEffects(c, now) {
     if (state === 'flight' && VR.fl) {   // an explosive shell's fragments (they aren't particles, so each is shown as a dot)
@@ -554,6 +587,17 @@
   const SB_WORDS = {
     pen: ['good', '✓ PENETRATED'], stop: ['crit', '✗ STOPPED'], rico: ['serious', '↗ RICOCHET'], spall: ['warn', '💥 SPALLED'],
   };
+  // several shots at once: how many did what (t = sim.tally)
+  function tallyBadge(v, t) {
+    const k = t[v] === t.n ? (t.n === 2 ? 'BOTH' : `ALL ${t.n}`) : `${t[v]} OF ${t.n}`;
+    return { pen: `✓ ${k} GOT THROUGH`, spall: `💥 ${k} SPALLED`, rico: `↗ ${k} BOUNCED`, stop: `✗ ${k} STOPPED` }[v];
+  }
+  function tallyWords(t, kind) {   // "3 got through, 1 was stopped and 1 bounced off"
+    const W = { pen: ['got through', 'got through'], spall: kind === 'hesh' ? ['knocked a scab off the inside', 'knocked scabs off the inside'] : ['broke bits off the inside', 'broke bits off the inside'],
+      rico: ['bounced off', 'bounced off'], stop: ['was stopped', 'were stopped'] };
+    const bits = ['pen', 'spall', 'rico', 'stop'].filter(k => t[k]).map(k => `${t[k] === t.n ? (t.n === 2 ? 'both' : `all ${t.n}`) : t[k]} ${W[k][t[k] === 1 ? 0 : 1]}`);
+    return bits.length > 1 ? `${bits.slice(0, -1).join(', ')} and ${bits[bits.length - 1]}` : bits[0];
+  }
   function formulaEstimate(P, v) {   // the classic formulas from the Calculator, for comparison
     const d = P.d, g = P.group;
     if (P.kind === 'heat') return Math.round(d.q * d.cal);   // a shaped charge goes about its design depth
@@ -570,7 +614,8 @@
     const r = sim.res;
     let awake = '';
     if (VR && VR.run) { let a = 0; for (let q = 0; q < sim.an; q++) a += sim.awake[sim.alist[q]]; awake = ` · ${a.toLocaleString()} awake`; }
-    return `${VR && VR.run ? `Shot ${VR.shots} · ` : ''}⏱ ${(sim.time - (VR && VR.run ? sim.shotT0 || 0 : 0)).toFixed(0)} µs · ${sim.n.toLocaleString()} particles${awake} · ${sim.broken.toLocaleString()} bonds snapped · 🔥 hottest ${Math.round((sim.maxT || 293) - 273).toLocaleString()} °C${r && r.depth ? ` · deepest ${Math.round(r.depth)} mm` : ''}`;
+    const many = sim.rounds && sim.rounds.length > 1 && (state === 'running' || state === 'approach') ? `🎯 ${sim.rounds.filter(R => R.hitAt).length} of ${sim.rounds.length} shots in · ` : '';
+    return `${VR && VR.run ? `Shot ${VR.shots} · ` : ''}${many}⏱ ${(sim.time - (VR && VR.run ? sim.shotT0 || 0 : 0)).toFixed(0)} µs · ${sim.n.toLocaleString()} particles${awake} · ${sim.broken.toLocaleString()} bonds snapped · 🔥 hottest ${Math.round((sim.maxT || 293) - 273).toLocaleString()} °C${r && r.depth ? ` · deepest ${Math.round(r.depth)} mm` : ''}`;
   }
   function renderLive() { $('sb-live').textContent = sim ? liveLine() : ''; }
   const estHTML = (P, est) => est ? `<p class="sb-est">📏 Classic formula: this ${esc(P.name)} beats about <b>${est.toLocaleString()} mm</b> of flat armor steel${P.kind === 'ke' ? ` at ${speedOf().toLocaleString()} m/s` : ''}. The sim is a 2D slice, so it won't match exactly.</p>` : '';
@@ -585,14 +630,16 @@
       $('sb-live').textContent = state === 'ready' ? `${sim.n.toLocaleString()} particles · ${sim.nb.toLocaleString()} bonds · particle size ${sim.h.toFixed(sim.h < 1 ? 2 : 1)} mm` : liveLine();
       return;
     }
-    const r = sim.measure(), v = verdict, [st, badge] = SB_WORDS[v] || SB_WORDS.stop, est = formulaEstimate(P, speedOf());
+    const r = sim.measure(), v = verdict, t = sim.tally, [st, badge0] = SB_WORDS[v] || SB_WORDS.stop, badge = t ? tallyBadge(v, t) : badge0, est = formulaEstimate(P, speedOf());
     const kind = P.kind;
     let text;
-    if (v === 'pen') text = kind === 'heat' ? `The jet cut all the way through${r.residual ? ` and came out at ${Math.round(r.residual * 1000).toLocaleString()} m/s` : ''}.` : kind === 'he' ? 'The blast tore through and sent fragments out the back.' : r.residual < 0.05 ? 'It only just got through, with almost no speed left.' : `It punched all the way through and came out at ${Math.round(r.residual * 1000).toLocaleString()} m/s.`;
+    if (t) text = `${t.n} shots at once: ${tallyWords(t, kind)}.${t.pen && kind !== 'he' && r.residual ? ` The fastest came out at ${Math.round(r.residual * 1000).toLocaleString()} m/s.` : ''}${!t.pen && (kind === 'ke' || kind === 'heat') ? ` The deepest got ${Math.round(r.depth)} mm in.` : ''}`;
+    else if (v === 'pen') text = kind === 'heat' ? `The jet cut all the way through${r.residual ? ` and came out at ${Math.round(r.residual * 1000).toLocaleString()} m/s` : ''}.` : kind === 'he' ? 'The blast tore through and sent fragments out the back.' : r.residual < 0.05 ? 'It only just got through, with almost no speed left.' : `It punched all the way through and came out at ${Math.round(r.residual * 1000).toLocaleString()} m/s.`;
     else if (v === 'rico') text = 'The shell glanced off the armor.';
     else if (v === 'spall') text = kind === 'hesh' ? 'The shock wave knocked a scab of metal off the inside of the armor.' : `It didn't get through, but pieces broke off the inside (spall). Deepest point: ${Math.round(r.depth)} mm.`;
     else text = kind === 'hesh' ? 'The shock wave wasn\'t strong enough to knock anything off the inside.' : kind === 'he' ? 'The blast didn\'t get through.' : `The armor held. The deepest the ${kind === 'heat' ? 'jet' : 'shell'} got was ${Math.round(r.depth)} mm.`;
     const stats = [
+      t ? ['Got through', `${t.pen} of ${t.n}`] : null,
       v === 'pen' && kind !== 'he' ? ['Exit speed', `${Math.round(r.residual * 1000).toLocaleString()} m/s`] : ['Deepest point', `${Math.round(r.depth)} mm`],
       kind === 'ke' ? ['Shell left', `${Math.round(r.massLeft * 100)}%`] : null,
       ['Hottest', `${Math.round(r.maxT - 273).toLocaleString()} °C`],
@@ -608,6 +655,7 @@
   function armorLine(L) {   // what happened at the armor on the last shot, in words
     const g = L.group, kind = L.P.kind, what = g.map(h => h.part.n.toLowerCase()).join(' and the '), los = g.reduce((s, h) => s + h.T / Math.max(0.05, h.cos), 0);
     const ang = Math.round(Math.acos(Math.min(1, g[0].cos)) / DEG), armor = `the ${what} (${g.map(h => `${h.T} mm`).join(' + ')} at ${ang}° = ${Math.round(los)} mm in the way)`;
+    if (L.tally) return `${L.tally.n} shots at ${armor}: ${tallyWords(L.tally, kind)}.${L.missed ? ` (${L.missed} more missed the armor.)` : ''}`;
     if (L.v === 'pen') return kind === 'heat' ? `✓ The jet cut through ${armor}.` : kind === 'he' ? `✓ The blast broke through ${armor}.` : L.resid < 0.05 ? `✓ It only just got through ${armor}, with almost no speed left.` : `✓ It punched through ${armor} and flew on at ${Math.round(L.resid * 1000).toLocaleString()} m/s.`;
     if (L.v === 'rico') return `↗ It bounced off ${armor}.`;
     if (L.v === 'spall') return `💥 It didn't get through ${armor}, but bits broke off the inside.`;
@@ -627,13 +675,14 @@
     }
     const { states, fate } = V.fateOf(run), L = VR.last, P = L ? L.P : projDef();
     let line = L ? armorLine(L) : '';
-    if (VR.burst) line += ' Then its explosive filling went off inside!';
+    if (VR.burst) line += L && L.tally ? ` Then ${VR.burst === 1 ? 'one of them' : VR.burst} burst inside!` : ' Then its explosive filling went off inside!';
     const order = V.MOD_KEYS, mods = veh.modules.map((m, k) => ({ m, k, s: states[k] })).sort((a, b) => order.indexOf(a.m.type) - order.indexOf(b.m.type));
     const chips = mods.map(({ m, s }) => `<span class="mchip s${s}">${V.MODULES[m.type].icon} ${esc(m.n)} <b>${s === 2 ? '✖ ' : s === 1 ? '⚠ ' : '✓ '}${V.MODULES[m.type].words[s]}</b></span>`).join('');
     const crew = veh.modules.filter(m => m.type === 'crew').length, ko = mods.filter(x => x.m.type === 'crew' && x.s === 2).length;
     const g = L && L.group, los = g ? g.reduce((s, h) => s + h.T / Math.max(0.05, h.cos), 0) : 0;
     const stats = [
       ['Shots fired', VR.shots.toLocaleString()],
+      L && L.tally ? ['Got through', `${L.tally.pen} of ${L.tally.n}`] : null,
       g ? ['Armor hit', esc(g[0].part.n)] : null, g ? ['In the way', `${Math.round(los)} mm`] : null,
       L ? (L.v === 'pen' && P.kind !== 'he' ? ['Exit speed', `${Math.round(L.resid * 1000).toLocaleString()} m/s`] : ['Deepest point', `${Math.round(L.depth)} mm`]) : null,
       crew ? ['Crew out', `${ko} of ${crew}`] : null,
@@ -647,10 +696,11 @@
 
   // ===================== Challenges =====================
   // ✏️ Goals to try. Each test gets what just happened: veh (vehicle id, or null for plain armor), P (the round), v (how it went at the armor),
-  // and for vehicles from, fate, out (destroyed or knocked out), turret (thrown off), shots (since the last repair) and fuelFire; for plain armor held and thick.
+  // and for vehicles from, tally (several shots at once), fate, out (destroyed or knocked out), turret (thrown off), shots (since the last repair) and fuelFire;
+  // for plain armor held and thick.
   const gunSize = P => (P.group === 'Rockets & missiles' || P.group === 'Just for fun' ? Infinity : P.bore || (P.d.shape === 'rod' ? Infinity : P.d.cal));
   const CHALLENGES = [
-    { id: 'bounce', text: 'Bounce a shell off a vehicle', test: c => c.veh && c.v === 'rico' },
+    { id: 'bounce', text: 'Bounce a shell off a vehicle', test: c => c.veh && (c.v === 'rico' || !!(c.tally && c.tally.rico)) },
     { id: 'tiger76', text: 'Knock out a Tiger I from the front with a gun smaller than 80 mm', test: c => c.veh === 'tiger' && c.from === 'front' && gunSize(c.P) < 80 && c.out },
     { id: 'turret', text: 'Blow a turret off', test: c => c.turret },
     { id: 'tiger2', text: 'Destroy a Tiger II from the front with a single shot', test: c => c.veh === 'tiger2' && c.from === 'front' && c.shots === 1 && c.fate === 'destroyed' },
@@ -697,6 +747,14 @@
     $('sb-proj-art').innerHTML = projSVG(P);
     const d = P.d, size = d.shape === 'rod' ? `${d.dia} mm × ${d.len} mm rod` : `${P.bore ? P.bore + ' mm gun, ' + d.cal + ' mm penetrator' : d.cal + ' mm'}${d.len ? ' · ' + d.len + ' mm long' : ''}`;
     $('sb-proj-info').textContent = size + (d.core ? ` · ${E.MATERIALS[d.core.mat].name.toLowerCase()} core` : '') + ` · ${E.MATERIALS[d.mat || (P.kind === 'heat' ? 'cu' : 'shot')].name.toLowerCase()}`;
+    renderVolley();
+  }
+  function renderVolley() {
+    $('sb-count').innerHTML = COUNTS.map(n => `<button data-count="${n}" class="${n === SB.count ? 'on' : ''}" aria-pressed="${n === SB.count}">${n}</button>`).join('');
+    document.querySelectorAll('#sb-pattern [data-pattern]').forEach(b => { b.classList.toggle('on', b.dataset.pattern === SB.pattern); b.setAttribute('aria-pressed', b.dataset.pattern === SB.pattern); });
+    $('sb-vol-more').hidden = SB.count < 2;
+    $('sb-gap').value = SB.gap; $('sb-gap-out').textContent = SB.gap + ' mm';
+    $('sb-gap-label').textContent = SB.pattern === 'row' ? 'Space between one and the next' : 'Space between them';
   }
   function projSVG(P) {   // a little side view of the projectile, drawn from its real shape
     const sh = E.makeShape(P.d), len = sh.x1 - sh.x0, r = sh.r, W = 200, Hh = 50, sc = Math.min((W - 10) / len, (Hh - 8) / (2 * r));
@@ -747,9 +805,11 @@
   function renderAimInfo(hoverPt) {
     if (SB.target !== 'vehicle' || ED) return;
     const veh = vehDef(), shot = hoverPt ? { ...shotOf(veh), at: hoverPt } : shotOf(veh), pr = V.probe(veh, shot, VR && VR.veh === veh ? VR.run : null);
-    $('sb-aim-info').innerHTML = pr
+    const aims = !hoverPt && VR && VR.aims && VR.aims.length ? VR.aims : null, miss = aims ? aims.filter(a => !a.e).length : 0;
+    const many = aims ? ` <br>${SB.pattern === 'row' ? `${aims.length} shots, one after another` : `${aims.length} shots side by side`}${miss ? `: <b>${miss} of them miss the armor</b>` : ''}.` : '';
+    $('sb-aim-info').innerHTML = (pr
       ? `🎯 ${hoverPt ? 'Pointing at' : 'Aiming at'} ${pr.map(p => `<b>${esc(p.name)}</b>: ${p.T} mm at ${p.ang}° → <b>${p.los} mm</b> in the way`).join(', then ')}`
-      : `🎯 ${hoverPt ? 'No armor there.' : 'Not aimed at the armor.'} Click the vehicle where you want to hit.`;
+      : `🎯 ${hoverPt ? 'No armor there.' : 'Not aimed at the armor.'} Click the vehicle where you want to hit.`) + many;
   }
   function renderControlsState() {
     const running = busyNow();
@@ -777,9 +837,18 @@
 
   // events: projectile and plain armor
   const vehMode = () => SB.target === 'vehicle';
-  const projChanged = () => { if (vehMode()) { if (!busyNow()) { renderResult(); draw(); } } else rebuildSoon(); };   // a vehicle keeps its damage: the new shell is used for the next shot
+  const projChanged = () => { if (vehMode()) { if (!busyNow()) renderResult(); aimChanged(); } else rebuildSoon(); };   // a vehicle keeps its damage: the new shell is used for the next shot
   $('sb-proj').addEventListener('change', e => { SB.proj = e.target.value; SB.v = null; renderProjControls(); saveSB(); projChanged(); });
   $('sb-v').addEventListener('input', e => { SB.v = +e.target.value; $('sb-v-out').textContent = SB.v.toLocaleString() + ' m/s'; saveSB(); projChanged(); });
+  $('sb-count').addEventListener('click', e => {
+    const b = e.target.closest('[data-count]'); if (!b) return;
+    SB.count = +b.dataset.count; renderVolley(); saveSB(); projChanged();
+  });
+  $('sb-pattern').addEventListener('click', e => {
+    const b = e.target.closest('[data-pattern]'); if (!b) return;
+    SB.pattern = b.dataset.pattern; renderVolley(); saveSB(); projChanged();
+  });
+  $('sb-gap').addEventListener('input', e => { SB.gap = +e.target.value; $('sb-gap-out').textContent = SB.gap + ' mm'; saveSB(); projChanged(); });
   $('sb-aim').addEventListener('input', e => { SB.aim = +e.target.value; $('sb-aim-out').textContent = (SB.aim > 0 ? '+' : '') + SB.aim + ' mm'; rebuildSoon(); });
   $('sb-preset').addEventListener('change', e => {
     const a = E.ARMORS.find(x => x.id === e.target.value); if (!a) return;

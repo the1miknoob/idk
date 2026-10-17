@@ -637,22 +637,28 @@
         clip: { poly: g.poly, ends: [[...g.poly[1], ...g.poly[2]], [...g.poly[3], ...g.poly[0]]] }, name: p.n, part: i };
     });
     const sim = new E.Sim({ h, plates, sleep: true, pad: 900, clash: 0.95 });
-    return { veh, sim, geo, h, frame: frameFor({ from: 'front', tilt: 0, at: [0, 0] }), dmg: veh.modules.map(() => 0), zin: null, boomed: [], shots: 0, group: null, burst: null };
+    return { veh, sim, geo, h, frame: frameFor({ from: 'front', tilt: 0, at: [0, 0] }), dmg: veh.modules.map(() => 0), zin: null, boomed: [], shots: 0, group: null, groups: [], bursts: [] };
   }
   const isTurret = (run, body) => { const pl = run.sim.plates[body - 1]; return !!(pl && run.veh.parts[pl.part] && run.veh.parts[pl.part].g === 't'); };
-  // Line the world up so this shot flies along +x through the aim point, then put the projectile in
-  function aimShot(run, shot, P) {
+  // Line the world up so this shot flies along +x through the aim point, then put the projectile in.
+  // vol: several shells at once (see E.volleyRounds), each hitting the armor on its own line. Returns how many were fired (0: they all miss).
+  function aimShot(run, shot, P, vol) {
     const sim = run.sim, f1 = run.frame, f2 = frameFor(shot);
     const d = f1.th - f2.th, c = Math.cos(d), s = Math.sin(d), t = f2.dirE([f1.O[0] - f2.O[0], f1.O[1] - f2.O[1]]);
     sim.transform(c, s, t[0], t[1]);
     run.frame = f2; run.shot = shot;
-    const group = run.group = firstArmor(run.veh, shot, run.geo, run.gone);
-    if (!group.length) return false;
+    const rounds = [];
+    for (const rd of E.volleyRounds(P, vol) || [{ dy: 0, back: 0 }]) {   // a shell to the side of the aim line meets whatever armor is on its own line
+      const g = firstArmor(run.veh, { ...shot, at: f2.toV([0, rd.dy]) }, run.geo, run.gone);
+      if (g.length) rounds.push({ ...rd, targets: g.map(h => h.i), group: g });
+    }
+    run.groups = rounds.map(r => r.group); run.group = rounds.length ? rounds[0].group : [];
+    if (!rounds.length) return 0;
     unsettle(run);
-    sim.addShot({ ...P, aim: 0 }, group.map(g => g.i));
+    sim.addShot({ ...P, aim: 0 }, null, rounds);
     run.shots++;
-    run.burst = P.aphe && P.kind === 'ke' ? { fuse: P.aphe.fuse, q: P.aphe.charge, done: false } : null;
-    return true;
+    run.bursts = P.aphe && P.kind === 'ke' ? sim.rounds.map(R => ({ R, fuse: P.aphe.fuse, q: P.aphe.charge, done: false })) : [];
+    return rounds.length;
   }
   // Where the next shot would hit (for the aiming line), in vehicle coordinates
   function entryPoint(veh, shot, run) { const g = firstArmor(veh, shot, run && run.geo, run && run.gone); return g.length ? frameFor(shot).toV([g[0].x, 0]) : null; }
@@ -685,16 +691,17 @@
     const st = states(run);
     mods.forEach((m, k) => { if (m.type === 'ammo' && st[k] === 2 && !run.boomed.includes(k)) { run.boomed.push(k); (out.booms = out.booms || []).push(k); } });
     // an explosive-filled shell bursts a moment after it gets through (or as soon as it's stopped)
-    const b = run.burst;
-    if (b && !b.done && sim.everBehind && sim.penAt) {
-      const r = sim.measure(), sp = Math.hypot(r.vel[0], r.vel[1]);
-      if ((sim.time - sim.penAt) * Math.max(0.05, r.residual) >= b.fuse || sp < 0.08 || r.alive < 3) { burstShell(run, r.com, b.q); b.done = true; out.burst = fr.toV(r.com); }
+    for (const b of run.bursts) {
+      const R = b.R;
+      if (b.done || !R.everBehind || !R.penAt) continue;
+      const r = sim.rounds.length > 1 ? sim.measureRound(R) : sim.measure(), sp = Math.hypot(r.vel[0], r.vel[1]);
+      if ((sim.time - R.penAt) * Math.max(0.05, r.residual) >= b.fuse || sp < 0.08 || r.alive < 3) { burstShell(run, r.com, b.q, R); b.done = true; (out.bursts = out.bursts || []).push(fr.toV(r.com)); }
     }
     return out;
   }
-  function burstShell(run, at, q) {
-    const sim = run.sim, [a] = sim.projRange;
-    for (let i = a; i < sim.n; i++) if (sim.body[i] === 0) sim.alive[i] = 0;   // the shell itself is gone…
+  function burstShell(run, at, q, R) {
+    const sim = run.sim;
+    for (const [a, b] of R.parts) for (let i = a; i < b; i++) if (sim.body[i] === 0) sim.alive[i] = 0;   // the shell itself is gone…
     const nf = 90;
     for (let k = 0; k < nf; k++) {   // …into fast fragments, every which way
       const ang = (k + 0.37) / nf * Math.PI * 2, sp = 0.9 + 0.5 * ((k * 0.618) % 1);
@@ -817,17 +824,22 @@
       pieces.push({ idx, rel: P.map(p => [p[0] - X, p[1] - Y]), X, Y, dx: VX / sp, dy: VY / sp, sp, e: 0.5 * M * sp * sp / h, own, big: idx.length });
     }
     pieces.sort((a, c) => c.e - a.e);
-    const out = { pieces: [], frags: [], burst: null };
-    const bu = run.burst, main = bu && !bu.done ? pieces.find(p => p.own && p.big > 1) : null;
+    const out = { pieces: [], frags: [], bursts: [] }, mains = new Map();   // an explosive shell that hasn't gone off yet: its biggest piece → its burst
+    for (const bu of run.bursts) {
+      if (bu.done) continue;
+      const p = pieces.find(p => p.own && p.big > 1 && !mains.has(p) && p.idx.some(i => bu.R.parts.some(([a, c]) => i >= a && i < c)));
+      if (p) mains.set(p, bu);
+    }
     for (const p of pieces.slice(0, 1200)) {
       let maxLen = 12000;
-      if (p === main) maxLen = Math.max(0, bu.fuse - (sim.penAt ? (sim.time - sim.penAt) * p.sp : 0));
+      const bu = mains.get(p);
+      if (bu) maxLen = Math.max(0, bu.fuse - (bu.R.penAt ? (sim.time - bu.R.penAt) * p.sp : 0));
       const r = flyLine(run, p.X, p.Y, p.dx, p.dy, p.e, maxLen);
       Object.assign(p, { stop: r.stop, hits: r.hits });
       out.pieces.push(p);
-      if (p === main) {   // the explosive filling goes off where the shell got to
+      if (bu) {   // the explosive filling goes off where the shell got to
         const t = Math.max(0, r.stop - 20), bx = p.X + p.dx * t, by = p.Y + p.dy * t, q = bu.q;
-        bu.done = true; out.burst = { x: bx, y: by, at: t, piece: p };
+        bu.done = true; out.bursts.push({ x: bx, y: by, at: t, piece: p });
         const R = 650 * Math.cbrt(q);
         run.veh.modules.forEach((m, k) => {   // the blast itself
           const ddx = Math.max(m.x - bx, 0, bx - (m.x + m.w)), ddy = Math.max(m.y - by, 0, by - (m.y + m.h)), d = Math.hypot(ddx, ddy);
@@ -853,7 +865,7 @@
     const sim = run.sim;
     placeFlight(run, fl, () => Infinity);
     for (const p of fl.pieces) for (const i of p.idx) { sim.vx[i] = 0; sim.vy[i] = 0; if (sim.awake[i]) sim.doze(i); }
-    if (fl.burst) for (const i of fl.burst.piece.idx) sim.alive[i] = 0;   // the burst shell is gone
+    for (const b of fl.bursts) for (const i of b.piece.idx) sim.alive[i] = 0;   // the burst shells are gone
   }
 
   // ---------- debris: after a big blast, pieces fly off and fall with gravity ----------

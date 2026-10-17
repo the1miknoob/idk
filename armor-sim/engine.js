@@ -240,12 +240,24 @@
     return Math.max(6 * cal, 0.45 * t, 120) / Math.max(0.35, Math.cos(p.ang * DEG));
   }
   const projCal = P => P.d.shape === 'rod' ? P.d.dia : P.d.cal;
+  // Several shells at once. 'spread' puts them side by side (gap = mm between their sides), all arriving together;
+  // 'row' lines them up one behind another (gap = mm from one's tail to the next one's nose), like a burst from a machine gun.
+  // Returns [{ dy, back }] (sideways offset from the aim line, distance behind the first), the middle one first; null for one shell.
+  function volleyRounds(proj, vol) {
+    const n = Math.max(1, Math.min(8, Math.round((vol && vol.n) || 1)));
+    if (n === 1) return null;
+    const sh = makeShape(proj.d), gap = Math.max(0, +vol.gap || 0);
+    const list = Array.from({ length: n }, (_, k) => (vol.pattern === 'row' ? { dy: 0, back: k * (sh.x1 - sh.x0 + gap) } : { dy: (k - (n - 1) / 2) * (2 * sh.r + gap), back: 0 }));
+    return list.sort((a, b) => Math.abs(a.dy) - Math.abs(b.dy));
+  }
+  const volleySpan = (proj, vol) => { const r = proj && volleyRounds(proj, vol); return r ? Math.max(...r.map(q => q.dy)) - Math.min(...r.map(q => q.dy)) : 0; };   // how wide a spread is
+  const plateLen = (p, proj, vol) => (p.len === 'auto' ? autoLen(p, proj) + volleySpan(proj, vol) / Math.max(0.35, Math.cos(p.ang * DEG)) : p.len);
 
   // Rough area (mm²) of a scene, so we can pick a particle size for a particle budget
   function sceneArea(scene) {
     let a = 0;
-    for (const p of scene.plates) a += plateThickness(p) * (p.len === 'auto' ? autoLen(p, scene.proj) : p.len);
-    if (scene.proj.kind === 'ke') { const sh = makeShape(scene.proj.d); a += (sh.x1 - sh.x0) * sh.r * 1.7; }
+    for (const p of scene.plates) a += plateThickness(p) * plateLen(p, scene.proj, scene.volley);
+    if (scene.proj.kind === 'ke') { const sh = makeShape(scene.proj.d); a += (sh.x1 - sh.x0) * sh.r * 1.7 * (volleyRounds(scene.proj, scene.volley) || [0]).length; }
     return a;
   }
   // Particle size: fit the budget, but keep at least ~7 particles across the projectile (allowing up to 2.5× the budget for that)
@@ -297,7 +309,7 @@
       const proj = scene.proj;
       this.growParticles(4000);
       this.plates = scene.plates.map((p, pi) => {
-        const len = p.len === 'auto' ? autoLen(p, proj) : p.len, T = plateThickness(p), f = plateFrame(p);
+        const len = plateLen(p, proj, scene.volley), T = plateThickness(p), f = plateFrame(p);
         const rows = Math.max(1, Math.round(T / dyl)), dy = T / rows, pin = K.PIN ? Math.max(2 * h, 6) : -1;   // (the 3D grip holds plates now, so edges aren't pinned)
         const start = this.n;
         for (let k = 0; k < rows; k++) {
@@ -327,10 +339,10 @@
       this.time = 0; this.steps = 0; this.broken = 0; this.shots = 0;
       this.events = []; this.detonated = new Set(); this.maxT = 293; this.res = null;
       this.gone = scene.trackGone ? [] : null;   // particles that flew out of the world box
-      if (proj) this.addShot(proj);
+      if (proj) this.addShot(proj, null, volleyRounds(proj, scene.volley));
       else {   // a whole vehicle waits for its first shot
-        this.targets = this.plates; this.firstPlate = this.lastPlate = this.plates[0]; this.projRange = [this.n, this.n]; this.shape = null;
-        this.kind = 'ke'; this.v0 = 1; this.hitAt = null; this.pending = null; this.jetQueue = null; this.scab = null; this.shotT0 = 0; this.weldCap = Infinity;
+        this.targets = this.plates; this.rounds = []; this.scabs = []; this.firstPlate = this.lastPlate = this.plates[0]; this.projRange = [this.n, this.n]; this.shape = null;
+        this.kind = 'ke'; this.v0 = 1; this.hitAt = null; this.pending = null; this.jetQueue = null; this.shotT0 = 0; this.weldCap = Infinity;
         if (this.sleepOn) for (let i = 0; i < this.n; i++) this.awake[i] = 0;
         this.setBox(0); this.dt0 = this.dt = CFL * h / 6;
       }
@@ -381,8 +393,9 @@
 
     // ---------------- a shot ----------------
     // Puts a projectile in front of the target plates (all plates, unless told which), sets the grip for it, and resets the scoring.
-    // A vehicle can be shot again and again: the damage from earlier shots stays.
-    addShot(proj, targetIdx) {
+    // Several at once: rounds = [{ dy, back, targets }], each shell dy mm to the side of the aim line and back mm behind the first,
+    // aimed at its own plates (a vehicle). A vehicle can be shot again and again: the damage from earlier shots stays.
+    addShot(proj, targetIdx, rounds) {
       const h = this.h, dyl = h * SQ3 / 2, v0 = proj.v / 1000, again = this.shots > 0;
       if (again || this.sleepOn) {   // everything from earlier shots settles where it is
         for (let i = 0; i < this.n; i++) {
@@ -393,50 +406,58 @@
         if (again) this.findAttached();
       }
       this.shots++;
-      const tp = this.targets = targetIdx && targetIdx.length ? targetIdx.map(k => this.plates[k]) : this.plates;
-      // projectile (body 0): put its nose just in front of the first plate it would hit
-      const sh = this.shape = makeShape(proj.d), aimY = proj.aim || 0;
-      let hitX = Infinity;
-      for (const pl of tp) {   // where the line y = aim meets each plate's front face
-        const n = pl.f.n, o = pl.f.o; if (Math.abs(n[0]) < 1e-6) continue;
-        const x = o[0] + (n[1] * (o[1] - aimY)) / n[0];
-        if (x < hitX) hitX = x;
-      }
-      if (!isFinite(hitX)) hitX = 0;
-      let noseX = hitX - 1.5 * h;
-      const surfaceX = y => {   // how far right the shell can be at height y: the left-most plate face, minus a gap measured square to that face
-        let best = Infinity;
-        for (const pl of tp) {
-          const n = pl.f.n, o = pl.f.o; if (Math.abs(n[0]) < 1e-6) continue;
-          const xf = o[0] + (n[1] * (o[1] - y)) / n[0];
-          if (pl.cy != null && Math.abs((xf - o[0]) * pl.f.t[0] + (y - o[1]) * pl.f.t[1]) > pl.len / 2 + 2 * h) continue;   // this short plate isn't at this height
-          const x = xf - 1.6 * h / Math.max(0.25, Math.abs(n[0]));
-          if (x < best) best = x;
-        }
-        return best;
-      };
-      const rowsR = Math.ceil(sh.r / dyl) + 1;
-      if (proj.kind === 'ke') {   // slide the shell back until no part of it is inside (or touching) a plate
-        for (let k = -rowsR; k <= rowsR; k++) {
-          const y = k * dyl;
-          for (let x = 0; x >= sh.x0 - h; x -= h) if (sh.at(x, y)) { noseX = Math.min(noseX, surfaceX(aimY + y) - x); break; }
-        }
-      }
-      // Shaped charges, squash heads and HE shells are gone the instant they go off, so only solid shots are made of particles
-      // (the page draws the others flying in, and the physics starts with the explosion).
+      const sh = this.shape = makeShape(proj.d), aim0 = proj.aim || 0, rowsR = Math.ceil(sh.r / dyl) + 1;
       const pStart = this.n;
-      if (proj.kind === 'ke') for (let k = -rowsR; k <= rowsR; k++) {
-        const y = k * dyl;
-        for (let x = (Math.abs(k) % 2) * h / 2; x >= sh.x0 - h; x -= h) {
-          const m = sh.at(x, y);
-          if (m) this.addRaw(noseX + x, aimY + y, MAT_INDEX[m], 0, v0, 0, 0, 0, false);
+      this.rounds = (rounds && rounds.length ? rounds : [{ dy: 0, back: 0, targets: targetIdx }]).map(rd => {
+        const tp = rd.targets && rd.targets.length ? rd.targets.map(k => this.plates[k]) : this.plates, aimY = aim0 + (rd.dy || 0);
+        // projectile (body 0): put its nose just in front of the first plate it would hit (a burst's later shells further back)
+        let hitX = Infinity;
+        for (const pl of tp) {   // where the line y = aim meets each plate's front face
+          const n = pl.f.n, o = pl.f.o; if (Math.abs(n[0]) < 1e-6) continue;
+          const x = o[0] + (n[1] * (o[1] - aimY)) / n[0];
+          if (x < hitX) hitX = x;
         }
-      }
-      this.link(pStart, this.n);
-      for (let i = pStart; i < this.n; i++) this.nbond[i] = this.nadj[i];
+        if (!isFinite(hitX)) hitX = 0;
+        let noseX = hitX - 1.5 * h;
+        const surfaceX = y => {   // how far right the shell can be at height y: the left-most plate face, minus a gap measured square to that face
+          let best = Infinity;
+          for (const pl of tp) {
+            const n = pl.f.n, o = pl.f.o; if (Math.abs(n[0]) < 1e-6) continue;
+            const xf = o[0] + (n[1] * (o[1] - y)) / n[0];
+            if (pl.cy != null && Math.abs((xf - o[0]) * pl.f.t[0] + (y - o[1]) * pl.f.t[1]) > pl.len / 2 + 2 * h) continue;   // this short plate isn't at this height
+            const x = xf - 1.6 * h / Math.max(0.25, Math.abs(n[0]));
+            if (x < best) best = x;
+          }
+          return best;
+        };
+        if (proj.kind === 'ke') {   // slide the shell back until no part of it is inside (or touching) a plate
+          for (let k = -rowsR; k <= rowsR; k++) {
+            const y = k * dyl;
+            for (let x = 0; x >= sh.x0 - h; x -= h) if (sh.at(x, y)) { noseX = Math.min(noseX, surfaceX(aimY + y) - x); break; }
+          }
+        }
+        noseX -= rd.back || 0;
+        // Shaped charges, squash heads and HE shells are gone the instant they go off, so only solid shots are made of particles
+        // (the page draws the others flying in, and the physics starts with the explosion).
+        const a = this.n;
+        if (proj.kind === 'ke') for (let k = -rowsR; k <= rowsR; k++) {
+          const y = k * dyl;
+          for (let x = (Math.abs(k) % 2) * h / 2; x >= sh.x0 - h; x -= h) {
+            const m = sh.at(x, y);
+            if (m) this.addRaw(noseX + x, aimY + y, MAT_INDEX[m], 0, v0, 0, 0, 0, false);
+          }
+        }
+        this.link(a, this.n);
+        for (let i = a; i < this.n; i++) this.nbond[i] = this.nadj[i];
+        let m0 = 0; for (let i = a; i < this.n; i++) m0 += this.m[i];
+        return { aimY, hitX, noseX, targets: tp, parts: [[a, this.n]], mass0: m0 || 1, delay: (rd.back || 0) / v0,
+          lastPlate: tp.reduce((p, q) => (q.f.o[0] + q.T * q.f.n[0] > p.f.o[0] + p.T * p.f.n[0] ? q : p)), firstPlate: tp.reduce((p, q) => (q.f.o[0] < p.f.o[0] ? q : p)),
+          hitAt: null, everBehind: false, penAt: 0, residual: 0, res: null, v: null, jetWait: false };
+      });
       this.weldCap = Math.ceil(this.nb * 1.6) + 2000;   // re-joins stop once there are this many bonds (keeps runs the same as when tuned)
+      const R0 = this.rounds[0];
       this.projRange = [pStart, this.n];
-      this.noseX = noseX; this.aimY = aimY; this.hitX = hitX;
+      this.noseX = R0.noseX; this.aimY = R0.aimY; this.hitX = R0.hitX;
       // In real (3D) armor, metal around the hole in the missing third direction also holds each bit in place.
       // A flat slice doesn't have that, so every armor particle gets a "grip" that resists being shoved (and gives way past its strength).
       // It's about the strength of the metal spread over the size of the hole, so it doesn't depend on the particle size.
@@ -454,11 +475,11 @@
       this.setBox(sh.x1 - sh.x0);
       // scoring for this shot
       this.kind = proj.kind; this.design = proj.d; this.v0 = v0;
-      this.triggered = false; this.jetQueue = null; this.scab = null; this.penAt = 0; this.shotT0 = this.time; this.maxT = 293; this.res = null;
-      this.lastPlate = tp.reduce((a, b) => (b.f.o[0] + b.T * b.f.n[0] > a.f.o[0] + a.T * a.f.n[0] ? b : a));
-      this.firstPlate = tp.reduce((a, b) => (b.f.o[0] < a.f.o[0] ? b : a));
+      this.triggered = false; this.jetQueue = null; this.scabs = []; this.penAt = 0; this.shotT0 = this.time; this.maxT = 293; this.res = null; this.tally = null;
+      this.targets = this.rounds.length === 1 ? R0.targets : [...new Set(this.rounds.flatMap(R => R.targets))];
+      this.lastPlate = R0.lastPlate; this.firstPlate = R0.firstPlate;
       this.hitAt = null; this.residual = 0; this.everBehind = false;
-      this.pending = proj.kind !== 'ke' ? [hitX, aimY] : null;
+      this.pending = proj.kind !== 'ke' ? this.rounds.map(R => ({ x: R.hitX, y: R.aimY, t: this.time + R.delay, R })).sort((p, q) => p.t - q.t) : null;   // when each one goes off
       let m0 = 0; for (let i = pStart; i < this.n; i++) m0 += this.m[i];
       this.projMass0 = m0 || 1;
     }
@@ -533,8 +554,17 @@
     // ---------------- one time step ----------------
     // (split into small functions: JavaScript engines optimize short, tight loops much better)
     step() {
-      if (this.pending) { const [x, y] = this.pending; this.pending = null; this.hitAt = [x, y, this.time]; this.trigger(x, y); }
-      if (this.jetQueue && this.time >= this.jetQueue.t) { const q = this.jetQueue; this.jetQueue = null; this.makeJet(q.x, q.y, q.P, q.vTip); }
+      while (this.pending && this.time >= this.pending[0].t) {
+        const p = this.pending.shift();
+        if (!this.pending.length) this.pending = null;
+        if (!this.hitAt) this.hitAt = [p.x, p.y, this.time];
+        p.R.hitAt = [p.x, p.y, this.time]; this.trigger(p.x, p.y, p.R);
+      }
+      while (this.jetQueue && this.time >= this.jetQueue[0].t) {
+        const q = this.jetQueue.shift(), a = this.n;
+        if (!this.jetQueue.length) this.jetQueue = null;
+        this.makeJet(q.x, q.y, q.P, q.vTip); q.R.parts.push([a, this.n]); q.R.jetWait = false;
+      }
       const dt = this.dt;
       this.fx.fill(0, 0, this.n); this.fy.fill(0, 0, this.n);
       let hit, vmax2;
@@ -546,7 +576,7 @@
       if (hit && !this.hitAt) this.hitAt = [hit[0], hit[1], this.time];
       if (hit && !this.triggered && this.kind !== 'ke') this.trigger(hit[0], hit[1]);
       if (this.hasERA && this.steps % 4 === 0) this.checkReactive();
-      if (this.scab && this.time >= this.scab.t) this.knockScab();
+      for (let k = 0; k < this.scabs.length; k++) if (this.time >= this.scabs[k].t) this.knockScab(this.scabs.splice(k--, 1)[0]);
       if (this.steps % 400 === 0) this.compactBonds();
       if (this.steps % 32 === 0) this.findAttached();
     }
@@ -966,21 +996,22 @@
         this.addParticle(startX - k * 0.8 * h, cy, vTip + (vTail - vTip) * f, 0, 'cu', 0, K.JET_MASS);
       }
     }
-    trigger(cx, cy) {
+    trigger(cx, cy, shell = this.rounds[0]) {   // shell: which of the shells this is (its jet or fragments count as its own)
       this.triggered = true;
-      const d = this.design, h = this.h, pl = this.plateAt(cx, cy) || this.firstPlate, n = pl.f.n;
+      const d = this.design, h = this.h, pl = this.plateAt(cx, cy) || this.firstPlate, n = pl.f.n, a0 = this.n;
       const kick = i => { if (this.sleepOn) this.wake(i); };
       if (this.kind === 'heat') {
         if (d.tandem) {   // a small charge in front sets off reactive armor first; the main jet follows a moment later
           this.makeJet(cx, cy, d.tandem.q * d.tandem.cal, d.vTip * 0.9);
-          this.jetQueue = { t: this.time + d.tandem.delay, x: cx, y: cy, P: d.q * d.cal, vTip: d.vTip };
+          (this.jetQueue = this.jetQueue || []).push({ t: this.time + d.tandem.delay, x: cx, y: cy, P: d.q * d.cal, vTip: d.vTip, R: shell }); shell.jetWait = true;
         } else this.makeJet(cx, cy, d.q * d.cal, d.vTip);
+        shell.parts.push([a0, this.n]);
         this.events.push({ type: 'flash', x: cx - d.probe * 0.5, y: cy, r: d.cal * 1.6, t: this.time });
       } else if (this.kind === 'hesh') {
         // the explosive spreads on the plate and slams it: a shock wave runs through and can knock a scab off the back
         const R = d.cal * 0.75, I = K.HESH_PUSH;
         const eff = pl.layers.reduce((s, l) => s + l.t * (l.mat === 'comp' || MATERIALS[l.mat].group === 'Ceramics' ? 2.2 : MP[MAT_INDEX[l.mat]].E > 0.1 ? 1 : 0.5), 0);
-        this.scab = { t: this.time + pl.T / 5.2, pl, cx, cy, ok: eff <= 1.25 * d.cal * K.HESH_CAP };
+        this.scabs.push({ t: this.time + pl.T / 5.2, pl, cx, cy, ok: eff <= 1.25 * d.cal * K.HESH_CAP });
         for (let i = pl.i0; i < pl.i1; i++) {
           if (!this.alive[i] || this.fixed[i]) continue;
           const du = this.u[i]; if (du > 2.2 * h) continue;          // only the front skin gets the blast
@@ -1006,13 +1037,14 @@
           const sp = 1.1 + 0.4 * frac(Math.sin(k * 91.3) * 437.5), dir = Math.atan2(sy - (cy - n[1] * cr * 1.6), sx - (cx - n[0] * cr * 1.6));
           this.addParticle(sx, sy, Math.cos(dir) * sp, Math.sin(dir) * sp, 'shot', 0, 1.5);
         }
+        shell.parts.push([a0, this.n]);
         this.events.push({ type: 'flash', x: cx, y: cy, r: d.cal * 2.6, t: this.time });
       }
     }
 
     // HESH: the shock wave bounces off the inside face and tears a "scab" of metal off it
-    knockScab() {
-      const { pl, cx, cy, ok } = this.scab; this.scab = null;
+    knockScab(sc) {
+      const { pl, cx, cy, ok } = sc;
       if (!ok) return;
       const n = pl.f.n, t = pl.f.t, R = this.design.cal * 0.7, depth = Math.min(40, Math.max(2 * this.h, pl.T * 0.25));
       const along = (cx - pl.f.o[0]) * t[0] + (cy - pl.f.o[1]) * t[1];
@@ -1075,6 +1107,7 @@
     // ---------------- what happened? ----------------
     measure() {
       this.findAttached();
+      if (this.rounds.length > 1) return this.measureVolley();
       const lp = this.lastPlate, n = lp.f.n, o = lp.f.o, back = lp.T;
       const fp = this.firstPlate;
       const [a] = this.projRange;
@@ -1102,17 +1135,52 @@
         massLeft: mass / this.projMass0,
         maxT: this.maxT, broken: this.broken,
       };
+      const R = this.rounds[0];
+      if (R) { R.everBehind = this.everBehind; R.residual = this.residual; R.res = res; }
       return res;
+    }
+    // The same for one shell of several (its own particles, and the plates on its own line)
+    measureRound(R) {
+      const lp = R.lastPlate, n = lp.f.n, o = lp.f.o, back = lp.T, fp = R.firstPlate;
+      let behind = 0, sx = 0, sy = 0, deepest = -Infinity, cnt = 0, mx = 0, my = 0, mvx = 0, mvy = 0, mass = 0, spall = 0;
+      for (const [a, b] of R.parts) for (let i = a; i < b; i++) {
+        if (this.body[i] !== 0 || !this.alive[i]) continue;
+        cnt++;
+        const u = (this.px[i] - o[0]) * n[0] + (this.py[i] - o[1]) * n[1];
+        const uf = (this.px[i] - fp.f.o[0]) * fp.f.n[0] + (this.py[i] - fp.f.o[1]) * fp.f.n[1];
+        if (uf > deepest) deepest = uf;
+        const mi = this.m[i]; mass += mi; mx += this.px[i] * mi; my += this.py[i] * mi; mvx += this.vx[i] * mi; mvy += this.vy[i] * mi;
+        if (u > back + 2 * this.h) { behind++; sx += this.vx[i]; sy += this.vy[i]; }
+      }
+      for (let i = lp.i0; i < lp.i1; i++) {
+        if (!this.alive[i]) continue;
+        const u = (this.px[i] - o[0]) * n[0] + (this.py[i] - o[1]) * n[1];
+        if (u > back + this.h && this.attached[i] === 0 && (this.vx[i] * n[0] + this.vy[i] * n[1]) > 0.02) spall++;
+      }
+      if (behind >= 2) { R.everBehind = true; R.residual = Math.max(0, (sx * n[0] + sy * n[1]) / behind); }
+      if (!R.hitAt && this.kind === 'ke' && deepest > -1.5 * this.h) R.hitAt = [0, R.aimY, this.time];   // it has reached the armor
+      return R.res = {
+        time: this.time, steps: this.steps, particles: this.n, alive: cnt, behind, spall, residual: R.residual, everBehind: R.everBehind,
+        depth: Math.max(0, deepest), vel: mass ? [mvx / mass, mvy / mass] : [0, 0], com: mass ? [mx / mass, my / mass] : [0, 0],
+        massLeft: mass / R.mass0, maxT: this.maxT, broken: this.broken,
+      };
+    }
+    measureVolley() {   // every shell, then the volley as a whole: the deepest, the fastest out, all the bits behind
+      const all = this.rounds.map(R => this.measureRound(R)), deep = all.reduce((a, b) => (b.depth > a.depth ? b : a));
+      this.everBehind = all.some(r => r.everBehind); this.residual = Math.max(...all.map(r => r.residual));
+      return this.res = { ...deep, alive: all.reduce((t, r) => t + r.alive, 0), behind: all.reduce((t, r) => t + r.behind, 0), spall: Math.max(...all.map(r => r.spall)),
+        residual: this.residual, everBehind: this.everBehind, massLeft: all.reduce((t, r, k) => t + r.massLeft * this.rounds[k].mass0, 0) / this.projMass0 };
     }
 
     // Has it played out? Returns the verdict or null while it's still going.
     verdict() {
+      if (this.rounds.length > 1) return this.volleyVerdict();
       const r = this.measure(), fp = this.firstPlate, nIn = fp.f.n, t = this.time - this.shotT0;
       const vIn = r.vel[0] * nIn[0] + r.vel[1] * nIn[1], speed = Math.hypot(r.vel[0], r.vel[1]);
       const vSide = Math.abs(r.vel[0] * fp.f.t[0] + r.vel[1] * fp.f.t[1]);
       const tooLong = t > this.timeLimit();
       if (r.everBehind) {   // something of the shell got out the back: let it fly a little, then call it
-        if (!this.penAt) this.penAt = this.time;
+        if (!this.penAt) this.penAt = this.rounds[0].penAt = this.time;
         return this.time - this.penAt > 60 || tooLong ? 'pen' : null;
       }
       if (this.kind === 'hesh' || this.kind === 'he') {
@@ -1129,9 +1197,71 @@
       if (tooLong) return r.everBehind ? 'pen' : r.spall > 2 ? 'spall' : 'stop';
       return null;
     }
-    timeLimit() {
-      const T = this.targets.reduce((s, p) => s + p.T / Math.max(0.2, Math.cos(p.ang * DEG)), 0);
-      const L = this.shape.x1 - this.shape.x0, gap = this.lastPlate.f.o[0] - this.firstPlate.f.o[0];
+    // The verdict now, even if it hasn't all played out (when something else cuts the shot short): a shell that isn't through yet counts as stopped
+    settleVerdict() {
+      const v = this.verdict();
+      if (v || this.rounds.length < 2) return v;
+      for (const R of this.rounds) if (!R.v) R.v = R.everBehind ? 'pen' : R.res && R.res.spall > 2 ? 'spall' : 'stop';
+      return this.volleyVerdict();
+    }
+    // Several shells: each one plays out on its own (like a single shot, counted from when it arrives), and the volley is over
+    // when they all have. The overall verdict is the best one (any got through → 'pen'); this.tally counts them.
+    volleyVerdict() {
+      this.measure();
+      let left = 0;
+      for (const R of this.rounds) { if (!R.v) R.v = this.roundVerdict(R, R.res); if (!R.v) left++; }
+      if (left) { this.bringNext(); return null; }
+      const t = this.tally = { n: this.rounds.length, pen: 0, stop: 0, rico: 0, spall: 0 };
+      for (const R of this.rounds) t[R.v]++;
+      return t.pen ? 'pen' : t.spall ? 'spall' : t.rico > t.stop ? 'rico' : 'stop';
+    }
+    // A row: once every shell that has arrived has played out, the next one comes in straight away instead of after a long empty wait.
+    // The ones still on their way all move up together (keeping their spacing); solid ones never jump past anything in their way.
+    bringNext() {
+      const later = this.rounds.filter(R => !R.hitAt);
+      if (!later.length || this.rounds.some(R => R.hitAt && !R.v)) return;
+      const v0 = this.v0, h = this.h, t = this.time - this.shotT0;
+      let skip = Math.min(...later.map(R => R.delay - t)) - 10;   // µs: the next one arrives 10 µs from now
+      if (skip <= 0) return;
+      if (this.kind === 'ke') {
+        const own = new Uint8Array(this.n), r = this.shape.r + 2 * h;
+        for (const R of later) for (const [a, b] of R.parts) own.fill(1, a, b);
+        const lanes = later.map(R => { let nose = -Infinity; for (const [a, b] of R.parts) for (let i = a; i < b; i++) if (this.alive[i] && this.px[i] > nose) nose = this.px[i]; return { y: R.aimY, nose }; });
+        for (let i = 0; i < this.n; i++) {   // stop short of whatever is ahead in each shell's lane (the armor, bits thrown back off it)
+          if (!this.alive[i] || own[i]) continue;
+          for (const L of lanes) if (this.px[i] > L.nose - h && Math.abs(this.py[i] - L.y) < r) skip = Math.min(skip, (this.px[i] - L.nose - 3 * h) / v0);
+        }
+        if (skip <= 0) return;
+        for (const R of later) for (const [a, b] of R.parts) for (let i = a; i < b; i++) this.px[i] += v0 * skip;
+      }
+      for (const R of later) { R.delay -= skip; R.noseX += v0 * skip; }
+      if (this.pending) for (const p of this.pending) p.t -= skip;
+    }
+    roundVerdict(R, r) {
+      const fp = R.firstPlate, nIn = fp.f.n, t = this.time - this.shotT0 - R.delay;
+      const vIn = r.vel[0] * nIn[0] + r.vel[1] * nIn[1], speed = Math.hypot(r.vel[0], r.vel[1]);
+      const vSide = Math.abs(r.vel[0] * fp.f.t[0] + r.vel[1] * fp.f.t[1]);
+      const tooLong = t > this.timeLimit(R);
+      if (r.everBehind) { if (!R.penAt) R.penAt = this.time; return this.time - R.penAt > 60 || tooLong ? 'pen' : null; }
+      if (this.kind === 'hesh' || this.kind === 'he') {
+        if (!R.hitAt) return null;
+        const wait = this.kind === 'hesh' ? R.lastPlate.T / 5.2 + 120 : 160;
+        return this.time - R.hitAt[2] > wait ? (r.spall > 2 ? (this.kind === 'hesh' ? 'spall' : 'pen') : 'stop') : null;
+      }
+      if (this.kind === 'ke' && R.hitAt && vIn < -0.05) return vSide > -vIn ? 'rico' : (r.spall > 2 ? 'spall' : 'stop');
+      if (this.kind === 'ke' && R.hitAt && speed < 0.04) return r.spall > 2 ? 'spall' : 'stop';
+      if (this.kind === 'heat' && R.hitAt && !R.jetWait && this.time - R.hitAt[2] > 40) {
+        let fast = 0;
+        for (const [a, b] of R.parts) for (let i = a; i < b; i++) if (this.alive[i] && this.body[i] === 0 && this.vx[i] > 0.4) fast++;
+        if (!fast) return r.everBehind ? 'pen' : r.spall > 2 ? 'spall' : 'stop';
+      }
+      if (tooLong) return r.everBehind ? 'pen' : r.spall > 2 ? 'spall' : 'stop';
+      return null;
+    }
+    timeLimit(R) {
+      const tp = R ? R.targets : this.targets, fp = R ? R.firstPlate : this.firstPlate, lp = R ? R.lastPlate : this.lastPlate;
+      const T = tp.reduce((s, p) => s + p.T / Math.max(0.2, Math.cos(p.ang * DEG)), 0);
+      const L = this.shape.x1 - this.shape.x0, gap = lp.f.o[0] - fp.f.o[0];
       return 200 + 2.5 * (T + L + gap) / Math.max(0.3, this.v0);
     }
   }
@@ -1141,5 +1271,5 @@
   const K = { STRENGTH: 1, STRETCH: 1, COMP: 1, CRUSH: 1, DUCT: 1, GRIP: 0.8, PSTR: 1, PCRUSH: 1, PIN: 0, DAMP: 0.02, CDAMP: 0.05, JET_SCALE: 1, JET_MASS: 1.25, HESH_PUSH: 0.3, HESH_CAP: 1, HE_PUSH: 0.35, ERA_FLY: 0.8, SLOPE: 3, SLOPE0: 1.15 };
   function tune(o) { Object.assign(K, o); }
 
-  return { MATERIALS, MAT_KEYS, MAT_INDEX, PROJECTILES, ARMORS, Sim, makeShape, plateThickness, autoLen, pickH, sceneArea, projCal, tune, inPoly };
+  return { MATERIALS, MAT_KEYS, MAT_INDEX, PROJECTILES, ARMORS, Sim, makeShape, plateThickness, autoLen, pickH, sceneArea, projCal, tune, inPoly, volleyRounds };
 });
