@@ -41,7 +41,7 @@
   // ✏️ Vehicle cut-aways. Real ones use rough public armor numbers and simplified insides; the made-up ones are made up.
   const VEHICLES = [
     {
-      id: 'tiger', name: 'Tiger I', group: 'WW2 tanks (approx.)', year: 1942, from: 'Germany', aim: [565, 1500],
+      id: 'tiger', name: 'Tiger I', group: 'WW2 (approx.)', year: 1942, from: 'Germany', aim: [565, 1500],
       about: 'Thick, flat armor and the famous 88 mm gun. Slow and heavy, but hard to hurt from the front.',
       parts: [
         ...chain('h', [[3700, 1830], [5950, 1830], [6080, 1000], [5700, 450], [650, 450], [220, 760], [60, 1100], [520, 1180], [630, 1830], [1650, 1830]], [
@@ -59,7 +59,7 @@
       deco: { track: [-60, 6230, 1120], wheels: [[330, 860, 330], ...wheelsRow(1000, 5200, 8, 400, 420), [5900, 760, 300]], barrel: { x0: 1250, x1: -2150, y: 2400, d: 130, brake: true } },
     },
     {
-      id: 'tiger2', name: 'Tiger II', group: 'WW2 tanks (approx.)', year: 1944, from: 'Germany', aim: [505, 1575],
+      id: 'tiger2', name: 'Tiger II', group: 'WW2 (approx.)', year: 1944, from: 'Germany', aim: [505, 1575],
       about: 'The heaviest German tank of the war: a 150 mm front plate sloped at 50° and a very long 88 mm gun. Almost nothing got through its front.',
       parts: [
         ...chain('h', [[4300, 2000], [7000, 2000], [7380, 1250], [7000, 490], [790, 490], [0, 1150], [1010, 2000], [2250, 2000]], [
@@ -78,7 +78,7 @@
       deco: { track: [-40, 7400, 1050], wheels: [[250, 780, 330], ...wheelsRow(1000, 6300, 9, 400, 410), [7050, 720, 300]], barrel: { x0: 1550, x1: -4700, y: 2430, d: 120, brake: true } },
     },
     {
-      id: 'panther', name: 'Panther Ausf. G', group: 'WW2 tanks (approx.)', year: 1944, from: 'Germany', aim: [560, 1405],
+      id: 'panther', name: 'Panther Ausf. G', group: 'WW2 (approx.)', year: 1944, from: 'Germany', aim: [560, 1405],
       about: 'Sloped armor like the T-34, a long 75 mm gun, and a thin roof. Its rounded mantlet could bounce shells down into the hull.',
       parts: [
         ...chain('h', [[4150, 1800], [6300, 1800], [6870, 820], [6400, 560], [650, 560], [0, 1010], [1120, 1800], [2350, 1800]], [
@@ -97,7 +97,7 @@
       deco: { track: [-120, 6820, 1060], wheels: [[250, 880, 330], ...wheelsRow(850, 5900, 8, 430, 450), [6550, 820, 300]], barrel: { x0: 1700, x1: -1950, y: 2340, d: 100, brake: true } },
     },
     {
-      id: 'jagdpanther', name: 'Jagdpanther', group: 'WW2 tanks (approx.)', year: 1944, from: 'Germany', aim: [700, 1500],
+      id: 'jagdpanther', name: 'Jagdpanther', group: 'WW2 (approx.)', year: 1944, from: 'Germany', aim: [700, 1500],
       about: 'A tank hunter: a Panther hull with a fixed box on top and the long 88 mm gun. No turret, so the whole vehicle turns to aim. Its front is one big 80 mm plate sloped at 55°.',
       parts: [
         ...chain('h', [[2385, 2680], [4200, 2680], [4500, 1800], [6300, 1800], [6870, 820], [6400, 560], [650, 560], [0, 1010]], [
@@ -114,7 +114,44 @@
       deco: { track: [-120, 6820, 1060], wheels: [[250, 880, 330], ...wheelsRow(850, 5900, 8, 430, 450), [6550, 820, 300]], barrel: { x0: 1500, x1: -4800, y: 2250, d: 120, brake: true } },
     },
     {
-      id: 'pz4', name: 'Panzer IV Ausf. H', group: 'WW2 tanks (approx.)', year: 1943, from: 'Germany', aim: [600, 1380],
+      id: 'elefant', name: 'Elefant', group: 'WW2 (approx.)', year: 1944, from: 'Germany', aim: [90, 1400],
+      about: 'A Porsche tank hunter with 200 mm of armor on the front and the long 88 mm gun. Its gun box sits at the back, so the engines are in the middle.',
+      parts: [
+        ...chain('h', [[3590, 2970], [6500, 2970], [6800, 1100], [6300, 480], [550, 480], [0, 980], [180, 1820], [3050, 1820]], [
+          ['Roof of the box', L('rha', 30)], ['Back of the box', L('rha', 80)], ['Lower rear plate', L('rha', 50)], ['Belly', L('rha', 30)],
+          ['Lower front plate', L('rha', 100)], ['Front plate', L('rha', 100, 'rha', 100)], ['Hull roof', L('rha', 30)], ['Front of the box', L('rha', 200)]], true),
+        ...chain('h', [[3150, 2300], [3150, 2600]], [['Gun mantlet', L('cast', 120)]]),
+      ],
+      modules: [
+        M('crew', 'Driver', 650, 560, 1100, 1700), M('crew', 'Radio operator', 1150, 560, 1600, 1700),
+        M('fuel', 'Fuel tanks', 1650, 560, 2000, 1750), M('engine', 'Engines and generators', 2050, 560, 3000, 1750),
+        M('crew', 'Gunner', 3850, 1950, 4250, 2900), M('gun', 'Gun breech', 3650, 2350, 5000, 2550),
+        M('crew', 'Loader', 4350, 560, 4800, 2850), M('crew', 'Second loader', 4900, 560, 5350, 2850), M('crew', 'Commander', 5450, 1900, 5900, 2900),
+        M('ammo', 'Ammo (racks)', 5450, 560, 6200, 1450),
+      ],
+      deco: { track: [-60, 6850, 900], wheels: [[250, 680, 300], ...wheelsRow(1000, 5600, 6, 320, 330), [6550, 680, 300]], barrel: { x0: 3150, x1: -3150, y: 2450, d: 120, brake: true } },
+    },
+    {
+      id: 'maus', name: 'Maus', group: 'WW2 (approx.)', year: 1944, from: 'Germany', aim: [650, 1455],
+      about: 'A 188-tonne giant, the heaviest tank ever built (only two were made). 200 mm of sloped steel on the front and a 240 mm turret face.',
+      parts: [
+        ...chain('h', [[6100, 1910], [8700, 1910], [9030, 1100], [8600, 500], [700, 500], [0, 1000], [1300, 1910], [2700, 1910]], [
+          ['Engine deck', L('rha', 50)], ['Rear plate', L('rha', 160)], ['Lower rear plate', L('rha', 160)], ['Belly', L('rha', 100)],
+          ['Lower front plate', L('rha', 200)], ['Upper front plate', L('rha', 200)], ['Hull roof', L('rha', 50)]]),
+        ...chain('t', [[2600, 1940], [2400, 2600], [2650, 3350], [3050, 3630], [6100, 3630], [6450, 1940]], [
+          ['Turret front (lower)', L('cast', 240)], ['Turret front', L('cast', 240)], ['Turret roof (front)', L('cast', 60)], ['Turret roof', L('cast', 60)], ['Turret rear', L('cast', 200)]]),
+        ...chain('t', [[2250, 2500], [2250, 2900]], [['Gun mantlet', L('cast', 100)]]),
+      ],
+      modules: [
+        M('fuel', 'Fuel tanks (front)', 950, 600, 1400, 1300), M('crew', 'Driver', 1450, 600, 1900, 1750), M('crew', 'Radio operator', 1950, 600, 2400, 1800),
+        M('engine', 'Engine and generator', 2500, 600, 5200, 1750), M('ammo', 'Ammo (hull racks)', 5300, 600, 7100, 1500), M('trans', 'Electric motors', 7300, 600, 8400, 1500),
+        M('crew', 'Gunner', 2950, 2050, 3400, 3300), M('crew', 'Loader', 3500, 1950, 3950, 3450), M('crew', 'Second loader', 4050, 1950, 4500, 3450),
+        M('crew', 'Commander', 4600, 2300, 5100, 3550), M('gun', 'Gun breech', 2800, 2600, 4600, 2850), M('ammo', 'Ammo (turret)', 5200, 2000, 5900, 3200),
+      ],
+      deco: { track: [-80, 9100, 1250], wheels: [[300, 820, 350], ...wheelsRow(800, 8200, 12, 270, 280), [8750, 820, 350]], barrel: { x0: 2250, x1: -4750, y: 2700, d: 160, brake: false } },
+    },
+    {
+      id: 'pz4', name: 'Panzer IV Ausf. H', group: 'WW2 (approx.)', year: 1943, from: 'Germany', aim: [600, 1380],
       about: 'The workhorse German tank. Thick 80 mm plates on the front of the hull, but a thin 50 mm turret front.',
       parts: [
         ...chain('h', [[3500, 1700], [5600, 1700], [5800, 620], [5500, 400], [300, 400], [150, 950], [450, 1050], [550, 1700], [1900, 1700]], [
@@ -133,7 +170,23 @@
       deco: { track: [-40, 5850, 820], wheels: [[200, 640, 270], ...wheelsRow(700, 5000, 8, 235, 260), [5550, 600, 250]], barrel: { x0: 1550, x1: -1130, y: 2120, d: 85, brake: true } },
     },
     {
-      id: 'kv1', name: 'KV-1 (1941)', group: 'WW2 tanks (approx.)', year: 1941, from: 'Soviet Union', aim: [195, 1375],
+      id: 'stug3', name: 'StuG III Ausf. G', group: 'WW2 (approx.)', year: 1943, from: 'Germany', aim: [860, 1700],
+      about: 'A low assault gun on the Panzer III hull: no turret, an 80 mm front and a long 75 mm gun. Germany built more of these than any other armored vehicle.',
+      parts: [
+        ...chain('h', [[950, 2160], [3100, 2160], [3300, 1500], [5100, 1500], [5400, 900], [5000, 390], [600, 390], [0, 860], [180, 1330], [800, 1400]], [
+          ['Roof', L('rha', 10)], ['Back of the box', L('rha', 30)], ['Engine deck', L('rha', 16)], ['Rear plate', L('rha', 50)], ['Lower rear plate', L('rha', 50)],
+          ['Belly', L('rha', 16)], ['Lower front plate', L('rha', 50)], ['Nose plate', L('rha', 50, 'rha', 30)], ['Glacis', L('rha', 25)], ['Front of the box', L('rha', 50, 'rha', 30)]], true),
+        ...chain('h', [[700, 1650], [700, 1950]], [['Gun mantlet', L('cast', 50)]]),
+      ],
+      modules: [
+        M('trans', 'Transmission', 620, 450, 1000, 1150), M('crew', 'Driver', 1050, 450, 1450, 1700), M('crew', 'Gunner', 1250, 1400, 1650, 2100),
+        M('gun', 'Gun breech', 1000, 1700, 2300, 1900), M('crew', 'Loader', 1750, 450, 2200, 2100), M('crew', 'Commander', 2300, 1450, 2750, 2140),
+        M('ammo', 'Ammo (racks)', 2300, 450, 3150, 1350), M('fuel', 'Fuel tanks', 3350, 450, 3800, 1400), M('engine', 'Engine', 3850, 450, 5050, 1420),
+      ],
+      deco: { track: [-60, 5450, 760], wheels: [[250, 640, 280], ...wheelsRow(800, 4600, 6, 260, 270), [5150, 640, 260]], barrel: { x0: 700, x1: -2900, y: 1800, d: 85, brake: true } },
+    },
+    {
+      id: 'kv1', name: 'KV-1 (1941)', group: 'WW2 (approx.)', year: 1941, from: 'Soviet Union', aim: [195, 1375],
       about: 'In 1941 hardly any German gun could get through its 75 mm armor. Slow and unreliable, but very hard to knock out.',
       parts: [
         ...chain('h', [[3800, 1950], [6200, 1950], [6750, 1300], [6300, 440], [460, 440], [60, 1050], [330, 1700], [900, 1950], [1800, 1950]], [
@@ -151,7 +204,7 @@
       deco: { track: [-40, 6800, 950], wheels: [[250, 700, 300], ...wheelsRow(900, 5700, 6, 300, 310), [6450, 700, 320]], barrel: { x0: 1500, x1: -1700, y: 2280, d: 95, brake: false } },
     },
     {
-      id: 't34', name: 'T-34-85', group: 'WW2 tanks (approx.)', year: 1944, from: 'Soviet Union', aim: [700, 1240],
+      id: 't34', name: 'T-34-85', group: 'WW2 (approx.)', year: 1944, from: 'Soviet Union', aim: [700, 1240],
       about: 'Thin but steeply sloped armor, so shells often glanced off. Ammo sat in boxes on the floor.',
       parts: [
         ...chain('h', [[3600, 1630], [5300, 1630], [6000, 1000], [5600, 400], [600, 400], [0, 850], [1350, 1630], [1900, 1630]], [
@@ -170,7 +223,7 @@
       deco: { track: [-60, 6060, 900], wheels: [[150, 600, 300], ...wheelsRow(800, 5100, 5, 415, 420), [5800, 620, 300]], barrel: { x0: 1450, x1: -1600, y: 2150, d: 100, brake: false } },
     },
     {
-      id: 'sherman', name: 'M4A3E8 Sherman', group: 'WW2 tanks (approx.)', year: 1944, from: 'USA', aim: [500, 1600],
+      id: 'sherman', name: 'M4A3E8 Sherman', group: 'WW2 (approx.)', year: 1944, from: 'USA', aim: [500, 1600],
       about: 'Tall and reliable. This late version kept its ammo in water-jacketed "wet" racks, so it caught fire less often.',
       parts: [
         ...chain('h', [[3700, 2000], [5400, 2000], [5700, 900], [5300, 430], [750, 430], [250, 750], [50, 1150], [960, 2000], [2000, 2000]], [
@@ -189,7 +242,26 @@
       deco: { track: [-100, 5900, 900], wheels: [[150, 620, 300], ...wheelsRow(800, 5000, 6, 260, 280), [5600, 600, 280]], barrel: { x0: 1650, x1: -1450, y: 2470, d: 95, brake: true } },
     },
     {
-      id: 'pershing', name: 'M26 Pershing', group: 'WW2 tanks (approx.)', year: 1945, from: 'USA', aim: [455, 1460],
+      id: 'hellcat', name: 'M18 Hellcat', group: 'WW2 (approx.)', year: 1944, from: 'USA', aim: [475, 1275],
+      about: 'The fastest tank of the war (80 km/h) with a strong 76 mm gun, but only 13 mm of armor and an open-top turret.',
+      parts: [
+        ...chain('h', [[3800, 1650], [5000, 1650], [5440, 900], [5000, 360], [650, 360], [0, 900], [950, 1650], [1700, 1650]], [
+          ['Engine deck', L('rha', 8)], ['Rear plate', L('rha', 13)], ['Lower rear plate', L('rha', 13)], ['Belly', L('rha', 6)],
+          ['Lower front plate', L('rha', 13)], ['Upper front plate', L('rha', 13)], ['Hull roof', L('rha', 8)]]),
+        ...chain('t', [[1800, 1680], [1520, 2340]], [['Turret front', L('rha', 19)]]),
+        ...chain('t', [[3750, 2340], [3950, 1680]], [['Turret rear', L('rha', 13)]]),
+        ...chain('t', [[1400, 1950], [1400, 2250]], [['Gun mantlet', L('rha', 19)]]),
+      ],
+      modules: [
+        M('trans', 'Transmission', 600, 430, 1050, 950), M('crew', 'Driver', 1100, 430, 1550, 1550), M('crew', 'Assistant driver', 1600, 430, 2050, 1550),
+        M('crew', 'Gunner', 2000, 1450, 2400, 2350), M('crew', 'Commander', 2500, 1600, 2950, 2450), M('crew', 'Loader', 3050, 430, 3500, 2350),
+        M('gun', 'Gun breech', 1700, 2000, 2850, 2200), M('ammo', 'Ammo (side racks)', 2100, 430, 3000, 900),
+        M('fuel', 'Fuel tanks', 3800, 430, 4150, 1550), M('engine', 'Engine', 4200, 430, 4950, 1550),
+      ],
+      deco: { track: [-60, 5500, 760], wheels: [[200, 600, 280], ...wheelsRow(750, 4700, 5, 330, 340), [5250, 600, 260]], barrel: { x0: 1400, x1: -2560, y: 2100, d: 90, brake: false } },
+    },
+    {
+      id: 'pershing', name: 'M26 Pershing', group: 'WW2 (approx.)', year: 1945, from: 'USA', aim: [455, 1460],
       about: 'America\'s heavy tank at the very end of the war: a 90 mm gun and a 102 mm front plate sloped at 46°.',
       parts: [
         ...chain('h', [[3700, 1900], [5900, 1900], [6330, 1150], [6000, 480], [720, 480], [0, 1020], [910, 1900], [1900, 1900]], [
@@ -208,7 +280,7 @@
       deco: { track: [-60, 6380, 950], wheels: [[150, 650, 300], ...wheelsRow(800, 5400, 6, 330, 340), [6100, 650, 300]], barrel: { x0: 1700, x1: -2800, y: 2280, d: 110, brake: true } },
     },
     {
-      id: 'is2', name: 'IS-2', group: 'WW2 tanks (approx.)', year: 1944, from: 'Soviet Union', aim: [550, 1270],
+      id: 'is2', name: 'IS-2', group: 'WW2 (approx.)', year: 1944, from: 'Soviet Union', aim: [550, 1270],
       about: 'A heavy tank with a huge 122 mm gun and a steep 120 mm front plate. It carried only 28 big shells.',
       parts: [
         ...chain('h', [[3700, 1590], [5800, 1590], [6500, 900], [6300, 420], [300, 420], [0, 950], [1108, 1590], [1900, 1590]], [
@@ -227,7 +299,7 @@
       deco: { track: [-60, 6650, 860], wheels: [[150, 620, 300], ...wheelsRow(800, 5700, 6, 280, 300), [6400, 640, 300]], barrel: { x0: 1450, x1: -1750, y: 2150, d: 140, brake: true } },
     },
     {
-      id: 'churchill', name: 'Churchill VII', group: 'WW2 tanks (approx.)', year: 1944, from: 'UK', aim: [60, 1550],
+      id: 'churchill', name: 'Churchill VII', group: 'WW2 (approx.)', year: 1944, from: 'UK', aim: [60, 1550],
       about: 'A slow British infantry tank with some of the thickest armor of the war: 152 mm on the front. Its tracks run all the way round the hull.',
       parts: [
         ...chain('h', [[3700, 2050], [6900, 2050], [7100, 1300], [6900, 500], [700, 500], [60, 1150], [60, 1950], [500, 2050], [1900, 2050]], [
@@ -245,7 +317,7 @@
       deco: { track: [-80, 7280, 1950], wheels: [[350, 1500, 320], ...wheelsRow(900, 6300, 11, 150, 170), [6850, 1500, 320]], barrel: { x0: 1800, x1: -900, y: 2400, d: 90, brake: true } },
     },
     {
-      id: 't55', name: 'T-55', group: 'Cold War tanks (approx.)', year: 1958, from: 'Soviet Union', aim: [640, 1200],
+      id: 't55', name: 'T-55', group: 'Cold War (approx.)', year: 1958, from: 'Soviet Union', aim: [640, 1200],
       about: 'One of the most-built tanks ever. A thick cast dome turret and a 100 mm gun. Some shells sit in a rack next to the driver.',
       parts: [
         ...chain('h', [[3700, 1515], [5700, 1515], [6200, 800], [5900, 425], [650, 425], [0, 880], [1100, 1515], [1800, 1515]], [
@@ -264,7 +336,7 @@
       deco: { track: [-80, 6150, 850], wheels: [[150, 560, 290], ...wheelsRow(750, 5200, 5, 405, 410), [5900, 600, 280]], barrel: { x0: 1500, x1: -2800, y: 1900, d: 115, brake: false, evac: -1900 } },
     },
     {
-      id: 't62', name: 'T-62', group: 'Cold War tanks (approx.)', year: 1961, from: 'Soviet Union', aim: [580, 1215],
+      id: 't62', name: 'T-62', group: 'Cold War (approx.)', year: 1961, from: 'Soviet Union', aim: [580, 1215],
       about: 'A T-55 stretched to fit a big 115 mm smoothbore gun, the first tank gun of its kind. It threw its empty shell cases out of a hatch in the turret.',
       parts: [
         ...chain('h', [[3900, 1550], [6000, 1550], [6630, 800], [6300, 425], [650, 425], [0, 880], [1160, 1550], [1850, 1550]], [
@@ -283,7 +355,7 @@
       deco: { track: [-80, 6600, 850], wheels: [[150, 560, 290], ...wheelsRow(750, 5600, 5, 405, 410), [6350, 600, 280]], barrel: { x0: 1520, x1: -4180, y: 1950, d: 125, brake: false, evac: -2600 } },
     },
     {
-      id: 't72', name: 'T-72 Ural', group: 'Cold War tanks (approx.)', year: 1973, from: 'Soviet Union', aim: [1000, 1300],
+      id: 't72', name: 'T-72 Ural', group: 'Cold War (approx.)', year: 1973, from: 'Soviet Union', aim: [1000, 1300],
       about: 'Low and fast-firing, with a layered steel-and-fibreglass front plate. Its autoloader keeps 22 rounds in a ring under the turret.',
       parts: [
         ...chain('h', [[4600, 1720], [6400, 1720], [6950, 900], [6600, 490], [700, 490], [0, 900], [2030, 1720], [2600, 1720]], [
@@ -302,7 +374,7 @@
       deco: { track: [-80, 6900, 800], wheels: [[150, 560, 280], ...wheelsRow(800, 5800, 6, 375, 380), [6650, 560, 280]], barrel: { x0: 2400, x1: -2580, y: 1990, d: 135, brake: false } },
     },
     {
-      id: 'leopard1', name: 'Leopard 1', group: 'Cold War tanks (approx.)', year: 1965, from: 'West Germany', aim: [580, 1265],
+      id: 'leopard1', name: 'Leopard 1', group: 'Cold War (approx.)', year: 1965, from: 'West Germany', aim: [580, 1265],
       about: 'West Germany chose speed over armor: only 70 mm on the front, but a fast tank with the excellent British-designed 105 mm gun.',
       parts: [
         ...chain('h', [[4400, 1600], [6400, 1600], [7090, 950], [6700, 440], [700, 440], [0, 930], [1160, 1600], [2300, 1600]], [
@@ -319,6 +391,84 @@
         M('fuel', 'Fuel tanks', 4500, 500, 5000, 1500), M('engine', 'Engine', 5050, 500, 6300, 1500), M('trans', 'Transmission', 6300, 480, 6900, 1150),
       ],
       deco: { track: [-60, 7100, 850], wheels: [[200, 600, 300], ...wheelsRow(900, 6100, 7, 350, 360), [6850, 600, 280]], barrel: { x0: 1750, x1: -3850, y: 2000, d: 115, brake: false, evac: -2300 } },
+    },
+    {
+      id: 'bmp1', name: 'BMP-1', group: 'Cold War (approx.)', year: 1966, from: 'Soviet Union', aim: [275, 570],
+      about: 'A Soviet infantry fighting vehicle with a 73 mm gun and room for 8 soldiers, but very thin armor. Its back doors are fuel tanks.',
+      parts: [
+        ...chain('h', [[3800, 1600], [6400, 1600], [6735, 600], [6400, 390], [550, 390], [0, 750], [2200, 1180], [2500, 1600], [2700, 1600]], [
+          ['Roof', L('rha', 6)], ['Back doors', L('rha', 16)], ['Lower rear plate', L('rha', 16)], ['Belly', L('rha', 6)],
+          ['Lower front plate', L('rha', 19)], ['Upper front plate (ribbed)', L('rha', 7)], ['Front of the roof', L('rha', 7)], ['Hull roof', L('rha', 6)]]),
+        ...chain('t', [[2800, 1620], [2650, 1900], [3000, 2068], [3550, 2068], [3750, 1620]], [
+          ['Turret front', L('rha', 23)], ['Turret roof (front)', L('rha', 10)], ['Turret roof', L('rha', 10)], ['Turret rear', L('rha', 19)]]),
+      ],
+      modules: [
+        M('engine', 'Engine', 700, 450, 1700, 850), M('crew', 'Driver', 1750, 450, 2200, 1050), M('crew', 'Commander', 2550, 450, 2950, 1550),
+        M('crew', 'Gunner', 3000, 1000, 3400, 2000), M('gun', 'Gun breech', 2750, 1780, 3500, 1920), M('ammo', 'Ammo (carousel)', 2700, 450, 3800, 800),
+        M('crew', 'Soldier 1', 3900, 450, 4450, 1500), M('crew', 'Soldier 2', 4500, 450, 5050, 1500), M('crew', 'Soldier 3', 5100, 450, 5650, 1500), M('crew', 'Soldier 4', 5700, 450, 6150, 1500),
+        M('fuel', 'Fuel tanks (back doors)', 6200, 650, 6420, 1450),
+      ],
+      deco: { track: [-40, 6800, 700], wheels: [[200, 520, 230], ...wheelsRow(800, 5900, 6, 300, 310), [6450, 520, 230]], barrel: { x0: 2650, x1: 550, y: 1850, d: 80, brake: false } },
+    },
+    {
+      id: 'leopard2', name: 'Leopard 2A4', group: 'Modern (approx.)', year: 1985, from: 'West Germany', aim: [2540, 1650],
+      about: 'West Germany\'s 1980s main battle tank. Its real armor is secret, so this uses rough public estimates. Some of its ammo sits in the hull next to the driver.',
+      parts: [
+        ...chain('h', [[5100, 1480], [7400, 1480], [7720, 800], [7300, 490], [600, 490], [80, 1100], [2300, 1480], [2450, 1480]], [
+          ['Engine deck', L('rha', 25)], ['Rear plate', L('rha', 25)], ['Lower rear plate', L('rha', 25)], ['Belly', L('rha', 25)],
+          ['Lower front plate (layered)', L('hhs', 50, 'al2o3', 100, 'rha', 50)], ['Upper front plate', L('rha', 50)], ['Hull roof', L('rha', 40)]]),
+        ...chain('t', [[2550, 1500], [2500, 2250], [3000, 2480], [6300, 2480], [6600, 1800], [5150, 1800]], [
+          ['Turret front (layered)', L('hhs', 50, 'al2o3', 200, 'rubber', 30, 'al2o3', 200, 'rha', 70)], ['Turret roof (front)', L('rha', 40)], ['Turret roof', L('rha', 30)],
+          ['Bustle rear', L('rha', 30)], ['Bustle floor', L('rha', 25)]]),
+        ...chain('t', [[2350, 1750], [2350, 2100]], [['Gun mantlet', L('rha', 150)]]),
+      ],
+      modules: [
+        M('ammo', 'Ammo (hull rack)', 850, 560, 1750, 1150), M('crew', 'Driver', 1800, 560, 2250, 1330),
+        M('crew', 'Gunner', 3150, 1450, 3600, 2400), M('crew', 'Commander', 3700, 1650, 4150, 2420), M('crew', 'Loader', 4250, 560, 4700, 2420),
+        M('gun', 'Gun breech', 3150, 1830, 4400, 2030), M('ammo', 'Ammo (bustle, blow-out panels)', 5200, 1850, 6250, 2420, { vent: true }),
+        M('fuel', 'Fuel tanks', 4800, 560, 5100, 1400), M('engine', 'Engine', 5150, 560, 6700, 1420), M('trans', 'Transmission', 6750, 540, 7250, 1200),
+      ],
+      deco: { track: [-80, 7750, 850], wheels: [[250, 650, 300], ...wheelsRow(950, 6700, 7, 350, 360), [7450, 650, 300]], barrel: { x0: 2350, x1: -2950, y: 1930, d: 140, brake: false, evac: -700 } },
+    },
+    {
+      id: 'abrams', name: 'M1A1 Abrams', group: 'Modern (approx.)', year: 1985, from: 'USA', aim: [2618, 1750],
+      about: 'America\'s main battle tank. Its real armor is secret, so this uses rough public estimates: thick layered armor on the turret front, and most of the ammo in the turret bustle behind blow-out panels.',
+      parts: [
+        ...chain('h', [[5100, 1600], [7500, 1600], [7930, 900], [7500, 480], [550, 480], [0, 1150], [2400, 1600], [2600, 1600]], [
+          ['Engine deck', L('rha', 30)], ['Rear plate', L('rha', 30)], ['Lower rear plate', L('rha', 30)], ['Belly', L('rha', 30)],
+          ['Lower front plate (layered)', L('hhs', 50, 'al2o3', 120, 'rha', 50)], ['Upper front plate', L('rha', 50)], ['Hull roof', L('rha', 40)]]),
+        ...chain('t', [[2650, 1630], [2500, 2200], [3000, 2440], [6600, 2440], [6750, 1900], [5150, 1900]], [
+          ['Turret front (layered)', L('hhs', 60, 'al2o3', 250, 'rubber', 30, 'al2o3', 250, 'rha', 80)], ['Turret roof (front)', L('rha', 50)], ['Turret roof', L('rha', 40)],
+          ['Bustle rear', L('rha', 30)], ['Bustle floor', L('rha', 30)]]),
+        ...chain('t', [[2350, 1850], [2350, 2150]], [['Gun mantlet', L('rha', 150)]]),
+      ],
+      modules: [
+        M('fuel', 'Fuel tanks (front)', 800, 560, 1250, 1200), M('crew', 'Driver', 1300, 560, 1750, 1300),
+        M('crew', 'Gunner', 3350, 1500, 3800, 2350), M('crew', 'Commander', 3900, 1700, 4350, 2400), M('crew', 'Loader', 4450, 560, 4900, 2400),
+        M('gun', 'Gun breech', 3300, 1900, 4700, 2100), M('ammo', 'Ammo (bustle, blow-out panels)', 5200, 1950, 6550, 2380, { vent: true }),
+        M('engine', 'Engine and transmission', 5200, 560, 7300, 1550),
+      ],
+      deco: { track: [-60, 7950, 850], wheels: [[250, 650, 300], ...wheelsRow(900, 6900, 7, 320, 330), [7550, 650, 300]], barrel: { x0: 2350, x1: -2950, y: 2000, d: 140, brake: false, evac: -500 } },
+    },
+    {
+      id: 't90', name: 'T-90A', group: 'Modern (approx.)', year: 2004, from: 'Russia', aim: [1000, 1340],
+      about: 'A modern T-72 with heavy reactive armor on the front, strong enough to knock many darts off course. Its real armor is secret, so this uses rough public estimates. Like the T-72, its ammo sits in a ring under the turret.',
+      parts: [
+        ...chain('h', [[4600, 1720], [6400, 1720], [6950, 900], [6600, 490], [700, 490], [0, 900], [2030, 1720], [2600, 1720]], [
+          ['Engine deck', L('rha', 20)], ['Rear plate', L('rha', 40)], ['Lower rear plate', L('rha', 40)], ['Belly', L('rha', 20)],
+          ['Lower front plate', L('rha', 85)], ['Upper front plate (layered)', L('rha', 80, 'grp', 105, 'rha', 70)], ['Hull roof', L('rha', 20)]]),
+        ...chain('h', [[162, 1031], [1739, 1668]], [['Reactive armor (heavy)', L('rha', 15, 'era', 15, 'rha', 15)]]),
+        ...chain('t', [[2500, 1740], [2350, 1950], [2700, 2180], [3500, 2230], [4400, 2150], [4800, 1740]], [
+          ['Turret front (layered)', L('rha', 70, 'al2o3', 150, 'rubber', 20, 'rha', 100)], ['Turret front (upper)', L('rha', 70, 'al2o3', 100, 'rha', 60)], ['Turret roof (front)', L('rha', 45)],
+          ['Turret roof', L('rha', 45)], ['Turret rear', L('rha', 70)]]),
+      ],
+      modules: [
+        M('fuel', 'Fuel tanks (front)', 1400, 560, 2200, 1150), M('crew', 'Driver', 2250, 560, 2700, 1450),
+        M('ammo', 'Autoloader carousel', 2900, 560, 4700, 800), M('ammo', 'Extra ammo (hull)', 4750, 560, 5100, 1500),
+        M('crew', 'Gunner', 2950, 1100, 3350, 2000), M('crew', 'Commander', 3400, 1150, 3850, 2150),
+        M('gun', 'Gun breech', 2850, 1920, 3900, 2080), M('engine', 'Engine', 5150, 560, 6300, 1600), M('trans', 'Transmission', 6300, 520, 6800, 1150),
+      ],
+      deco: { track: [-80, 6900, 800], wheels: [[150, 560, 280], ...wheelsRow(800, 5800, 6, 375, 380), [6650, 560, 280]], barrel: { x0: 2350, x1: -3650, y: 1990, d: 135, brake: false } },
     },
     {
       id: 'warden', name: 'Warden MBT (made up)', group: 'Made-up vehicles', year: 2030, from: 'Made up', aim: [800, 1300],

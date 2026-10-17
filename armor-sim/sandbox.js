@@ -19,7 +19,7 @@
   const SB = Object.assign(clone(DEF), store.get('armor-sandbox', {}) || {});
   if (!E.PROJECTILES.some(p => p.id === SB.proj)) SB.proj = DEF.proj;
   if (!Array.isArray(SB.plates) || !SB.plates.length) SB.plates = clone(DEF.plates);
-  SB.plates = SB.plates.map(p => ({ x: +p.x || 0, ang: clamp(+p.ang || 0, -80, 80), len: 'auto', layers: (p.layers || []).filter(l => E.MATERIALS[l.mat]).map(l => ({ mat: l.mat, t: clamp(+l.t || 10, 1, 1000) })) })).filter(p => p.layers.length);
+  SB.plates = SB.plates.map(p => ({ x: +p.x || 0, ang: clamp(+p.ang || 0, -80, 80), len: +p.len > 0 ? clamp(+p.len, 50, 3000) : 'auto', layers: (p.layers || []).filter(l => E.MATERIALS[l.mat]).map(l => ({ mat: l.mat, t: clamp(+l.t || 10, 1, 1000) })) })).filter(p => p.layers.length);
   if (!SB.plates.length) SB.plates = clone(DEF.plates);
   if (!QUALITY[SB.quality]) SB.quality = DEF.quality;
   if (!SPEEDS[SB.speed]) SB.speed = 'normal';
@@ -111,6 +111,7 @@
     sound(v === 'rico' ? 'rico' : v === 'pen' ? 'pen' : v === 'spall' ? 'boom' : 'stop');
     state = 'done';
     renderResult(); renderControlsState();
+    checkChallenges({ veh: null, P: projDef(), v, held: v === 'stop' || v === 'spall', thick: SB.plates.reduce((t, p) => t + E.plateThickness(p), 0) });
   }
 
   // ---------- vehicle phases ----------
@@ -168,6 +169,9 @@
     if (!VR.last) noteVerdict();
     state = 'done';
     renderResult(); renderControlsState(); draw();
+    const { states, fate } = V.fateOf(VR.run), f = fate.id;
+    checkChallenges({ veh: VR.veh.id, modern: /^Modern/.test(VR.veh.group), from: SB.from, P: VR.last.P, v: VR.last.v, fate: f, out: f === 'destroyed' || f === 'knocked',
+      turret: !!VR.turret, shots: VR.shots, fuelFire: VR.veh.modules.some((m, k) => m.type === 'fuel' && states[k] === 2) });
   }
 
   // ===================== The loop =====================
@@ -641,6 +645,39 @@
     $('sb-live').textContent = liveLine();
   }
 
+  // ===================== Challenges =====================
+  // ✏️ Goals to try. Each test gets what just happened: veh (vehicle id, or null for plain armor), P (the round), v (how it went at the armor),
+  // and for vehicles from, fate, out (destroyed or knocked out), turret (thrown off), shots (since the last repair) and fuelFire; for plain armor held and thick.
+  const gunSize = P => (P.group === 'Rockets & missiles' || P.group === 'Just for fun' ? Infinity : P.bore || (P.d.shape === 'rod' ? Infinity : P.d.cal));
+  const CHALLENGES = [
+    { id: 'bounce', text: 'Bounce a shell off a vehicle', test: c => c.veh && c.v === 'rico' },
+    { id: 'tiger76', text: 'Knock out a Tiger I from the front with a gun smaller than 80 mm', test: c => c.veh === 'tiger' && c.from === 'front' && gunSize(c.P) < 80 && c.out },
+    { id: 'turret', text: 'Blow a turret off', test: c => c.turret },
+    { id: 'tiger2', text: 'Destroy a Tiger II from the front with a single shot', test: c => c.veh === 'tiger2' && c.from === 'front' && c.shots === 1 && c.fate === 'destroyed' },
+    { id: 'maus', text: 'Get a shot through the front of the Maus', test: c => c.veh === 'maus' && c.from === 'front' && c.v === 'pen' },
+    { id: 'roof', text: 'Knock out a modern tank from above', test: c => c.modern && c.from === 'top' && c.out },
+    { id: 'bmp', text: 'Set a BMP-1 on fire with a bullet (its back doors are fuel tanks)', test: c => c.veh === 'bmp1' && c.P.group === 'Bullets' && c.fuelFire },
+    { id: 'five', text: 'Hit the same vehicle 5 times without repairing it', test: c => c.veh && c.shots >= 5 },
+    { id: 'rpg', text: 'Stop an RPG-7 with armor less than 200 mm thick (all the layers added up)', test: c => !c.veh && c.P.id === 'rpg7' && c.held && c.thick < 200 },
+    { id: 'vest', text: 'Stop a 12.7 mm AP bullet with armor less than 40 mm thick', test: c => !c.veh && c.P.id === 'b127' && c.held && c.thick < 40 },
+  ];
+  let won = store.get('armor-challenges', {}) || {};
+  function checkChallenges(c) {
+    const fresh = CHALLENGES.filter(ch => !won[ch.id] && ch.test(c));
+    if (!fresh.length) return;
+    fresh.forEach(ch => { won[ch.id] = Date.now(); });
+    store.set('armor-challenges', won);
+    renderChallenges(fresh.map(ch => ch.id));
+    toast(`🏆 Challenge done: ${fresh[0].text}${fresh.length > 1 ? ` (and ${fresh.length - 1} more)` : ''}`);
+  }
+  function renderChallenges(fresh = []) {
+    const n = CHALLENGES.filter(ch => won[ch.id]).length;
+    $('sb-ch-count').textContent = `${n} / ${CHALLENGES.length}`;
+    $('sb-ch-list').innerHTML = CHALLENGES.map(ch => `<li class="${won[ch.id] ? 'done' : ''}${fresh.includes(ch.id) ? ' new' : ''}"><span class="ck" aria-hidden="true">${won[ch.id] ? '✓' : '○'}</span><span><span class="sr-only">${won[ch.id] ? 'Done: ' : 'Not done yet: '}</span>${esc(ch.text)}</span></li>`).join('');
+    $('sb-ch-reset').hidden = !n;
+  }
+  $('sb-ch-reset').addEventListener('click', () => { if (!confirm('Start all the challenges over?')) return; won = {}; store.set('armor-challenges', won); renderChallenges(); });
+
   // ===================== Controls =====================
   const groups = [...new Set(E.PROJECTILES.map(p => p.group))];
   $('sb-proj').innerHTML = groups.map(g => `<optgroup label="${esc(g)}">${E.PROJECTILES.filter(p => p.group === g).map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</optgroup>`).join('');
@@ -1111,7 +1148,7 @@
     get sim() { return sim; }, get state() { return state; }, get verdict() { return verdict; }, get vr() { return VR; }, get editor() { return ED; },
     get mine() { return mine; }, fire, rebuild, SB, startEdit, toast, aim(x, y) { SB.vaim = [x, y]; aimChanged(); },
   };
-  renderProjControls(); renderPlates(); renderTarget(); renderControlsState();
+  renderProjControls(); renderPlates(); renderTarget(); renderControlsState(); renderChallenges();
   if (linkMsg && S.mode !== 'sandbox') setMode('sandbox');
   else if (S.mode === 'sandbox') Sandbox.show();
 })();

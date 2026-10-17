@@ -143,6 +143,15 @@
     .sb-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; font-size: 12.5px; color: var(--text-2); }
     .sb-legend i { display: inline-block; width: 130px; height: 10px; border-radius: 5px; }
     .sb-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+    .ch-list { list-style: none; display: grid; gap: 6px; margin: 0; padding: 0; }
+    .ch-list li { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--text-2); line-height: 1.4; padding: 7px 9px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); }
+    .ch-list .ck { flex: none; width: 16px; text-align: center; color: var(--muted); font-weight: 700; }
+    .ch-list li.done { border-color: var(--good); color: var(--text); }
+    .ch-list li.done .ck { color: var(--good); }
+    .ch-list li.new { animation: ch-pop 1.6s ease; }
+    @keyframes ch-pop { from { background: rgba(250, 178, 25, .32); } to { background: var(--panel-2); } }
+    #sb-ch-reset { margin-top: 10px; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }   /* read out, not shown */
     .aim-info { font-size: 13px; color: var(--text-2); margin-top: 10px; padding: 8px 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px; line-height: 1.45; }
     .aim-info b { color: var(--text); }
     .sb-view.editing canvas { touch-action: none; cursor: default; }
@@ -301,6 +310,11 @@
           <input type="text" id="ed-link" class="ed-link" readonly hidden aria-label="Share link">
           <p class="blurb">Drag the <b>round handles</b> to reshape a plate (drop one onto another to join them). Drag plates and boxes to move them, and the <b>square handle</b> to resize a box. A plate's first layer is its outside.</p>
         </div>
+      </section>
+      <section class="card" aria-labelledby="h-sbc">
+        <h2 id="h-sbc"><span>🏆 Challenges</span><span id="sb-ch-count"></span></h2>
+        <ul class="ch-list" id="sb-ch-list"></ul>
+        <button class="mini wide" id="sb-ch-reset" hidden>Start the challenges over</button>
       </section>
     </aside>
 
@@ -498,7 +512,7 @@
       </div>
       <div class="card">
         <h3>🚜 Vehicles and the builder</h3>
-        <p>Pick <b>Vehicles</b> in the Sandbox to shoot at side cut-aways of 15 real tanks and 2 made-up vehicles. The <b>whole vehicle is made of particles</b>, tens of thousands of them. Most of them "sleep" until something hits them, which keeps it fast. After the hit, the shell and every bit of armor it knocked loose fly on through the inside:</p>
+        <p>Pick <b>Vehicles</b> in the Sandbox to shoot at side cut-aways of 23 real vehicles (tanks, tank hunters and an infantry carrier, from 1941 to today) and 2 made-up ones. The <b>whole vehicle is made of particles</b>, tens of thousands of them. Most of them "sleep" until something hits them, which keeps it fast. After the hit, the shell and every bit of armor it knocked loose fly on through the inside:</p>
         <ul>
           <li><b>🧑 Crew</b> get hurt or knocked out. If more than half are out, the vehicle is knocked out.</li>
           <li><b>💣 Ammo</b> can explode: the blast throws the turret off and tears armor loose, and the pieces fly and land with gravity. Blow-out panels send the blast outside instead.</li>
@@ -515,7 +529,12 @@
           <li>The <b>top-attack slug</b> is a lump of copper shaped by an explosion, flying at 2 km/s. Try it on a tank from above, where the armor is thin.</li>
           <li><b>Uranium darts</b> are heavier than tungsten and shed metal instead of flattening, so the same dart goes a bit deeper.</li>
           <li><b>Sand, water and brick</b> are weak but thick. A shaped-charge jet goes about three times deeper in water than in steel, and sandbags stop bullets.</li>
+          <li><b>Everyday things:</b> try a pistol bullet on a car door or a police shield, or see whether an engine block stops rifle fire.</li>
         </ul>
+      </div>
+      <div class="card">
+        <h3>🏆 Challenges</h3>
+        <p>The Sandbox has 10 challenges to try, like knocking out a Tiger I with a small gun or stopping an RPG-7 with thin armor. Each one ticks off by itself when you pull it off, and your progress is saved in this browser.</p>
       </div>
       <div class="card">
         <h3>🧮 How the Calculator works</h3>
