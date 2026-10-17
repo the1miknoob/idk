@@ -267,6 +267,14 @@
         <div class="field" id="sb-v-field"><label for="sb-v">Impact speed</label><output id="sb-v-out"></output><input type="range" id="sb-v" min="100" max="2100" step="10"></div>
         <p class="blurb" id="sb-v-note" hidden></p>
         <div class="field" id="sb-aim-field"><label for="sb-aim">Aim higher or lower</label><output id="sb-aim-out"></output><input type="range" id="sb-aim" min="-300" max="300" step="5"></div>
+        <div class="seg-label" id="sb-count-label">Shots at once</div>
+        <div class="seg sm" id="sb-count" role="group" aria-labelledby="sb-count-label" style="margin-top:6px"></div>
+        <div id="sb-vol-more" hidden>
+          <div class="seg sm" id="sb-pattern" role="group" aria-label="How the shots fly" style="margin-top:8px">
+            <button data-pattern="spread">Side by side</button><button data-pattern="row">One after another</button>
+          </div>
+          <div class="field"><label for="sb-gap" id="sb-gap-label">Space between them</label><output id="sb-gap-out"></output><input type="range" id="sb-gap" min="0" max="300" step="5"></div>
+        </div>
       </section>
       <section class="card" aria-labelledby="h-sba">
         <h2 id="h-sba"><span>Target</span><span id="sb-target-kind">cut-aways</span></h2>
@@ -531,6 +539,11 @@
           <li><b>Sand, water and brick</b> are weak but thick. A shaped-charge jet goes about three times deeper in water than in steel, and sandbags stop bullets.</li>
           <li><b>Everyday things:</b> try a pistol bullet on a car door or a police shield, or see whether an engine block stops rifle fire.</li>
         </ul>
+      </div>
+      <div class="card">
+        <h3>🎯 Several shots at once</h3>
+        <p>Under <b>Shots at once</b> you can fire 2, 3, 5 or 8 at the same time. <b>Side by side</b> sends them in together, each on its own line, so they hit a row of spots at once. <b>One after another</b> lines them up nose to tail, like a burst from a machine gun, so each one hits the hole the last one made.</p>
+        <p>Each shot plays out on its own, and the result counts them up ("3 of 5 got through"). In a row, the next shot comes in as soon as the last one has finished, so you don't sit through the empty flight in between. Lots of tiny bullets take the longest, since they need the smallest particles.</p>
       </div>
       <div class="card">
         <h3>🏆 Challenges</h3>
