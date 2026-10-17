@@ -59,6 +59,25 @@
       deco: { track: [-60, 6230, 1120], wheels: [[330, 860, 330], ...wheelsRow(1000, 5200, 8, 400, 420), [5900, 760, 300]], barrel: { x0: 1250, x1: -2150, y: 2400, d: 130, brake: true } },
     },
     {
+      id: 'tiger2', name: 'Tiger II', group: 'WW2 tanks (approx.)', year: 1944, from: 'Germany', aim: [505, 1575],
+      about: 'The heaviest German tank of the war: a 150 mm front plate sloped at 50° and a very long 88 mm gun. Almost nothing got through its front.',
+      parts: [
+        ...chain('h', [[4300, 2000], [7000, 2000], [7380, 1250], [7000, 490], [790, 490], [0, 1150], [1010, 2000], [2250, 2000]], [
+          ['Engine deck', L('rha', 40)], ['Upper rear plate', L('rha', 80)], ['Lower rear plate', L('rha', 80)], ['Belly', L('rha', 40)],
+          ['Lower front plate', L('rha', 100)], ['Upper front plate', L('rha', 150)], ['Hull roof', L('rha', 40)]]),
+        ...chain('t', [[1700, 2030], [1800, 2700], [2300, 3000], [4500, 3000], [4850, 2150], [4300, 2050]], [
+          ['Turret front', L('rha', 180)], ['Turret roof (front)', L('rha', 44)], ['Turret roof', L('rha', 40)], ['Turret rear', L('rha', 80)], ['Bustle floor', L('rha', 40)]]),
+        ...chain('t', [[1550, 2200], [1550, 2650]], [['Gun mantlet', L('cast', 100)]]),
+      ],
+      modules: [
+        M('trans', 'Transmission', 350, 570, 950, 1150), M('crew', 'Driver', 1000, 570, 1450, 1750), M('crew', 'Radio operator', 1500, 570, 1950, 1850),
+        M('ammo', 'Ammo (side racks)', 2050, 1450, 4200, 1950), M('ammo', 'Ammo (turret bustle)', 3950, 2150, 4650, 2850),
+        M('crew', 'Gunner', 2050, 1750, 2450, 2750), M('crew', 'Loader', 2550, 600, 3050, 2500), M('crew', 'Commander', 3150, 2050, 3650, 2900),
+        M('gun', 'Gun breech', 1900, 2340, 3150, 2540), M('fuel', 'Fuel tanks', 4350, 570, 4850, 1900), M('engine', 'Engine', 4900, 570, 6900, 1900),
+      ],
+      deco: { track: [-40, 7400, 1050], wheels: [[250, 780, 330], ...wheelsRow(1000, 6300, 9, 400, 410), [7050, 720, 300]], barrel: { x0: 1550, x1: -4700, y: 2430, d: 120, brake: true } },
+    },
+    {
       id: 'panther', name: 'Panther Ausf. G', group: 'WW2 tanks (approx.)', year: 1944, from: 'Germany', aim: [560, 1405],
       about: 'Sloped armor like the T-34, a long 75 mm gun, and a thin roof. Its rounded mantlet could bounce shells down into the hull.',
       parts: [
@@ -78,6 +97,23 @@
       deco: { track: [-120, 6820, 1060], wheels: [[250, 880, 330], ...wheelsRow(850, 5900, 8, 430, 450), [6550, 820, 300]], barrel: { x0: 1700, x1: -1950, y: 2340, d: 100, brake: true } },
     },
     {
+      id: 'jagdpanther', name: 'Jagdpanther', group: 'WW2 tanks (approx.)', year: 1944, from: 'Germany', aim: [700, 1500],
+      about: 'A tank hunter: a Panther hull with a fixed box on top and the long 88 mm gun. No turret, so the whole vehicle turns to aim. Its front is one big 80 mm plate sloped at 55°.',
+      parts: [
+        ...chain('h', [[2385, 2680], [4200, 2680], [4500, 1800], [6300, 1800], [6870, 820], [6400, 560], [650, 560], [0, 1010]], [
+          ['Roof', L('rha', 25)], ['Back of the box', L('rha', 40)], ['Engine deck', L('rha', 16)], ['Rear plate', L('rha', 40)], ['Lower rear plate', L('rha', 40)],
+          ['Belly', L('rha', 16)], ['Lower front plate', L('rha', 60)], ['Upper front plate', L('rha', 80)]], true),
+        ...chain('h', [[1271, 1900], [1209, 2162], [1689, 2498], [1914, 2350]], [['Gun mantlet (lower)', L('cast', 100)], ['Gun mantlet', L('cast', 100)], ['Gun mantlet (upper)', L('cast', 100)]]),
+      ],
+      modules: [
+        M('trans', 'Transmission', 250, 640, 820, 1100), M('crew', 'Driver', 1050, 640, 1500, 1640), M('crew', 'Radio operator', 1550, 640, 2000, 1800),
+        M('crew', 'Gunner', 2350, 1600, 2800, 2550), M('gun', 'Gun breech', 2100, 2150, 3300, 2350), M('crew', 'Loader', 2900, 640, 3350, 2550),
+        M('crew', 'Commander', 3450, 1550, 3950, 2600), M('ammo', 'Ammo (side racks)', 3450, 640, 4250, 1500),
+        M('fuel', 'Fuel tanks', 4550, 640, 5000, 1700), M('engine', 'Engine', 5050, 640, 6250, 1720),
+      ],
+      deco: { track: [-120, 6820, 1060], wheels: [[250, 880, 330], ...wheelsRow(850, 5900, 8, 430, 450), [6550, 820, 300]], barrel: { x0: 1500, x1: -4800, y: 2250, d: 120, brake: true } },
+    },
+    {
       id: 'pz4', name: 'Panzer IV Ausf. H', group: 'WW2 tanks (approx.)', year: 1943, from: 'Germany', aim: [600, 1380],
       about: 'The workhorse German tank. Thick 80 mm plates on the front of the hull, but a thin 50 mm turret front.',
       parts: [
@@ -95,6 +131,24 @@
         M('fuel', 'Fuel tanks', 3460, 470, 3960, 1150), M('engine', 'Engine', 4020, 470, 5400, 1580),
       ],
       deco: { track: [-40, 5850, 820], wheels: [[200, 640, 270], ...wheelsRow(700, 5000, 8, 235, 260), [5550, 600, 250]], barrel: { x0: 1550, x1: -1130, y: 2120, d: 85, brake: true } },
+    },
+    {
+      id: 'kv1', name: 'KV-1 (1941)', group: 'WW2 tanks (approx.)', year: 1941, from: 'Soviet Union', aim: [195, 1375],
+      about: 'In 1941 hardly any German gun could get through its 75 mm armor. Slow and unreliable, but very hard to knock out.',
+      parts: [
+        ...chain('h', [[3800, 1950], [6200, 1950], [6750, 1300], [6300, 440], [460, 440], [60, 1050], [330, 1700], [900, 1950], [1800, 1950]], [
+          ['Engine deck', L('rha', 30)], ['Upper rear plate', L('rha', 60)], ['Lower rear plate', L('rha', 60)], ['Belly', L('rha', 40)],
+          ['Lower front plate', L('rha', 75)], ["Driver's plate", L('rha', 75)], ['Glacis', L('rha', 75)], ['Hull roof', L('rha', 30)]]),
+        ...chain('t', [[1700, 1980], [1650, 2650], [3700, 2710], [3950, 1980]], [['Turret front', L('rha', 75)], ['Turret roof', L('rha', 40)], ['Turret rear', L('rha', 75)]]),
+        ...chain('t', [[1500, 2050], [1500, 2500]], [['Gun mantlet', L('cast', 90)]]),
+      ],
+      modules: [
+        M('crew', 'Driver', 700, 520, 1150, 1650), M('crew', 'Radio operator', 1200, 520, 1650, 1700),
+        M('crew', 'Gunner', 1800, 1550, 2200, 2550), M('crew', 'Loader', 2300, 600, 2750, 2400), M('crew', 'Commander', 2850, 1550, 3300, 2600),
+        M('gun', 'Gun breech', 1750, 2180, 2850, 2380), M('ammo', 'Ammo (floor boxes)', 1850, 500, 3700, 800), M('ammo', 'Ammo (turret rack)', 3350, 2000, 3750, 2450),
+        M('fuel', 'Fuel tanks', 3900, 520, 4300, 1850), M('engine', 'Engine', 4350, 520, 5700, 1800), M('trans', 'Transmission', 5750, 500, 6300, 1250),
+      ],
+      deco: { track: [-40, 6800, 950], wheels: [[250, 700, 300], ...wheelsRow(900, 5700, 6, 300, 310), [6450, 700, 320]], barrel: { x0: 1500, x1: -1700, y: 2280, d: 95, brake: false } },
     },
     {
       id: 't34', name: 'T-34-85', group: 'WW2 tanks (approx.)', year: 1944, from: 'Soviet Union', aim: [700, 1240],
@@ -135,6 +189,25 @@
       deco: { track: [-100, 5900, 900], wheels: [[150, 620, 300], ...wheelsRow(800, 5000, 6, 260, 280), [5600, 600, 280]], barrel: { x0: 1650, x1: -1450, y: 2470, d: 95, brake: true } },
     },
     {
+      id: 'pershing', name: 'M26 Pershing', group: 'WW2 tanks (approx.)', year: 1945, from: 'USA', aim: [455, 1460],
+      about: 'America\'s heavy tank at the very end of the war: a 90 mm gun and a 102 mm front plate sloped at 46°.',
+      parts: [
+        ...chain('h', [[3700, 1900], [5900, 1900], [6330, 1150], [6000, 480], [720, 480], [0, 1020], [910, 1900], [1900, 1900]], [
+          ['Engine deck', L('rha', 22)], ['Rear plate', L('rha', 51)], ['Lower rear plate', L('rha', 51)], ['Belly', L('rha', 25)],
+          ['Lower front plate', L('rha', 76)], ['Upper front plate', L('rha', 102)], ['Hull roof', L('rha', 22)]]),
+        ...chain('t', [[1950, 1920], [1880, 2550], [2200, 2780], [3700, 2780], [4100, 2200], [3750, 1950]], [
+          ['Turret front', L('cast', 102)], ['Turret roof (front)', L('rha', 25)], ['Turret roof', L('rha', 25)], ['Turret rear', L('cast', 76)], ['Bustle floor', L('rha', 25)]]),
+        ...chain('t', [[1700, 2050], [1700, 2500]], [['Gun mantlet', L('cast', 114)]]),
+      ],
+      modules: [
+        M('trans', 'Transmission', 350, 560, 900, 1050), M('crew', 'Driver', 950, 560, 1400, 1700), M('crew', 'Assistant driver', 1450, 560, 1900, 1800),
+        M('crew', 'Gunner', 2100, 1500, 2500, 2550), M('crew', 'Loader', 2600, 600, 3050, 2450), M('crew', 'Commander', 3150, 1650, 3600, 2700),
+        M('gun', 'Gun breech', 1950, 2180, 3150, 2380), M('ammo', 'Ammo (floor racks)', 1950, 560, 3650, 900),
+        M('fuel', 'Fuel tanks', 3800, 560, 4250, 1800), M('engine', 'Engine', 4300, 560, 5800, 1800),
+      ],
+      deco: { track: [-60, 6380, 950], wheels: [[150, 650, 300], ...wheelsRow(800, 5400, 6, 330, 340), [6100, 650, 300]], barrel: { x0: 1700, x1: -2800, y: 2280, d: 110, brake: true } },
+    },
+    {
       id: 'is2', name: 'IS-2', group: 'WW2 tanks (approx.)', year: 1944, from: 'Soviet Union', aim: [550, 1270],
       about: 'A heavy tank with a huge 122 mm gun and a steep 120 mm front plate. It carried only 28 big shells.',
       parts: [
@@ -152,6 +225,24 @@
         M('fuel', 'Fuel tanks', 4100, 500, 4600, 1500), M('engine', 'Engine', 4600, 500, 5800, 1500), M('trans', 'Transmission', 5800, 480, 6300, 1100),
       ],
       deco: { track: [-60, 6650, 860], wheels: [[150, 620, 300], ...wheelsRow(800, 5700, 6, 280, 300), [6400, 640, 300]], barrel: { x0: 1450, x1: -1750, y: 2150, d: 140, brake: true } },
+    },
+    {
+      id: 'churchill', name: 'Churchill VII', group: 'WW2 tanks (approx.)', year: 1944, from: 'UK', aim: [60, 1550],
+      about: 'A slow British infantry tank with some of the thickest armor of the war: 152 mm on the front. Its tracks run all the way round the hull.',
+      parts: [
+        ...chain('h', [[3700, 2050], [6900, 2050], [7100, 1300], [6900, 500], [700, 500], [60, 1150], [60, 1950], [500, 2050], [1900, 2050]], [
+          ['Engine deck', L('rha', 20)], ['Rear plate', L('rha', 50)], ['Lower rear plate', L('rha', 50)], ['Belly', L('rha', 25)],
+          ['Nose plate', L('rha', 140)], ['Front plate', L('rha', 152)], ['Glacis', L('rha', 58)], ['Hull roof', L('rha', 20)]]),
+        ...chain('t', [[2000, 2070], [1950, 2700], [3550, 2750], [3700, 2070]], [['Turret front', L('cast', 152)], ['Turret roof', L('rha', 20)], ['Turret rear', L('cast', 95)]]),
+        ...chain('t', [[1800, 2200], [1800, 2600]], [['Gun mantlet', L('cast', 90)]]),
+      ],
+      modules: [
+        M('crew', 'Driver', 800, 600, 1250, 1850), M('crew', 'Hull gunner', 1300, 600, 1750, 1850),
+        M('crew', 'Gunner', 2200, 1600, 2600, 2600), M('crew', 'Loader', 2700, 650, 3150, 2450), M('crew', 'Commander', 3200, 1700, 3550, 2700),
+        M('gun', 'Gun breech', 2150, 2300, 3150, 2500), M('ammo', 'Ammo (side bins)', 1800, 580, 3650, 1000),
+        M('fuel', 'Fuel tanks', 3800, 580, 4300, 1950), M('engine', 'Engine', 4350, 580, 6000, 1900), M('trans', 'Transmission', 6050, 560, 6800, 1400),
+      ],
+      deco: { track: [-80, 7280, 1950], wheels: [[350, 1500, 320], ...wheelsRow(900, 6300, 11, 150, 170), [6850, 1500, 320]], barrel: { x0: 1800, x1: -900, y: 2400, d: 90, brake: true } },
     },
     {
       id: 't55', name: 'T-55', group: 'Cold War tanks (approx.)', year: 1958, from: 'Soviet Union', aim: [640, 1200],
@@ -173,6 +264,25 @@
       deco: { track: [-80, 6150, 850], wheels: [[150, 560, 290], ...wheelsRow(750, 5200, 5, 405, 410), [5900, 600, 280]], barrel: { x0: 1500, x1: -2800, y: 1900, d: 115, brake: false, evac: -1900 } },
     },
     {
+      id: 't62', name: 'T-62', group: 'Cold War tanks (approx.)', year: 1961, from: 'Soviet Union', aim: [580, 1215],
+      about: 'A T-55 stretched to fit a big 115 mm smoothbore gun, the first tank gun of its kind. It threw its empty shell cases out of a hatch in the turret.',
+      parts: [
+        ...chain('h', [[3900, 1550], [6000, 1550], [6630, 800], [6300, 425], [650, 425], [0, 880], [1160, 1550], [1850, 1550]], [
+          ['Engine deck', L('rha', 20)], ['Rear plate', L('rha', 45)], ['Lower rear plate', L('rha', 20)], ['Belly', L('rha', 20)],
+          ['Lower front plate', L('rha', 100)], ['Upper front plate', L('rha', 100)], ['Hull roof', L('rha', 30)]]),
+        ...chain('t', [[1650, 1575], [1520, 1980], [1850, 2300], [2900, 2400], [3900, 2280], [4150, 1575]], [
+          ['Turret front', L('cast', 230)], ['Turret front (upper)', L('cast', 160)], ['Turret roof (front)', L('cast', 40)],
+          ['Turret roof', L('cast', 30)], ['Turret rear', L('cast', 65)]]),
+      ],
+      modules: [
+        M('crew', 'Driver', 1250, 500, 1700, 1380), M('fuel', 'Fuel tank (front)', 1750, 480, 2100, 1450), M('ammo', 'Ammo (front rack)', 2150, 480, 2500, 1450),
+        M('crew', 'Gunner', 2150, 1450, 2550, 2250), M('crew', 'Loader', 2700, 500, 3150, 2200), M('crew', 'Commander', 3250, 1450, 3700, 2250),
+        M('gun', 'Gun breech', 1800, 1870, 2950, 2060), M('ammo', 'Ammo (rear rack)', 3500, 550, 3850, 1450),
+        M('engine', 'Engine', 4300, 500, 5650, 1450), M('trans', 'Transmission', 5650, 480, 6150, 1100),
+      ],
+      deco: { track: [-80, 6600, 850], wheels: [[150, 560, 290], ...wheelsRow(750, 5600, 5, 405, 410), [6350, 600, 280]], barrel: { x0: 1520, x1: -4180, y: 1950, d: 125, brake: false, evac: -2600 } },
+    },
+    {
       id: 't72', name: 'T-72 Ural', group: 'Cold War tanks (approx.)', year: 1973, from: 'Soviet Union', aim: [1000, 1300],
       about: 'Low and fast-firing, with a layered steel-and-fibreglass front plate. Its autoloader keeps 22 rounds in a ring under the turret.',
       parts: [
@@ -190,6 +300,25 @@
         M('gun', 'Gun breech', 2500, 1920, 3800, 2080), M('engine', 'Engine', 5150, 560, 6300, 1600), M('trans', 'Transmission', 6300, 520, 6800, 1150),
       ],
       deco: { track: [-80, 6900, 800], wheels: [[150, 560, 280], ...wheelsRow(800, 5800, 6, 375, 380), [6650, 560, 280]], barrel: { x0: 2400, x1: -2580, y: 1990, d: 135, brake: false } },
+    },
+    {
+      id: 'leopard1', name: 'Leopard 1', group: 'Cold War tanks (approx.)', year: 1965, from: 'West Germany', aim: [580, 1265],
+      about: 'West Germany chose speed over armor: only 70 mm on the front, but a fast tank with the excellent British-designed 105 mm gun.',
+      parts: [
+        ...chain('h', [[4400, 1600], [6400, 1600], [7090, 950], [6700, 440], [700, 440], [0, 930], [1160, 1600], [2300, 1600]], [
+          ['Engine deck', L('rha', 20)], ['Rear plate', L('rha', 25)], ['Lower rear plate', L('rha', 25)], ['Belly', L('rha', 15)],
+          ['Lower front plate', L('rha', 70)], ['Upper front plate', L('rha', 70)], ['Hull roof', L('rha', 25)]]),
+        ...chain('t', [[2150, 1620], [1900, 2000], [2500, 2400], [4400, 2450], [5000, 2150], [4500, 1640]], [
+          ['Turret front (lower)', L('cast', 52)], ['Turret front (upper)', L('cast', 52)], ['Turret roof', L('rha', 20)], ['Turret rear', L('cast', 30)], ['Bustle floor', L('rha', 20)]]),
+        ...chain('t', [[1750, 1850], [1750, 2150]], [['Gun mantlet', L('rha', 60)]]),
+      ],
+      modules: [
+        M('crew', 'Driver', 900, 520, 1350, 1450), M('ammo', 'Ammo (hull rack)', 1400, 500, 2200, 1450),
+        M('crew', 'Gunner', 2500, 1350, 2900, 2300), M('crew', 'Commander', 3000, 1450, 3450, 2380), M('crew', 'Loader', 3550, 520, 4000, 2350),
+        M('gun', 'Gun breech', 2100, 1900, 3350, 2100), M('ammo', 'Ammo (turret)', 4150, 1880, 4650, 2300),
+        M('fuel', 'Fuel tanks', 4500, 500, 5000, 1500), M('engine', 'Engine', 5050, 500, 6300, 1500), M('trans', 'Transmission', 6300, 480, 6900, 1150),
+      ],
+      deco: { track: [-60, 7100, 850], wheels: [[200, 600, 300], ...wheelsRow(900, 6100, 7, 350, 360), [6850, 600, 280]], barrel: { x0: 1750, x1: -3850, y: 2000, d: 115, brake: false, evac: -2300 } },
     },
     {
       id: 'warden', name: 'Warden MBT (made up)', group: 'Made-up vehicles', year: 2030, from: 'Made up', aim: [800, 1300],
@@ -312,10 +441,11 @@
     };
   }
   // Which plates does the shot line go through, in order (only ones it enters from the outside)?
-  function crossings(veh, shot, geo) {
+  function crossings(veh, shot, geo, gone) {
     geo = geo || geometry(veh);
     const fr = frameFor(shot), out = [];
     veh.parts.forEach((p, i) => {
+      if (gone && gone[i]) return;   // blown off by an earlier shot
       const A = fr.toE(p.a), B = fr.toE(p.b);
       if ((A[1] > 0 && B[1] > 0) || (A[1] < 0 && B[1] < 0) || A[1] === B[1]) return;
       const k = A[1] / (A[1] - B[1]), x = A[0] + k * (B[0] - A[0]);
@@ -326,8 +456,8 @@
     return out.sort((a, b) => a.x - b.x);
   }
   const GAP = 450;   // armor closer behind than this is simulated too (spaced plates, a mantlet in front of the turret…)
-  function firstArmor(veh, shot, geo) {
-    const hits = crossings(veh, shot, geo), group = [];
+  function firstArmor(veh, shot, geo, gone) {
+    const hits = crossings(veh, shot, geo, gone), group = [];
     let back = -Infinity;
     for (const h of hits) {
       if (group.length && (h.x - back > GAP || group.length >= 4)) break;
@@ -336,54 +466,144 @@
     return group;
   }
   // Info for the "aiming at" line: the plate, how thick, at what angle, and how much steel is in the way
-  function probe(veh, shot) {
-    const g = firstArmor(veh, shot);
+  function probe(veh, shot, run) {
+    const g = firstArmor(veh, shot, run && run.geo, run && run.gone);
     if (!g.length) return null;
     return g.map(h => ({ name: h.part.n, T: h.T, ang: Math.round(Math.acos(Math.min(1, h.cos)) / DEG), los: Math.round(h.T / Math.max(0.05, h.cos)), layers: h.part.layers }));
   }
 
-  // ---------- building the simulation for one shot ----------
-  function buildShot(veh, shot, P, budget) {
-    const geo = geometry(veh), fr = frameFor(shot), group = firstArmor(veh, shot, geo);
-    if (!group.length) return null;
-    const cal = E.projCal(P), cuts = [];
-    const plates = group.map(h => {
-      const p = h.part, g = geo[h.i], f = g.f, T = f.T;
-      const want = Math.max(6 * cal, 0.45 * T, 120) / Math.max(0.35, h.cos);
-      const sHit = h.k * f.len;
-      let s0 = sHit - want / 2, s1 = sHit + want / 2;
-      if (s0 < 0) { s1 = Math.min(f.len, s1 - s0); s0 = 0; }
-      if (s1 > f.len) { s0 = Math.max(0, s0 - (s1 - f.len)); s1 = f.len; }
-      const atA = s0 < 1e-6, atB = s1 > f.len - 1e-6;
-      const oa = lerp(p.a, p.b, s0 / f.len), ob = lerp(p.a, p.b, s1 / f.len);
-      const ia = atA ? g.poly[3] : [oa[0] + f.n[0] * T, oa[1] + f.n[1] * T], ib = atB ? g.poly[2] : [ob[0] + f.n[0] * T, ob[1] + f.n[1] * T];
-      const cut = [oa, ob, ib, ia];
-      cuts.push({ i: h.i, s0, s1, cut, atA, atB });
-      const mid = lerp(oa, ob, 0.5), c = fr.toE(mid), cE = cut.map(fr.toE);
-      const reach = Math.max(...cut.map(q => Math.abs((q[0] - mid[0]) * f.t[0] + (q[1] - mid[1]) * f.t[1])));   // the rectangle must cover the whole cut outline
-      return {
-        cx: c[0], cy: c[1], ang: Math.atan2(-h.nE[1], h.nE[0]) / DEG, len: 2 * reach + 2, layers: clone(p.layers),
-        clip: { poly: cE, ends: [[...cE[1], ...cE[2]], [...cE[3], ...cE[0]]] }, name: p.n, part: h.i,
-      };
-    });
-    const scene = { plates, proj: { ...P, aim: 0 }, pad: 700, trackGone: true };
-    scene.h = E.pickH(scene, budget);
-    // everything else stays solid (drawn, and stops bits flying around inside)
-    const statics = [];
-    geo.forEach((g, i) => {
-      const c = cuts.find(k => k.i === i), p = veh.parts[i];
-      if (!c) { statics.push({ i, poly: g.poly }); return; }
-      const f = g.f, [a, b, ib, ia] = g.poly;
-      if (!c.atA) statics.push({ i, poly: [a, c.cut[0], c.cut[3], ia] });
-      if (!c.atB) statics.push({ i, poly: [c.cut[1], b, ib, c.cut[2]] });
-      void p; void f;
-    });
-    return { scene, fr, group, cuts, statics, geo };
-  }
-
-  // ---------- after the hit: follow everything that's flying into the vehicle ----------
+  // ---------- the whole vehicle, made of particles ----------
+  const SQ3 = Math.sqrt(3);
   const MIN_SPEED = 0.06;   // km/s: slower bits don't hurt anything
-  function rayBox(px, py, dx, dy, x0, y0, x1, y1) {   // where a ray enters (and leaves) a box
+  function vehicleArea(veh) { return veh.parts.reduce((s, p) => s + Math.hypot(p.b[0] - p.a[0], p.b[1] - p.a[1]) * E.plateThickness(p), 0); }
+  // Particle size for a whole vehicle: just fit the budget (most of the vehicle sleeps until it's hit, so budgets can be big)
+  function pickVehH(veh, budget) { return Math.max(1.2, Math.sqrt(vehicleArea(veh) / (budget * SQ3 / 2))); }
+  function buildVehicle(veh, budget) {
+    const geo = geometry(veh), h = pickVehH(veh, budget);
+    const plates = veh.parts.map((p, i) => {
+      const g = geo[i], f = g.f, mid = lerp(p.a, p.b, 0.5);
+      const reach = Math.max(...g.poly.map(q => Math.abs((q[0] - mid[0]) * f.t[0] + (q[1] - mid[1]) * f.t[1])));   // the rectangle must cover the whole outline
+      return { cx: mid[0], cy: mid[1], ang: Math.atan2(-f.n[1], f.n[0]) / DEG, len: 2 * reach + 2 * h, layers: clone(p.layers),
+        clip: { poly: g.poly, ends: [[...g.poly[1], ...g.poly[2]], [...g.poly[3], ...g.poly[0]]] }, name: p.n, part: i };
+    });
+    const sim = new E.Sim({ h, plates, sleep: true, pad: 900, clash: 0.95 });
+    return { veh, sim, geo, h, frame: frameFor({ from: 'front', tilt: 0, at: [0, 0] }), dmg: veh.modules.map(() => 0), zin: null, boomed: [], shots: 0, group: null, burst: null };
+  }
+  const isTurret = (run, body) => { const pl = run.sim.plates[body - 1]; return !!(pl && run.veh.parts[pl.part] && run.veh.parts[pl.part].g === 't'); };
+  // Line the world up so this shot flies along +x through the aim point, then put the projectile in
+  function aimShot(run, shot, P) {
+    const sim = run.sim, f1 = run.frame, f2 = frameFor(shot);
+    const d = f1.th - f2.th, c = Math.cos(d), s = Math.sin(d), t = f2.dirE([f1.O[0] - f2.O[0], f1.O[1] - f2.O[1]]);
+    sim.transform(c, s, t[0], t[1]);
+    run.frame = f2; run.shot = shot;
+    const group = run.group = firstArmor(run.veh, shot, run.geo, run.gone);
+    if (!group.length) return false;
+    unsettle(run);
+    sim.addShot({ ...P, aim: 0 }, group.map(g => g.i));
+    run.shots++;
+    run.burst = P.aphe && P.kind === 'ke' ? { fuse: P.aphe.fuse, q: P.aphe.charge, done: false } : null;
+    return true;
+  }
+  // Where the next shot would hit (for the aiming line), in vehicle coordinates
+  function entryPoint(veh, shot, run) { const g = firstArmor(veh, shot, run && run.geo, run && run.gone); return g.length ? frameFor(shot).toV([g[0].x, 0]) : null; }
+
+  // Bits flying through the inside: crew, ammo, fuel and engines soak up their energy (and get hurt by it).
+  // A bit gives up a share of its energy that grows with how far it travels through a box; loose single bits always lose at least `soak`.
+  // Returns what happened: ammo that just exploded, and an explosive shell bursting.
+  function zoneTick(run, steps) {
+    const sim = run.sim, fr = run.frame, h = sim.h, dtAcc = steps * sim.dt, mods = run.veh.modules;
+    if (!run.zin || run.zin.length < sim.cap) { const z = new Int16Array(sim.cap).fill(-1); if (run.zin) z.set(run.zin.subarray(0, Math.min(run.zin.length, z.length))); run.zin = z; }
+    const zin = run.zin, c = fr.c, s = fr.s, O = fr.O, out = {}, al = sim.alist;
+    for (let q = 0, an = sim.an; q < an; q++) {
+      const i = al[q];
+      if (!sim.alive[i] || !sim.awake[i] || (sim.body[i] > 0 && sim.attached[i])) continue;
+      const vx = sim.vx[i], vy = sim.vy[i], sp2 = vx * vx + vy * vy;
+      if (sp2 < MIN_SPEED * MIN_SPEED) { zin[i] = -1; continue; }
+      const x = O[0] + c * sim.px[i] - s * sim.py[i], y = O[1] + s * sim.px[i] + c * sim.py[i];
+      let k = -1;
+      for (let m = 0; m < mods.length; m++) { const md = mods[m]; if (x >= md.x && x <= md.x + md.w && y >= md.y && y <= md.y + md.h) { k = m; break; } }
+      if (k < 0) { zin[i] = -1; continue; }
+      const T = MODULES[mods[k].type], sp = Math.sqrt(sp2), e = 0.5 * sim.m[i] * sp2 / h;
+      let lost = e * (1 - Math.exp(-sp * dtAcc / T.gap));
+      if (zin[i] !== k && sim.nadj[i] === 0) lost += T.soak;
+      if (lost > e) lost = e;
+      run.dmg[k] += lost;
+      const keep = Math.sqrt((e - lost) / e);
+      sim.vx[i] = vx * keep; sim.vy[i] = vy * keep; zin[i] = k;
+    }
+    // ammo that's had enough goes off (once)
+    const st = states(run);
+    mods.forEach((m, k) => { if (m.type === 'ammo' && st[k] === 2 && !run.boomed.includes(k)) { run.boomed.push(k); (out.booms = out.booms || []).push(k); } });
+    // an explosive-filled shell bursts a moment after it gets through (or as soon as it's stopped)
+    const b = run.burst;
+    if (b && !b.done && sim.everBehind && sim.penAt) {
+      const r = sim.measure(), sp = Math.hypot(r.vel[0], r.vel[1]);
+      if ((sim.time - sim.penAt) * Math.max(0.05, r.residual) >= b.fuse || sp < 0.08 || r.alive < 3) { burstShell(run, r.com, b.q); b.done = true; out.burst = fr.toV(r.com); }
+    }
+    return out;
+  }
+  function burstShell(run, at, q) {
+    const sim = run.sim, [a] = sim.projRange;
+    for (let i = a; i < sim.n; i++) if (sim.body[i] === 0) sim.alive[i] = 0;   // the shell itself is gone…
+    const nf = 90;
+    for (let k = 0; k < nf; k++) {   // …into fast fragments, every which way
+      const ang = (k + 0.37) / nf * Math.PI * 2, sp = 0.9 + 0.5 * ((k * 0.618) % 1);
+      sim.addParticle(at[0] + Math.cos(ang) * 30, at[1] + Math.sin(ang) * 30, Math.cos(ang) * sp, Math.sin(ang) * sp, 'shot', 0, 1.2 * q);
+    }
+    blast(run, at[0], at[1], 450 * Math.cbrt(q), 0.05, { loose: 0, turret: false });
+    sim.events.push({ type: 'flash', x: at[0], y: at[1], r: 400, t: sim.time, big: true });
+  }
+  // A blast inside the vehicle: things near it are thrown outward and torn loose. Turret plates fly off easily;
+  // the heavy hull mostly stays, apart from the bits closest to the blast.
+  function blast(run, x, y, R, dv, opt = {}) {
+    const sim = run.sim, R2 = R * R, share = opt.loose == null ? 0.5 : opt.loose, heat = opt.heat || 500, turretToo = opt.turret !== false;
+    for (let i = 0; i < sim.n; i++) {
+      if (!sim.alive[i]) continue;
+      const dx = sim.px[i] - x, dy = sim.py[i] - y, r2 = dx * dx + dy * dy, tur = turretToo && sim.body[i] > 0 && isTurret(run, sim.body[i]);
+      if (r2 > R2 && !tur) continue;   // the whole turret lifts off its ring, however far it is
+      const r = Math.sqrt(r2) || 1, f = tur ? Math.max(0.2, 1 - r / R) : 1 - r / R;
+      const k = sim.body[i] === 0 || tur ? 1 : 0.3;
+      sim.wake(i);
+      sim.vx[i] += dx / r * dv * f * k; sim.vy[i] += dy / r * dv * f * k; sim.T[i] += heat * f;
+      if (tur || sim.body[i] === 0 || r < R * share) { sim.loose[i] = 1; sim.ag[i] = 0; }
+    }
+  }
+  function ammoBlast(run, k) {
+    const m = run.veh.modules[k], c = run.frame.toE([m.x + m.w / 2, m.y + m.h / 2]);
+    if (m.vent) blast(run, c[0], c[1], Math.max(m.w, m.h) * 0.9, 0.05, { loose: 1, turret: false, heat: 300 });   // blow-out panels: the blast goes out the top of the rack
+    else blast(run, c[0], c[1], 1900, 0.16, { loose: 0.45, heat: 700 });
+    run.sim.events.push({ type: 'flash', x: c[0], y: c[1], r: m.vent ? 600 : 1800, t: run.sim.time, big: true });
+  }
+  function states(run) {
+    return run.veh.modules.map((m, k) => { const T = MODULES[m.type], d = run.dmg[k] / (m.tough || 1); return d >= T.hp[1] ? 2 : d >= T.hp[0] ? 1 : 0; });
+  }
+  function fateOf(run) {
+    const st = states(run), fate = judge(run.veh, st);
+    if (fate.id === 'destroyed') run.veh.modules.forEach((m, k) => { if (m.type === 'crew') st[k] = 2; });
+    return { states: st, fate };
+  }
+  // Is anything still flying around inside? (the replay keeps going until it settles)
+  function busy(run, min = 0.15) {   // bits faster than min (km/s) still flying around inside the vehicle
+    const sim = run.sim, al = sim.alist, fr = run.frame, b = run.box || (run.box = bbox(run.veh, false));
+    let fast = 0;
+    for (let q = 0, an = sim.an; q < an; q++) {
+      const i = al[q];
+      if (!sim.alive[i] || !sim.awake[i] || (sim.body[i] > 0 && sim.attached[i])) continue;
+      if (sim.vx[i] * sim.vx[i] + sim.vy[i] * sim.vy[i] < min * min) continue;
+      const x = fr.O[0] + fr.c * sim.px[i] - fr.s * sim.py[i], y = fr.O[1] + fr.s * sim.px[i] + fr.c * sim.py[i];
+      if (x > b[0] && x < b[1] && y > b[2] && y < b[3]) fast++;
+    }
+    return fast;
+  }
+  // After the hit has played out at the armor, shaking plates may settle sooner: only flying bits matter now
+  function settle(run) { run.sim.sleepV2 = 0.004 * 0.004; run.sim.calmSteps = 25; }
+  function unsettle(run) { run.sim.sleepV2 = 0.001 * 0.001; run.sim.calmSteps = 60; }
+
+  // ---------- after the physics window: what's still flying keeps going in straight lines ----------
+  // Slow bits take many milliseconds to cross a vehicle, far too long to simulate particle by particle, so after a short window
+  // every loose piece flies on as one rigid lump: crew, ammo and engines along its path soak up its energy, and armor stops it.
+  const AIR = 1200;   // µs of full physics after the hit
+  function rayBox(px, py, dx, dy, x0, y0, x1, y1) {   // where a ray enters and leaves a box
     let t0 = 0, t1 = Infinity;
     for (const [p, d, lo, hi] of [[px, dx, x0, x1], [py, dy, y0, y1]]) {
       if (Math.abs(d) < 1e-12) { if (p < lo || p > hi) return null; continue; }
@@ -404,87 +624,261 @@
     }
     return best;
   }
-  // Fly one bit (energy e in kJ per mm of slice) along a ray through the vehicle; it stops in armor or when it runs out of energy
-  function castRay(st, x, y, dx, dy, e, maxLen, fromInside) {
-    const hits = [];
-    st.mods.forEach((m, k) => {
-      const r = rayBox(x, y, dx, dy, m.x, m.y, m.x + m.w, m.y + m.h);
-      if (r && r[0] <= maxLen && !(fromInside && r[0] === 0)) hits.push({ t: r[0], t1: r[1], k });   // a burst's own box was already hit by the blast
-    });
+  // Fly a lump (energy e, kJ per mm of slice) along a ray; returns where it stops and what it went through (and records the damage)
+  function flyLine(run, x, y, dx, dy, e, maxLen, fromInside) {
+    const mods = run.veh.modules, hits = [];
+    mods.forEach((m, k) => { const r = rayBox(x, y, dx, dy, m.x, m.y, m.x + m.w, m.y + m.h); if (r && r[0] <= maxLen && !(fromInside && r[0] === 0)) hits.push({ t: r[0], t1: r[1], k }); });
     let stop = maxLen;
-    for (const s of st.statics) { const t = rayPoly(x, y, dx, dy, s.poly); if (t < stop) stop = t; }
+    for (const g of run.geo) { const t = rayPoly(x + dx * 2, y + dy * 2, dx, dy, g.poly); if (t + 2 < stop) stop = t + 2; }
     if (dy < 0) stop = Math.min(stop, Math.max(0, -y / dy));   // the ground
     hits.sort((a, b) => a.t - b.t);
     const got = [];
     for (const h of hits) {
       if (h.t > stop || e <= 0) break;
-      const m = st.mods[h.k], T = MODULES[m.type], chord = Math.min(h.t1, stop) - h.t;
-      const share = 1 - Math.exp(-chord / T.gap), lost = Math.min(e, e * share + T.soak);
-      st.dmg[h.k] += lost; got.push({ t: h.t, k: h.k, e: lost });
-      e -= lost;
-      if (e <= 1e-5) { stop = h.t + chord * Math.min(1, lost ? (e * share) / lost + 0.3 : 0.3); break; }
+      const T = MODULES[mods[h.k].type], chord = Math.min(h.t1, stop) - h.t;
+      const lost = Math.min(e, e * (1 - Math.exp(-chord / T.gap)) + T.soak);
+      run.dmg[h.k] += lost; got.push({ t: h.t, k: h.k, e: lost }); e -= lost;
+      if (e <= 1e-5) { stop = h.t + chord * 0.5; break; }
     }
     return { x, y, dx, dy, stop, hits: got };
   }
-  function afterShot(veh, shot, built, sim, P) {
+  function launch(run) {
+    const sim = run.sim, fr = run.frame, n = sim.n, h = sim.h, b = run.box || (run.box = bbox(run.veh, false));
     sim.findAttached();
-    const { fr } = built, N = sim.n, h = sim.h;
-    const st = { mods: veh.modules, statics: built.statics, dmg: veh.modules.map(() => 0) };
-    // 1) group the loose bits into chunks (a whole shell, a plug of armor, single fragments…)
-    const uf = new Int32Array(N), free = new Uint8Array(N);
-    for (let i = 0; i < N; i++) { uf[i] = i; free[i] = sim.alive[i] && (sim.body[i] === 0 || !sim.attached[i]) ? 1 : 0; }
+    const uf = new Int32Array(n), mover = new Uint8Array(n);
+    for (let i = 0; i < n; i++) uf[i] = i;
     const find = x => { while (uf[x] !== x) { uf[x] = uf[uf[x]]; x = uf[x]; } return x; };
-    for (let b = 0; b < sim.nb; b++) { const i = sim.bi[b]; if (i < 0) continue; const j = sim.bj[b]; if (free[i] && free[j]) { const a = find(i), c = find(j); if (a !== c) uf[a] = c; } }
-    const acc = new Map();
-    const addTo = (key, i) => {
-      let c = acc.get(key); if (!c) acc.set(key, c = { m: 0, x: 0, y: 0, vx: 0, vy: 0, n: 0, proj: false });
-      const m = sim.m[i]; c.m += m; c.x += sim.px[i] * m; c.y += sim.py[i] * m; c.vx += sim.vx[i] * m; c.vy += sim.vy[i] * m; c.n++;
-      if (sim.body[i] === 0) c.proj = true;
-    };
-    for (let i = 0; i < N; i++) if (free[i]) addTo(find(i), i);
-    for (const i of sim.gone || []) addTo('g' + i, i);
-    const chunks = [];
-    for (const c of acc.values()) {
-      c.x /= c.m; c.y /= c.m; c.vx /= c.m; c.vy /= c.m;
-      const sp = Math.hypot(c.vx, c.vy);
-      if (sp < MIN_SPEED) continue;
-      c.e = 0.5 * c.m * sp * sp / h; c.sp = sp;
-      chunks.push(c);
+    for (let q = 0; q < sim.an; q++) {
+      const i = sim.alist[q];
+      if (!sim.alive[i] || !sim.awake[i] || (sim.body[i] > 0 && sim.attached[i])) continue;
+      if (sim.vx[i] * sim.vx[i] + sim.vy[i] * sim.vy[i] > MIN_SPEED * MIN_SPEED) mover[i] = 1;
     }
-    chunks.sort((a, b) => b.e - a.e);
-    // 2) fly them through the vehicle
-    const rays = [];
-    let main = chunks.find(c => c.proj && c.n > 1) || null;
-    for (const c of chunks.slice(0, 1500)) {
-      const p = fr.toV([c.x, c.y]), d = fr.dirV([c.vx / c.sp, c.vy / c.sp]);
-      let maxLen = 12000, fuse = null;
-      if (c === main && P.aphe && sim.everBehind) maxLen = P.aphe.fuse;   // it'll go off after a short way (or when it hits something)
-      const r = castRay(st, p[0], p[1], d[0], d[1], c.e, maxLen);
-      r.proj = c.proj; r.big = c.n > 3; r.e = c.e;
-      if (c === main && P.aphe && sim.everBehind) { fuse = Math.min(r.stop, P.aphe.fuse); r.fuse = fuse; }
-      rays.push(r);
+    for (let k = 0; k < sim.nb; k++) { const i = sim.bi[k]; if (i < 0) continue; const j = sim.bj[k]; if (mover[i] && mover[j]) { const a = find(i), c = find(j); if (a !== c) uf[a] = c; } }
+    const groups = new Map();
+    for (let i = 0; i < n; i++) if (mover[i]) { const r = find(i); let g = groups.get(r); if (!g) groups.set(r, g = []); g.push(i); }
+    const pieces = [], [p0] = sim.projRange;
+    for (const idx of groups.values()) {
+      let M = 0, X = 0, Y = 0, VX = 0, VY = 0, own = false;
+      const P = idx.map(i => fr.toV([sim.px[i], sim.py[i]]));
+      idx.forEach((i, k) => { const m = sim.m[i]; M += m; X += P[k][0] * m; Y += P[k][1] * m; const v = fr.dirV([sim.vx[i], sim.vy[i]]); VX += v[0] * m; VY += v[1] * m; if (sim.body[i] === 0 && i >= p0) own = true; });
+      X /= M; Y /= M; VX /= M; VY /= M;
+      const sp = Math.hypot(VX, VY);
+      if (sp < MIN_SPEED || X < b[0] - 300 || X > b[1] + 300 || Y < -100 || Y > b[3] + 300) continue;   // too slow, or already outside the vehicle
+      pieces.push({ idx, rel: P.map(p => [p[0] - X, p[1] - Y]), X, Y, dx: VX / sp, dy: VY / sp, sp, e: 0.5 * M * sp * sp / h, own, big: idx.length });
     }
-    // 3) explosive-filled shells burst inside
-    let burst = null;
-    const mr = main && rays.find(r => r.fuse != null);
-    if (mr) {
-      const t = Math.max(0, mr.fuse - 30), bx = mr.x + mr.dx * t, by = mr.y + mr.dy * t, q = P.aphe.charge, R = 650 * Math.cbrt(q);
-      burst = { x: bx, y: by, r: R, at: t };
-      veh.modules.forEach((m, k) => {   // the blast itself
-        const dx = Math.max(m.x - bx, 0, bx - (m.x + m.w)), dy = Math.max(m.y - by, 0, by - (m.y + m.h)), d = Math.hypot(dx, dy);
-        if (d < R) st.dmg[k] += 0.09 * q * (1 - d / R);
-      });
-      for (let k = 0; k < 72; k++) {   // and its fragments
-        const a = (k + 0.37) / 72 * Math.PI * 2, r = castRay(st, bx, by, Math.cos(a), Math.sin(a), 0.016 * q, 4000, true);
-        r.frag = true; r.delay = t; rays.push(r);
+    pieces.sort((a, c) => c.e - a.e);
+    const out = { pieces: [], frags: [], burst: null };
+    const bu = run.burst, main = bu && !bu.done ? pieces.find(p => p.own && p.big > 1) : null;
+    for (const p of pieces.slice(0, 1200)) {
+      let maxLen = 12000;
+      if (p === main) maxLen = Math.max(0, bu.fuse - (sim.penAt ? (sim.time - sim.penAt) * p.sp : 0));
+      const r = flyLine(run, p.X, p.Y, p.dx, p.dy, p.e, maxLen);
+      Object.assign(p, { stop: r.stop, hits: r.hits });
+      out.pieces.push(p);
+      if (p === main) {   // the explosive filling goes off where the shell got to
+        const t = Math.max(0, r.stop - 20), bx = p.X + p.dx * t, by = p.Y + p.dy * t, q = bu.q;
+        bu.done = true; out.burst = { x: bx, y: by, at: t, piece: p };
+        const R = 650 * Math.cbrt(q);
+        run.veh.modules.forEach((m, k) => {   // the blast itself
+          const ddx = Math.max(m.x - bx, 0, bx - (m.x + m.w)), ddy = Math.max(m.y - by, 0, by - (m.y + m.h)), d = Math.hypot(ddx, ddy);
+          if (d < R) run.dmg[k] += 0.09 * q * (1 - d / R);
+        });
+        for (let k = 0; k < 72; k++) {   // and its fragments
+          const a = (k + 0.37) / 72 * Math.PI * 2, f = flyLine(run, bx, by, Math.cos(a), Math.sin(a), 0.016 * q, 4000, true);
+          f.delay = t; out.frags.push(f);
+        }
       }
     }
-    // 4) what state is everything in?
-    const states = veh.modules.map((m, k) => { const T = MODULES[m.type], d = st.dmg[k] / (m.tough || 1); return d >= T.hp[1] ? 2 : d >= T.hp[0] ? 1 : 0; });
-    const fate = judge(veh, states);
-    if (fate.id === 'destroyed') veh.modules.forEach((m, k) => { if (m.type === 'crew') states[k] = 2; });
-    return { rays, burst, states, dmg: st.dmg, fate, chunks: chunks.length };
+    return out;
   }
+  // Move the flying lumps to where they are after travelling d mm (vehicle frame), writing their particles back into the simulation
+  function placeFlight(run, fl, dist) {
+    const sim = run.sim, fr = run.frame;
+    for (const p of fl.pieces) {
+      const d = Math.min(p.stop, dist(p)), X = p.X + p.dx * d, Y = p.Y + p.dy * d;
+      p.idx.forEach((i, k) => { const e = fr.toE([X + p.rel[k][0], Y + p.rel[k][1]]); sim.px[i] = e[0]; sim.py[i] = e[1]; });
+    }
+  }
+  function landFlight(run, fl) {   // everything comes to rest where it stopped
+    const sim = run.sim;
+    placeFlight(run, fl, () => Infinity);
+    for (const p of fl.pieces) for (const i of p.idx) { sim.vx[i] = 0; sim.vy[i] = 0; if (sim.awake[i]) sim.doze(i); }
+    if (fl.burst) for (const i of fl.burst.piece.idx) sim.alive[i] = 0;   // the burst shell is gone
+  }
+
+  // ---------- debris: after a big blast, pieces fly off and fall with gravity ----------
+  // The particle physics runs in microseconds; flying through the air takes seconds. So everything that's loose and moving becomes
+  // a rigid piece (one per connected bit; the turret stays in one piece) that the page then throws in real time. Pieces land on
+  // whatever stayed put (or the ground), bounce a little and tip over onto a flat side.
+  const SHOW = 0.11;   // how fast pieces fly on screen, for each mm/µs they had (real blasts would throw them out of sight)
+  const TOSS = 2.5;    // a turret is thrown harder than the rest (a real rack going up can throw it many metres)
+  const CELL = 12;     // mm: the map of what stayed put
+  function cornersOf(pts, tol, step) {   // points around the outside of a piece (its convex hull, every `step` mm): what it can land on
+    const p = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    if (p.length < 4) return p;
+    const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]), lo = [], up = [];
+    for (const q of p) { while (lo.length > 1 && cross(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
+    for (let i = p.length - 1; i >= 0; i--) { const q = p[i]; while (up.length > 1 && cross(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop(); up.push(q); }
+    let hull = lo.slice(0, -1).concat(up.slice(0, -1));
+    for (let again = true; again && hull.length > 3;) {   // drop corners that hardly bend the outline
+      again = false;
+      for (let i = 0; i < hull.length && hull.length > 3; i++) {
+        const a = hull[(i + hull.length - 1) % hull.length], b = hull[i], c = hull[(i + 1) % hull.length], L = Math.hypot(c[0] - a[0], c[1] - a[1]) || 1;
+        if (Math.abs(cross(a, c, b)) / L < tol) { hull.splice(i, 1); i--; again = true; }
+      }
+    }
+    const out = [];
+    hull.forEach((a, i) => {
+      const b = hull[(i + 1) % hull.length], n = Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / step);
+      for (let k = 0; k < n; k++) out.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]);
+    });
+    return out;
+  }
+  function solidMap(run, fly) {   // which 12 mm cells hold something that stayed put (each particle fills a square twice its size, so nothing lands overlapping it)
+    const sim = run.sim, fr = run.frame, b = run.box || (run.box = bbox(run.veh, false)), r = sim.h;
+    const x0 = b[0] - 8000, nx = Math.ceil((b[1] - b[0] + 16000) / CELL), ny = Math.ceil((b[3] + 6000) / CELL), cells = new Uint8Array(nx * ny);
+    for (let i = 0; i < sim.n; i++) {
+      if (!sim.alive[i] || fly[i] || sim.body[i] === 0 || !sim.attached[i] || sim.loose[i]) continue;   // bits lying around don't hold anything up
+      const v = fr.toV([sim.px[i], sim.py[i]]);
+      const ca = Math.max(0, Math.floor((v[0] - r - x0) / CELL)), cb = Math.min(nx - 1, Math.floor((v[0] + r - x0) / CELL));
+      const ra = Math.max(0, Math.floor((v[1] - r) / CELL)), rb = Math.min(ny - 1, Math.floor((v[1] + r) / CELL));
+      for (let y = ra; y <= rb; y++) for (let x = ca; x <= cb; x++) cells[y * nx + x] = 1;
+    }
+    const at = (x, y) => { if (y < 0) return true; const cx = Math.floor((x - x0) / CELL), cy = Math.floor(y / CELL); return cx >= 0 && cx < nx && cy < ny && cells[cy * nx + cx] === 1; };
+    // how far to move a point up, or sideways, to get it out
+    const up = (x, y) => { let t = Math.max(0, Math.floor(y / CELL) + 1) * CELL; while (at(x, t + 0.01) && t < ny * CELL) t += CELL; return t + 0.01 - y; };
+    const side = (x, y, dir) => { let k = 0; while (at(x + dir * k * CELL, y) && k < 40) k++; const cx = Math.floor((x + dir * k * CELL - x0) / CELL); return Math.abs((dir > 0 ? cx : cx + 1) * CELL + x0 - x) + 1; };
+    return { at, up, side };
+  }
+  function makeDebris(run) {
+    const sim = run.sim, fr = run.frame, n = sim.n;
+    sim.findAttached();
+    const uf = new Int32Array(n); for (let i = 0; i < n; i++) uf[i] = i;
+    const find = x => { while (uf[x] !== x) { uf[x] = uf[uf[x]]; x = uf[x]; } return x; };
+    const join = (a, b) => { a = find(a); b = find(b); if (a !== b) uf[a] = b; };
+    const fly = new Uint8Array(n);
+    for (let i = 0; i < n; i++) if (sim.alive[i] && (sim.loose[i] || (sim.body[i] > 0 && !sim.attached[i])) && sim.vx[i] * sim.vx[i] + sim.vy[i] * sim.vy[i] > 1e-6) fly[i] = 1;
+    for (let b = 0; b < sim.nb; b++) { const i = sim.bi[b]; if (i < 0) continue; const j = sim.bj[b]; if (fly[i] && fly[j]) join(i, j); }
+    let tRoot = -1;
+    for (let i = 0; i < n; i++) if (fly[i] && sim.body[i] > 0 && isTurret(run, sim.body[i])) { if (tRoot < 0) tRoot = i; else join(i, tRoot); }
+    // plates that mostly flew away aren't there to hit any more
+    const tot = new Int32Array(sim.plates.length + 1), flew = new Int32Array(sim.plates.length + 1);
+    for (let i = 0; i < n; i++) if (sim.alive[i] && sim.body[i] > 0) { tot[sim.body[i]]++; flew[sim.body[i]] += fly[i]; }
+    run.gone = run.gone || [];
+    sim.plates.forEach((pl, b) => { if (tot[b + 1] && flew[b + 1] > tot[b + 1] * 0.5) run.gone[pl.part] = true; });
+    const groups = new Map();
+    for (let i = 0; i < n; i++) { if (!fly[i]) continue; const r = find(i); let g = groups.get(r); if (!g) groups.set(r, g = []); g.push(i); }
+    const pieces = [], tKey = tRoot >= 0 ? find(tRoot) : -2, deco = decoOf(run.veh), barrel = deco && deco.barrel;
+    for (const [root, idx] of groups) {
+      let M = 0, X = 0, Y = 0, VX = 0, VY = 0;
+      const P = idx.map(i => fr.toV([sim.px[i], sim.py[i]])), Vv = idx.map(i => fr.dirV([sim.vx[i], sim.vy[i]]));
+      idx.forEach((i, k) => { const m = sim.m[i]; M += m; X += P[k][0] * m; Y += P[k][1] * m; VX += Vv[k][0] * m; VY += Vv[k][1] * m; });
+      X /= M; Y /= M; VX /= M; VY /= M;
+      let Lz = 0, I = 0;
+      idx.forEach((i, k) => { const m = sim.m[i], rx = P[k][0] - X, ry = P[k][1] - Y; Lz += m * (rx * (Vv[k][1] - VY) - ry * (Vv[k][0] - VX)); I += m * (rx * rx + ry * ry); });
+      const turret = root === tKey, show = SHOW * 1e6 * (turret ? TOSS : 1);
+      let vx = VX * show, vy = VY * show;
+      const sp = Math.hypot(vx, vy), cap = turret ? 7500 : 15000, spin = turret ? 3 : 7;   // a light turret mustn't fly out of sight
+      if (sp > cap) { vx *= cap / sp; vy *= cap / sp; }
+      const w = I > 0 ? Math.max(-spin, Math.min(spin, Lz / I * show)) : 0, rel = P.map(p => [p[0] - X, p[1] - Y]);
+      const pts = idx.length < 4 ? [[0, 0]] : cornersOf(rel, 2 * sim.h, 80);
+      if (turret && barrel) for (const s of [-0.5, 0.5]) pts.push([barrel.x1 - X, barrel.y + s * barrel.d - Y]);   // the gun barrel lands too
+      pieces.push({ idx, rel, X, Y, X0: X, Y0: Y, vx, vy, a: 0, w, rest: false, turret, big: idx.length, pts, free: new Uint8Array(pts.length), still: 0,
+        iM: 1 / M, iI: idx.length < 4 || I <= 0 ? 0 : 1 / I, R: Math.max(1, ...pts.map(q => Math.hypot(q[0], q[1]))) });
+    }
+    const map = solidMap(run, fly), b = run.box;
+    for (const p of pieces) p.pts.forEach((q, k) => { p.free[k] = map.at(p.X + q[0], p.Y + q[1]) ? 0 : 1; });   // corners that start inside something (where they broke off) can't land on it
+    return { pieces, t: 0, done: false, map, x0: b[0] - 7000, x1: b[1] + 7000 };
+  }
+  function stepDebris(run, deb, dt) {
+    const sim = run.sim, fr = run.frame, map = deb.map, g = 9810, SUB = 4, h = dt / SUB;
+    let moving = 0;
+    for (const p of deb.pieces) {
+      if (p.rest) continue;
+      moving++;
+      for (let sub = 0; sub < SUB && !p.rest; sub++) {
+        const ox = p.X, oy = p.Y, oa = p.a;
+        p.vy -= g * h; p.X += p.vx * h; p.Y += p.vy * h; p.a += p.w * h;
+        const c = Math.cos(p.a), s = Math.sin(p.a), c0 = Math.cos(oa), s0 = Math.sin(oa);
+        let touch = false, lift = 0, drop = 0, pushX = 0;
+        p.age = (p.age || 0) + h;
+        for (let k = 0; k < p.pts.length; k++) {
+          const r = p.pts[k], rx = c * r[0] - s * r[1], ry = s * r[0] + c * r[1];
+          let x = p.X + rx, y = p.Y + ry;
+          const qx = ox + c0 * r[0] - s0 * r[1], qy = oy + s0 * r[0] + c0 * r[1];
+          // sweep from where it was, so fast pieces can't skip through a thin plate
+          const steps = Math.min(40, Math.ceil(Math.hypot(x - qx, y - qy) / (CELL / 2)));
+          let hit = false, px = qx, py = qy;
+          for (let j = 1; j <= steps; j++) {
+            const sx = qx + (x - qx) * j / steps, sy = qy + (y - qy) * j / steps;
+            if (sy < 0 || (p.free[k] && map.at(sx, sy))) { hit = true; x = sx; y = sy; break; }   // the ground always counts
+            px = sx; py = sy;
+          }
+          if (!hit) { if (!p.free[k] && !map.at(x, y)) p.free[k] = 1; continue; }
+          touch = true;
+          let nx = 0, ny = 1;
+          const endX = p.X + rx, endY = p.Y + ry;
+          if (map.at(px, y) || !map.at(x, py)) {   // came down onto it (or up into it)
+            if (y <= py) lift = Math.max(lift, y + map.up(x, y) - endY); else { ny = -1; drop = Math.min(drop, py - endY); }
+          } else {   // ran into it sideways
+            nx = px < x ? -1 : 1; ny = 0;
+            const d = x + nx * map.side(x, y, nx) - endX; if (Math.abs(d) > Math.abs(pushX)) pushX = d;
+          }
+          // bounce and friction at that corner (it can make the piece tip over)
+          const vcx = p.vx - p.w * ry, vcy = p.vy + p.w * rx, vn = vcx * nx + vcy * ny;
+          if (vn < 0) {
+            const rn = rx * ny - ry * nx, jn = -(vn < -600 && p.big >= 60 ? 1.25 : 1) * vn / (p.iM + rn * rn * p.iI);   // only big pieces landing hard bounce
+            const tx = -ny, ty = nx, vt = vcx * tx + vcy * ty, rt = rx * ty - ry * tx;
+            let jt = -vt / (p.iM + rt * rt * p.iI); const lim = 0.6 * jn; jt = Math.max(-lim, Math.min(lim, jt));
+            p.vx += (jn * nx + jt * tx) * p.iM; p.vy += (jn * ny + jt * ty) * p.iM; p.w += (rn * jn + rt * jt) * p.iI;
+          }
+        }
+        if (touch) {
+          p.Y += lift > 0 ? lift : drop; p.X += pushX; p.touchAt = p.age;
+          if (p.big < 60) { p.w *= 0.8; p.vx *= 0.9; } else p.w *= 0.98;   // small bits don't roll far
+        }
+        if (p.X < deb.x0 || p.X > deb.x1) { dropDown(p, map); p.rest = true; p.vx = p.vy = p.w = 0; }   // thrown right out of the picture
+        // at rest once it's been slow (and touching something) for a little while
+        if (p.touchAt != null && p.age - p.touchAt < 0.1 && Math.hypot(p.vx, p.vy) < 220 && Math.abs(p.w) * p.R < 220) { if (++p.still > 12) { p.rest = true; p.vx = p.vy = p.w = 0; } }
+        else p.still = 0;
+      }
+      const c = Math.cos(p.a), s = Math.sin(p.a);
+      p.idx.forEach((i, k) => {
+        const r = p.rel[k], e = fr.toE([p.X + c * r[0] - s * r[1], p.Y + s * r[0] + c * r[1]]);
+        sim.px[i] = e[0]; sim.py[i] = e[1];
+      });
+    }
+    deb.t += dt;
+    if (!moving || deb.t > 4.5) {   // done: everything stays where it landed (anything still in the air drops straight down)
+      for (const p of deb.pieces) {
+        if (!p.rest) { dropDown(p, map); p.rest = true; p.vx = p.vy = p.w = 0; }
+        const c = Math.cos(p.a), s = Math.sin(p.a);
+        p.idx.forEach((i, k) => {
+          const r = p.rel[k], e = fr.toE([p.X + c * r[0] - s * r[1], p.Y + s * r[0] + c * r[1]]);
+          sim.px[i] = e[0]; sim.py[i] = e[1]; sim.vx[i] = 0; sim.vy[i] = 0; sim.ax[i] = e[0]; sim.ay[i] = e[1]; if (sim.awake[i]) sim.doze(i);
+        });
+      }
+      deb.done = true;
+    }
+  }
+  function dropDown(p, map) {   // move a piece straight down until one of its corners lands on something
+    const c = Math.cos(p.a), s = Math.sin(p.a);
+    let fall = Infinity;
+    p.pts.forEach((r, k) => {
+      const x = p.X + c * r[0] - s * r[1], y = p.Y + s * r[0] + c * r[1];
+      if (!p.free[k] && map.at(x, y)) return;   // still stuck where it broke off
+      let yy = y - CELL / 2;
+      while (yy > 0 && !map.at(x, yy)) yy -= CELL / 2;
+      fall = Math.min(fall, Math.max(0, y - Math.max(0, (Math.floor(yy / CELL) + 1) * CELL)));
+    });
+    if (isFinite(fall)) p.Y -= fall;
+  }
+  // Where the turret is now (so the gun barrel and the crew boxes can go with it)
+  function turretMove(deb) {
+    const p = deb && deb.pieces.find(q => q.turret);
+    return p ? { x0: p.X0, y0: p.Y0, x: p.X, y: p.Y, a: p.a } : null;
+  }
+
   function judge(veh, states) {
     const ms = veh.modules, of = t => ms.map((m, k) => (m.type === t ? states[k] : -1)).filter(s => s >= 0);
     const crew = of('crew'), crewKO = crew.filter(s => s === 2).length;
@@ -556,5 +950,5 @@
     });
   }
 
-  return { MODULES, MOD_KEYS, VEHICLES, geometry, layerBands, bbox, decoOf, shotAngle, frameFor, crossings, firstArmor, probe, buildShot, afterShot, judge, sanitize, pack, unpack, toLink, fromLink, starter, castRay };
+  return { MODULES, MOD_KEYS, VEHICLES, geometry, layerBands, bbox, decoOf, shotAngle, frameFor, crossings, firstArmor, probe, entryPoint, buildVehicle, pickVehH, aimShot, zoneTick, ammoBlast, blast, states, fateOf, busy, settle, unsettle, AIR, launch, placeFlight, landFlight, flyLine, makeDebris, stepDebris, turretMove, isTurret, judge, sanitize, pack, unpack, toLink, fromLink, starter };
 });

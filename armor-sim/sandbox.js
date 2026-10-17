@@ -7,8 +7,10 @@
   const $ = id => document.getElementById(id);
   const clone = o => JSON.parse(JSON.stringify(o));
   const DEG = Math.PI / 180;
-  const QUALITY = { low: ['Low', 3000], med: ['Medium', 6000], high: ['High', 12000], ultra: ['Ultra', 24000] };   // particle budgets
+  const QUALITY = { low: ['Low', 3000], med: ['Medium', 6000], high: ['High', 12000], ultra: ['Ultra', 24000] };   // particle budgets (plain armor)
+  const VQ = { low: 15000, med: 30000, high: 60000, ultra: 110000 };   // a whole vehicle (most of it sleeps until it's hit)
   const SPEEDS = { slow: ['🐢 Slow-mo', 40], normal: ['▶ Normal', 150], fast: ['⏩ Fast', Infinity] };              // simulated µs per real second
+  const INSIDE_MAX = { slow: 20000, normal: 4500, fast: 2500 };   // ms of real time for the bits flying inside, so slow computers don't wait forever
   const VIEWS = { mat: '🎨 Material', heat: '🔥 Heat', damage: '💔 Damage', speed: '💨 Speed' };
   const FROM = ['front', 'rear', 'top'];
   const weak = innerWidth < 700 || (navigator.hardwareConcurrency || 8) <= 4;
@@ -40,14 +42,19 @@
   const shotOf = veh => ({ from: SB.from, tilt: SB.tilt, at: SB.vaim || defaultAim(veh) });
 
   // ===================== The simulation =====================
+  // Plain armor: one shot per build. Vehicles: the whole vehicle is particles and stays damaged between shots, until you repair it.
+  // A vehicle shot goes: approach → running (the hit) → inside (bits flying, real physics) → flight (what's left flies on in straight lines)
+  // → blast + debris (only if ammo explodes) → done.
   let sim = null, state = 'idle', approachT0 = 0, verdict = null, verdictAt = 0, runStart = 0, flashes = [], seenEvents = 0, visible = false, raf = 0, stepsPerSec = 0;
-  let VR = null;     // shooting at a vehicle: { veh, shot, built, geo }
-  let POST = null;   // after the hit: what flew where inside the vehicle, and what it broke
+  let VR = null;     // the vehicle: { veh, run, shots, last, fl, deb, … }
   let ED = null;     // the vehicle builder
+  let paused = null; // which phase a pause interrupted
   const IDENT = V.frameFor({ from: 'front', tilt: 0, at: [0, 0] });
   let fr = IDENT;    // turns the engine's frame (shot flying along +x) into the picture's frame
   const cam = { x: 0, y: 0, s: 1 };
   let glide = null;  // smooth camera moves
+  const physicsOn = () => state === 'running' || state === 'inside' || state === 'blast';
+  const busyNow = () => state === 'approach' || physicsOn() || state === 'flight' || state === 'debris';
 
   // Plates mustn't start inside each other along the shot line
   function tidyPlates() {
@@ -58,15 +65,14 @@
     }
   }
   function rebuild(keepView) {
-    POST = null; flashes = []; seenEvents = 0; verdict = null;
+    flashes = []; seenEvents = 0; verdict = null; paused = null;
     const P = projDef();
-    if (ED) { VR = { veh: ED.veh, shot: shotOf(ED.veh), built: null }; sim = null; fr = IDENT; state = 'edit'; }
+    if (ED) { VR = { veh: ED.veh, run: null }; sim = null; fr = IDENT; state = 'edit'; }
     else if (SB.target === 'vehicle') {
-      const veh = vehDef(), shot = shotOf(veh);
-      const built = V.buildShot(veh, shot, { ...P, v: speedOf() }, QUALITY[SB.quality][1]);
-      VR = { veh, shot, built };
-      if (built) { sim = new E.Sim(built.scene); fr = built.fr; state = 'ready'; }
-      else { sim = null; fr = V.frameFor(shot); state = 'miss'; }
+      const veh = vehDef(), run = V.buildVehicle(veh, VQ[SB.quality]);
+      VR = { veh, run, shots: 0, last: null, fl: null, deb: null, turret: null, boom: null, reveal: null };
+      sim = run.sim; fr = run.frame; seenEvents = sim.events.length; state = 'ready';
+      aimChanged();
     } else {
       VR = null; tidyPlates();
       const scene = { plates: clone(SB.plates), proj: { ...P, v: speedOf(), aim: SB.aim } };
@@ -78,63 +84,104 @@
   }
   let rbTimer = 0;
   const rebuildSoon = keepView => { clearTimeout(rbTimer); rbTimer = setTimeout(() => { rebuild(keepView); saveSB(); }, 160); };
+  function aimChanged() {   // the vehicle stays as it is; only the planned shot moves
+    if (!VR || ED) return;
+    VR.entry = V.entryPoint(VR.veh, shotOf(VR.veh), VR.run);
+    renderAimInfo(); draw();
+  }
 
   function fire() {
-    if (ED) return;
-    if (state === 'miss') { toast('That shot misses the armor. Click on the vehicle where you want to hit.'); return; }
-    if (!sim || state === 'done' || state === 'post' || state === 'running' || state === 'approach' || state === 'paused') rebuild(true);
-    if (!sim) return;
+    if (ED || busyNow() || state === 'paused') return;
+    const P = { ...projDef(), v: speedOf() };
+    if (VR) {
+      if (!VR.run) rebuild(true);
+      if (!VR.entry) { toast('That shot misses the armor. Click on the vehicle where you want to hit.'); return; }
+      if (!V.aimShot(VR.run, shotOf(VR.veh), P)) { toast('That shot misses the armor.'); return; }
+      fr = VR.run.frame; sim = VR.run.sim; VR.shots++; VR.fl = null; VR.reveal = null; VR.last = null; VR.burst = false;
+      seenEvents = sim.events.length; flashes = []; verdict = null;
+      glideTo(impactView(), 450);
+    } else if (!sim || state !== 'ready') rebuild(true);
     state = 'approach'; approachT0 = performance.now(); runStart = 0;
-    if (VR) glideTo(impactView(), 450);
     sound('fire'); countPlay(); renderControlsState(); renderResult();
     loop();
   }
-  function finish() {
+  function finish() {   // plain armor: the shot is over
     const v = verdict || sim.verdict() || 'stop';
     verdict = v;
     sound(v === 'rico' ? 'rico' : v === 'pen' ? 'pen' : v === 'spall' ? 'boom' : 'stop');
-    if (VR && VR.built) { startPost(); return; }
     state = 'done';
     renderResult(); renderControlsState();
   }
 
-  // ===================== After the hit: follow the bits inside the vehicle =====================
-  function startPost() {
-    const veh = VR.veh, out = V.afterShot(veh, VR.shot, VR.built, sim, { ...projDef(), v: speedOf() });
-    const ends = out.rays.map(r => (r.delay || 0) + Math.min(r.stop, 9000));
-    const vs = Math.max(3500, Math.max(0, ...ends) / 1.1);   // how fast (mm per real second) the bits fly in the replay
-    const reveal = veh.modules.map(() => Infinity);
-    for (const r of out.rays) for (const h of r.hits) { const t = ((r.delay || 0) + h.t) / vs; if (out.states[h.k] && t < reveal[h.k]) reveal[h.k] = t; }
-    let boomAt = Infinity;
-    veh.modules.forEach((m, k) => { if (m.type === 'ammo' && out.states[k] === 2 && !m.vent) boomAt = Math.min(boomAt, reveal[k]); });
-    if (isFinite(boomAt)) veh.modules.forEach((m, k) => { if (out.states[k] && !isFinite(reveal[k])) reveal[k] = boomAt + 0.05; });
-    const last = Math.min(1.6, Math.max(0, ...ends) / vs);
-    POST = { out, vs, reveal, boomAt, t0: performance.now(), end: last + (isFinite(boomAt) ? 2.6 : 0.6), burstDone: false, boomDone: false, toss: null, boom: null };
-    state = 'post';
-    glideTo(fitVehicle(), 800);
-    renderResult(); renderControlsState(); loop();
+  // ---------- vehicle phases ----------
+  function noteVerdict() {   // remember how this shot went at the armor (later phases keep moving things)
+    const v = verdict || sim.verdict() || 'stop', r = sim.res || sim.measure();
+    verdict = v;
+    VR.last = { v, resid: r.residual, depth: r.depth, group: VR.run.group, P: projDef(), maxT: r.maxT };
+    sound(v === 'rico' ? 'rico' : v === 'pen' ? 'pen' : v === 'spall' ? 'boom' : 'stop');
   }
-  function postTick(now) {
-    const tp = (now - POST.t0) / 1000, out = POST.out;
-    if (out.burst && !POST.burstDone && tp >= out.burst.at / POST.vs) {
-      POST.burstDone = true; sound('stop');
-      flashes.push({ type: 'flash', x: out.burst.x, y: out.burst.y, r: 300, at: now, v: true });
-    }
-    if (!POST.boomDone && tp >= POST.boomAt) {
-      POST.boomDone = true; sound('boom');
-      const ammo = VR.veh.modules.filter((m, k) => m.type === 'ammo' && out.states[k] === 2);
-      const cx = ammo.reduce((s, m) => s + m.x + m.w / 2, 0) / ammo.length, cy = ammo.reduce((s, m) => s + m.y + m.h / 2, 0) / ammo.length;
-      POST.boom = { x: cx, y: cy, at: now };
-      flashes.push({ type: 'flash', x: cx, y: cy, r: 1600, at: now, v: true, big: true });
-      if (VR.veh.parts.some(p => p.g === 't')) POST.toss = { at: now + 120 };
-    }
-    if (tp >= POST.end && state === 'post') { state = 'done'; renderResult(); renderControlsState(); }
+  function toInside() {
+    noteVerdict();
+    V.settle(VR.run);
+    VR.t0 = sim.time; VR.phaseT0 = performance.now(); state = 'inside';
+    glideTo(fitVehicle(), 900);
+    renderResult(); renderControlsState();
   }
-  const effectsOn = now => POST && (state === 'post' || (POST.toss && now - POST.toss.at < 2600) || POST.out.fate.id === 'fire' && now - POST.t0 < 9000 || POST.boom && now - POST.boom.at < 6000);
+  function toFlight() {
+    const run = VR.run, before = V.states(run), fl = V.launch(run), after = V.states(run);
+    const ends = fl.pieces.map(p => p.stop).concat(fl.frags.map(f => (f.delay || 0) + f.stop));
+    const far = Math.min(9000, Math.max(0, ...ends)), vs = Math.max(2500, far / 1.1);
+    const reveal = run.veh.modules.map(() => 0);
+    run.veh.modules.forEach((m, k) => {
+      if (after[k] === before[k]) return;
+      let t = Infinity;
+      for (const p of fl.pieces) for (const h of p.hits) if (h.k === k) t = Math.min(t, h.t / vs);
+      for (const f of fl.frags) for (const h of f.hits) if (h.k === k) t = Math.min(t, ((f.delay || 0) + h.t) / vs);
+      reveal[k] = isFinite(t) ? t : 0;
+    });
+    VR.fl = fl; VR.vs = vs; VR.before = before; VR.reveal = reveal; VR.flT0 = performance.now(); VR.flEnd = far / vs + 0.45; VR.burstShown = false;
+    // ammo set off by the flying bits explodes when they get there
+    VR.flBooms = [];
+    run.veh.modules.forEach((m, k) => { if (m.type === 'ammo' && after[k] === 2 && !run.boomed.includes(k)) { run.boomed.push(k); VR.flBooms.push({ k, t: reveal[k] }); } });
+    VR.flBooms.sort((a, b) => a.t - b.t);
+    if (!fl.pieces.length && !fl.frags.length && !VR.flBooms.length) { finishVehicle(); return; }
+    state = 'flight';
+    renderResult(); renderControlsState();
+  }
+  function toBlast(k) {
+    if (state === 'flight' && VR.fl) { V.landFlight(VR.run, VR.fl); VR.fl = null; }
+    V.ammoBlast(VR.run, k);
+    const m = VR.veh.modules[k];
+    VR.boom = { x: m.x + m.w / 2, y: m.y + m.h / 2, at: performance.now(), vent: !!m.vent };
+    VR.blastT0 = sim.time; VR.phaseT0 = performance.now(); state = 'blast';
+    sound('boom');
+    renderResult(); renderControlsState();
+  }
+  function toDebris() {
+    VR.deb = V.makeDebris(VR.run); state = 'debris';
+    glideTo(fitVehicle(tossReach()), 600);
+  }
+  function finishVehicle() {
+    if (VR.fl) { V.landFlight(VR.run, VR.fl); VR.fl = null; }
+    if (VR.deb) { VR.turret = turretT(); VR.deb = null; }
+    VR.reveal = null;
+    if (!VR.last) noteVerdict();
+    state = 'done';
+    renderResult(); renderControlsState(); draw();
+  }
 
   // ===================== The loop =====================
   let lastNow = 0;
   function loop() { if (!raf) raf = requestAnimationFrame(tick); }
+  function physics(quota, budgetMs, each) {   // run steps until the simulated-time quota or the frame's time budget is used up
+    const until = isFinite(quota) ? sim.time + quota : Infinity, t0 = performance.now();
+    let n = 0;
+    while (sim.time < until && performance.now() - t0 < budgetMs) {
+      sim.step(); n++;
+      if (each && each()) break;
+    }
+    return n;
+  }
   function tick(now) {
     raf = 0;
     if (!visible) return;
@@ -145,27 +192,59 @@
       if (k >= 1) glide = null;
     }
     if (sim && state === 'approach' && now - approachT0 > 450) { state = 'running'; runStart = now; }
+    const quota = SPEEDS[SB.speed][1];
+    let boom = -1;
+    const zones = () => {   // vehicles: bits flying through crew, ammo, fuel and engines (and ammo that goes off)
+      if (!VR || sim.steps % 4) return false;
+      const o = V.zoneTick(VR.run, 4);
+      if (o.burst) { flashes.push({ type: 'flash', x: o.burst[0], y: o.burst[1], r: 400, at: performance.now(), big: true }); VR.burst = true; sound('stop'); }
+      if (o.booms) { boom = o.booms[0]; return true; }
+      return false;
+    };
     if (sim && state === 'running') {
-      const quota = SPEEDS[SB.speed][1], until = isFinite(quota) ? sim.time + quota * dtReal : Infinity;
-      const t0 = performance.now(), budget = 11;
-      let n = 0;
-      while (sim.time < until && performance.now() - t0 < budget) {
-        sim.step(); n++;
+      const n = physics(quota * dtReal, 11, () => {
+        if (zones()) return true;
         if (sim.steps % 40 === 0) {
           if (!verdict) { const v = sim.verdict(); if (v) { verdict = v; verdictAt = sim.time; } }
-          else if (sim.time - verdictAt > 90) { finish(); break; }
+          else if (sim.time - verdictAt > 90) return true;
         }
-      }
+        return false;
+      });
       stepsPerSec = stepsPerSec * 0.9 + (n / Math.max(dtReal, 0.001)) * 0.1;
-      if (state === 'running' && now - runStart > 120000) finish();   // safety: never run forever
-      if (n && sim.steps % 40 < n) renderLive();
+      if (boom >= 0) { if (!VR.last) noteVerdict(); toBlast(boom); }
+      else if (verdict && sim.time - verdictAt > 90) { if (VR) toInside(); else finish(); }
+      else if (now - runStart > 120000) { if (VR) toInside(); else finish(); }   // safety: never run forever
+      if (n) renderLive();
+    } else if (state === 'inside') {   // the bits fly around inside: sped up, it's slow otherwise
+      let done = false;
+      physics(quota * 12 * dtReal, 11, () => {
+        if (zones()) return true;
+        if (sim.steps % 40 === 0 && (sim.time - VR.t0 > V.AIR || V.busy(VR.run) === 0 || performance.now() - VR.phaseT0 > INSIDE_MAX[SB.speed])) { done = true; return true; }
+        return false;
+      });
+      if (boom >= 0) toBlast(boom); else if (done) toFlight();
+      renderLive();
+    } else if (state === 'flight') {
+      const tp = (now - VR.flT0) / 1000;
+      V.placeFlight(VR.run, VR.fl, p => tp * VR.vs);
+      if (VR.fl.burst && !VR.burstShown && tp >= VR.fl.burst.at / VR.vs) { VR.burstShown = true; VR.burst = true; flashes.push({ type: 'flash', x: VR.fl.burst.x, y: VR.fl.burst.y, r: 420, at: now, big: true }); sound('stop'); }
+      if (VR.flBooms.length && tp >= VR.flBooms[0].t) toBlast(VR.flBooms.shift().k);
+      else if (tp >= VR.flEnd) finishVehicle();
+    } else if (state === 'blast') {   // the explosion tears things loose (real physics, as fast as it goes)
+      physics(Infinity, 11, () => sim.time - VR.blastT0 > 200);
+      if (sim.time - VR.blastT0 > 200 || now - VR.phaseT0 > 3000) toDebris();
+      renderLive();
+    } else if (state === 'debris') {   // the pieces fly and fall with gravity, in real time
+      V.stepDebris(VR.run, VR.deb, dtReal);
+      if (VR.deb.done) finishVehicle();
     }
     if (sim) while (seenEvents < sim.events.length) { const ev = sim.events[seenEvents++], p = fr.toV([ev.x, ev.y]); flashes.push({ ...ev, x: p[0], y: p[1], at: now }); }
     flashes = flashes.filter(f => now - f.at < (f.big ? 1400 : 700));
-    if (state === 'post') postTick(now);
     draw(now);
-    if (state === 'running' || state === 'approach' || state === 'post' || flashes.length || glide || effectsOn(now)) loop();
+    if (busyNow() || flashes.length || glide || effectsOn(now)) loop();
   }
+  const effectsOn = now => VR && VR.run && ((VR.boom && now - VR.boom.at < 7000) || fireLit() && now - (VR.fireAt || 0) < 9000);
+  const fireLit = () => VR && VR.run && VR.veh.modules.some((m, k) => m.type === 'fuel' && shownState(k, performance.now()) === 2);
 
   // ===================== Drawing =====================
   const cv = $('sb-canvas'), ctx = cv.getContext('2d');
@@ -192,18 +271,36 @@
     const bw = (x1 - x0) * pad || 100, bh = (y1 - y0) * pad || 100;
     return { s: Math.min(W / bw, H / bh), x: (x0 + x1) / 2, y: (y0 + y1) / 2 };
   }
-  function fitVehicle() {   // on narrow screens the long gun barrel may run off the edge, so the vehicle itself is bigger
+  function fitVehicle(reach) {   // on narrow screens the long gun barrel may run off the edge, so the vehicle itself is bigger
     resize();
     const narrow = W < 600, b = V.bbox(VR.veh, !narrow);
-    return viewOf(b[0] - (narrow ? 250 : 150), b[1] + 150, Math.min(b[2], 0) - 200, b[3] + 300, 1.06);
+    let x0 = b[0] - (narrow ? 250 : 150), x1 = b[1] + 150, y1 = b[3] + 300;
+    const tt = VR.run && VR.turret;
+    if (tt) {   // a turret that was thrown off earlier stays in the picture
+      const d = V.decoOf(VR.veh) || {}, pts = VR.veh.parts.filter(p => p.g === 't').flatMap(p => [p.a, p.b]).concat(d.barrel ? [[d.barrel.x1, d.barrel.y]] : []);
+      for (const q of pts.map(p => moveBy(tt, p))) { x0 = Math.min(x0, q[0] - 150); x1 = Math.max(x1, q[0] + 150); y1 = Math.max(y1, q[1] + 300); }
+    }
+    if (reach) { x0 = Math.min(x0, reach.x0 - 200); x1 = Math.max(x1, reach.x1 + 200); y1 = Math.max(y1, reach.top + 300); }
+    return viewOf(x0, x1, Math.min(b[2], 0) - 200, y1, 1.06);
   }
-  function impactView() {   // close up on the plates being simulated
-    const pts = VR.built.cuts.flatMap(c => c.cut), sh = sim.shape;
-    pts.push(fr.toV([sim.noseX - (sh.x1 - sh.x0) * 0.6, 0]));
+  function tossReach() {   // where the big pieces of a blast will fly, so the whole throw stays in the picture
+    const g = 9810, out = { x0: Infinity, x1: -Infinity, top: -Infinity };
+    for (const p of VR.deb.pieces) {
+      if (p.big < 200) continue;
+      let r = 0; for (const q of p.rel) r = Math.max(r, q[0] * q[0] + q[1] * q[1]); r = Math.sqrt(r);
+      const up = Math.max(0, p.vy), apex = p.Y + up * up / (2 * g), t = up / g + Math.sqrt(2 * Math.max(0, apex) / g), xe = p.X + p.vx * t;
+      out.x0 = Math.min(out.x0, p.X - r, xe - r); out.x1 = Math.max(out.x1, p.X + r, xe + r); out.top = Math.max(out.top, apex + r);
+    }
+    return out;
+  }
+  function impactView() {   // close up on the plates the shot hits
+    const pts = VR.run.group.flatMap(g => VR.run.geo[g.i].poly), sh = sim.shape;
+    if (sh) pts.push(fr.toV([sim.noseX - (sh.x1 - sh.x0) * 0.6, 0]));
     const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
     let x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-    const grow = (a, b, min) => { const m = (a + b) / 2, h = Math.max((b - a) / 2, min / 2); return [m - h, m + h]; };
-    [x0, x1] = grow(x0, x1, 500); [y0, y1] = grow(y0, y1, 400);
+    const grow = (a, b, min, max) => { const m = (a + b) / 2, h = Math.min(max, Math.max((b - a) / 2, min)) / 1; return [m - h, m + h]; };
+    const e = VR.entry || [(x0 + x1) / 2, (y0 + y1) / 2];
+    [x0, x1] = grow(Math.max(x0, e[0] - 900), Math.min(x1, e[0] + 900), 300, 700); [y0, y1] = grow(Math.max(y0, e[1] - 700), Math.min(y1, e[1] + 700), 250, 600);
     return viewOf(x0, x1, y0, y1, 1.35);
   }
   function fit() {
@@ -243,6 +340,7 @@
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (VR) drawVehicle(c, now);
     if (sim) { drawParticles(now); c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(pcv, 0, 0); c.setTransform(dpr, 0, 0, dpr, 0, 0); }
+    if (VR && VR.run) drawModuleMarks(c, now);
     overlays(c, now);
   }
   function drawParticles(now) {
@@ -251,14 +349,13 @@
     const ox = cw / 2 - cam.x * s, oy = ch / 2 + cam.y * s;
     const view = SB.view, n = sim.n, fc = fr.c, fs = fr.s, Ox = fr.O[0], Oy = fr.O[1];
     const px = sim.px, py = sim.py, alive = sim.alive, mat = sim.mat, T = sim.T, shade = sim.shade, body = sim.body, vx = sim.vx, vy = sim.vy;
-    const hide = tossingBodies(now);
     // the incoming shell slides in from the left before the physics starts
-    let off = 0;
+    let off = 0, p0 = sim.projRange ? sim.projRange[0] : n;
     if (state === 'approach') { const f = Math.min(1, (now - approachT0) / 450), e = 1 - Math.pow(1 - f, 2); off = -(1 - e) * Math.max(W / cam.s, 400); }
     for (let i = 0; i < n; i++) {
-      if (alive[i] === 0 || (hide && hide[body[i]])) continue;
+      if (alive[i] === 0) continue;
       let x = px[i]; const y = py[i];
-      if (off && body[i] === 0) x += off;
+      if (off && body[i] === 0 && i >= p0) x += off;
       const X = Ox + fc * x - fs * y, Y = Oy + fs * x + fc * y;
       const sx = (ox + X * s - half) | 0, sy = (oy - Y * s - half) | 0;
       if (sx >= cw || sy >= ch || sx + splat <= 0 || sy + splat <= 0) continue;
@@ -283,95 +380,90 @@
 
   // ---------- vehicles ----------
   const path = (c, pts) => { c.beginPath(); pts.forEach((p, k) => (k ? c.lineTo(toSX(p[0]), toSY(p[1])) : c.moveTo(toSX(p[0]), toSY(p[1])))); c.closePath(); };
-  const turretPivot = veh => { const pts = veh.parts.filter(p => p.g === 't').flatMap(p => [p.a, p.b]); return pts.length ? [pts.reduce((s, p) => s + p[0], 0) / pts.length, Math.min(...pts.map(p => p[1]))] : null; };
-  function tossNow(now) {   // the turret flying off after the ammo explodes: where it is now
-    if (!POST || !POST.toss || now < POST.toss.at) return null;
-    const k = Math.min(1, (now - POST.toss.at) / 2000), base = turretPivot(VR.veh);
-    if (!base) return null;
-    return { base, dx: -650 * k, dy: 3800 * 4 * k * (1 - k) + 70 * k, rot: k * (Math.PI * 2 + 0.33) };   // up, a spin and a bit, and it lands crooked on the hull
-  }
-  function withToss(c, tz, fn) {   // draw something that belongs to the turret, moved to where the turret is now
-    if (!tz) { fn(); return; }
-    const bx = toSX(tz.base[0]), by = toSY(tz.base[1]);
-    c.save(); c.translate(bx + tz.dx * cam.s, by - tz.dy * cam.s); c.rotate(-tz.rot); c.translate(-bx, -by); fn(); c.restore();
-  }
-  function tossingBodies(now) {
-    if (!VR || !VR.built || !tossNow(now)) return null;
-    const hide = new Uint8Array(sim.plates.length + 1);
-    sim.plates.forEach((pl, k) => { if (VR.veh.parts[pl.part] && VR.veh.parts[pl.part].g === 't') hide[k + 1] = 1; });
-    return hide;
-  }
+  // where the turret has gone (after a blast it flies off and lands somewhere): moves things that belong to it
+  const compose = (a, b) => {   // the turret moved by a, then by b (a second blast can throw it again)
+    if (!a || !b) return a || b;
+    const c = Math.cos(b.a), s = Math.sin(b.a), dx = a.x - b.x0, dy = a.y - b.y0;
+    return { x0: a.x0, y0: a.y0, a: a.a + b.a, x: b.x + c * dx - s * dy, y: b.y + s * dx + c * dy };
+  };
+  function turretT() { return compose(VR.turret, VR.deb && V.turretMove(VR.deb)); }
+  const moveBy = (t, p) => { if (!t) return p; const c = Math.cos(t.a), s = Math.sin(t.a), dx = p[0] - t.x0, dy = p[1] - t.y0; return [t.x + c * dx - s * dy, t.y + s * dx + c * dy]; };
   const inTurret = (veh, m) => { const t = veh.parts.filter(p => p.g === 't').flatMap(p => [p.a, p.b]); if (!t.length) return false; const y0 = Math.min(...t.map(p => p[1])), x0 = Math.min(...t.map(p => p[0])), x1 = Math.max(...t.map(p => p[0])); return m.y + m.h / 2 > y0 && m.x + m.w / 2 > x0 && m.x + m.w / 2 < x1; };
-  function moduleState(k, now) {
-    if (!POST) return 0;
-    if (state === 'done') return POST.out.states[k];
-    return (now - POST.t0) / 1000 >= POST.reveal[k] ? POST.out.states[k] : 0;
+  function shownState(k, now) {   // what to show for a crew member or part right now (hits during the replay show up when the bits get there)
+    if (!VR.run) return 0;
+    const st = state === 'done' || state === 'ready' ? V.fateOf(VR.run).states : V.states(VR.run);
+    if (VR.reveal && state === 'flight') return (now - VR.flT0) / 1000 >= VR.reveal[k] ? st[k] : VR.before[k];
+    if (VR.boom && VR.veh.modules[k].type === 'crew' && !VR.boom.vent) return 2;   // nobody survives the ammo going up
+    return st[k];
   }
   function drawVehicle(c, now) {
-    const veh = VR.veh, geo = VR.geo && VR.geoOf === veh ? VR.geo : (VR.geo = V.geometry(veh), VR.geoOf = veh, VR.geo), deco = V.decoOf(veh) || {};
-    const tz = tossNow(now), editing = !!ED;
+    const veh = VR.veh, deco = V.decoOf(veh) || {}, tt = VR.run ? turretT() : null;
     // the ground
     const gy = toSY(0);
     if (gy < H) { c.fillStyle = '#12171c'; c.fillRect(0, gy, W, H - gy); c.strokeStyle = '#2b333c'; c.lineWidth = 1; c.beginPath(); c.moveTo(0, gy); c.lineTo(W, gy); c.stroke(); }
     // tracks, wheels and the gun barrel (drawn only: they aren't armor)
     if (deco.track) { const [a, b, t] = deco.track; c.fillStyle = '#1a2026'; c.strokeStyle = '#2b343e'; c.lineWidth = 1; c.beginPath(); c.roundRect(toSX(a), toSY(t), (b - a) * cam.s, t * cam.s, t * cam.s / 2); c.fill(); c.stroke(); }
     for (const [x, y, r] of deco.wheels || []) { c.fillStyle = '#212932'; c.strokeStyle = '#34404b'; c.beginPath(); c.arc(toSX(x), toSY(y), r * cam.s, 0, Math.PI * 2); c.fill(); c.stroke(); c.fillStyle = '#2c3640'; c.beginPath(); c.arc(toSX(x), toSY(y), r * cam.s * 0.3, 0, Math.PI * 2); c.fill(); }
-    if (deco.barrel) withToss(c, tz, () => {
-      const b = deco.barrel, x0 = Math.min(b.x0, b.x1), x1 = Math.max(b.x0, b.x1);
-      c.fillStyle = '#58636e'; c.fillRect(toSX(x0), toSY(b.y + b.d / 2), (x1 - x0) * cam.s, b.d * cam.s);
-      if (b.brake) c.fillRect(toSX(b.x1 - 30), toSY(b.y + b.d * 0.85), Math.min(260, Math.abs(b.x0 - b.x1) * 0.12) * cam.s, b.d * 1.7 * cam.s);
-      if (b.evac != null) c.fillRect(toSX(b.evac - 200), toSY(b.y + b.d * 0.75), 400 * cam.s, b.d * 1.5 * cam.s);
-    });
+    if (deco.barrel) {
+      const b = deco.barrel, x0 = Math.min(b.x0, b.x1), x1 = Math.max(b.x0, b.x1), m = p => moveBy(tt, p);
+      c.fillStyle = '#58636e';
+      path(c, [[x0, b.y - b.d / 2], [x1, b.y - b.d / 2], [x1, b.y + b.d / 2], [x0, b.y + b.d / 2]].map(m)); c.fill();
+      if (b.brake) { const w = Math.min(260, Math.abs(b.x0 - b.x1) * 0.12); path(c, [[b.x1 - 30, b.y - b.d * 0.85], [b.x1 - 30 + w, b.y - b.d * 0.85], [b.x1 - 30 + w, b.y + b.d * 0.85], [b.x1 - 30, b.y + b.d * 0.85]].map(m)); c.fill(); }
+      if (b.evac != null) { path(c, [[b.evac - 200, b.y - b.d * 0.75], [b.evac + 200, b.y - b.d * 0.75], [b.evac + 200, b.y + b.d * 0.75], [b.evac - 200, b.y + b.d * 0.75]].map(m)); c.fill(); }
+    }
     // the inside
     const hullPts = veh.parts.filter(p => p.g !== 't').flatMap(p => [p.a, p.b]), turPts = veh.parts.filter(p => p.g === 't').flatMap(p => [p.a, p.b]);
     c.fillStyle = '#151c23';
     if (hullPts.length > 2) { path(c, hullPts); c.fill(); }
-    if (turPts.length > 2) withToss(c, tz, () => { path(c, turPts); c.fill(); });
+    if (turPts.length > 2) { path(c, turPts.map(p => moveBy(tt, p))); c.fill(); }
     // what's inside: crew, ammo, fuel, engine…
     const fs = clamp(cam.s * 260, 9, 22);
-    veh.modules.forEach((m, k) => {
-      const go = () => drawModule(c, m, k, now, fs);
-      if (tz && inTurret(veh, m)) withToss(c, tz, go); else go();
-    });
-    // the armor: solid where it isn't being simulated, particles where it is
-    const cuts = VR.built && sim && !editing ? VR.built.cuts : null;
-    veh.parts.forEach((p, i) => {
-      const turret = p.g === 't', g = geo[i];
-      const go = pieces => pieces.forEach(poly => {
-        V.layerBands(p, { poly, f: g.f }).forEach(b => { path(c, b.poly); c.fillStyle = E.MATERIALS[b.mat].color; c.fill(); });
-        path(c, poly); c.strokeStyle = 'rgba(0,0,0,.45)'; c.lineWidth = 1; c.stroke();
+    veh.modules.forEach((m, k) => drawModule(c, m, k, now, fs, tt && inTurret(veh, m) ? tt : null, tt && !inTurret(veh, m) ? ringY(veh) : null));
+    // the armor itself: particles (drawn next), or solid while you're building
+    if (!VR.run) {
+      const geo = VR.geo && VR.geoOf === veh ? VR.geo : (VR.geo = V.geometry(veh), VR.geoOf = veh, VR.geo);
+      veh.parts.forEach((p, i) => {
+        const g = geo[i];
+        V.layerBands(p, { poly: g.poly, f: g.f }).forEach(b => { path(c, b.poly); c.fillStyle = E.MATERIALS[b.mat].color; c.fill(); });
+        path(c, g.poly); c.strokeStyle = 'rgba(0,0,0,.45)'; c.lineWidth = 1; c.stroke();
       });
-      const cut = cuts && cuts.find(k => k.i === i);
-      if (turret && tz) withToss(c, tz, () => go([g.poly]));
-      else if (cut) go(VR.built.statics.filter(s => s.i === i).map(s => s.poly));
-      else go([g.poly]);
-    });
-    if (editing) drawEditHandles(c);
+      if (ED) drawEditHandles(c);
+    }
   }
-  function drawModule(c, m, k, now, fs) {
-    const T = V.MODULES[m.type], st = moduleState(k, now), x = toSX(m.x), y = toSY(m.y + m.h), w = m.w * cam.s, h = m.h * cam.s;
+  // once the turret has been thrown off, boxes that reached up into it (a loader standing on the floor…) end at the turret ring
+  const ringY = veh => { const ys = veh.parts.filter(p => p.g === 't').flatMap(p => [p.a[1], p.b[1]]); return ys.length ? Math.min(...ys) : Infinity; };
+  function drawModule(c, m, k, now, fs, tt, clipY) {
+    const T = V.MODULES[m.type], st = VR.run ? shownState(k, now) : 0, top = clipY != null ? Math.min(m.y + m.h, clipY) : m.y + m.h;
+    if (top <= m.y) return;
+    const corners = [[m.x, m.y], [m.x + m.w, m.y], [m.x + m.w, top], [m.x, top]].map(p => moveBy(tt, p));
     c.fillStyle = st === 2 ? 'rgba(208,59,59,.42)' : st === 1 ? 'rgba(250,178,25,.25)' : T.color + '2b';
     c.strokeStyle = st === 2 ? '#ff6d60' : st === 1 ? '#fab219' : T.color + 'b0';
     c.lineWidth = ED && ED.sel && ED.sel.kind === 'mod' && ED.sel.i === k ? 2.5 : 1.2;
-    c.beginPath(); c.roundRect(x, y, w, h, Math.min(6, w / 4, h / 4)); c.fill(); c.stroke();
-    if (POST && state !== 'done') {   // flash when something hits it
-      const a = (now - POST.t0) / 1000 - POST.reveal[k];
-      if (a >= 0 && a < 0.4) { c.fillStyle = `rgba(255,255,255,${0.7 * (1 - a / 0.4)})`; c.fillRect(x, y, w, h); }
+    path(c, corners); c.fill(); c.stroke();
+    if (VR.reveal && state === 'flight') {   // flash when something hits it
+      const a = (now - VR.flT0) / 1000 - VR.reveal[k];
+      if (VR.reveal[k] > 0 && a >= 0 && a < 0.4) { c.fillStyle = `rgba(255,255,255,${0.7 * (1 - a / 0.4)})`; path(c, corners); c.fill(); }
     }
-    if (w > 14 && h > 14) {
-      const big = w > 70 && h > 46;
+  }
+  function drawModuleMarks(c, now) {   // icons and names go on top of the particles so you can always see them
+    const veh = VR.veh, tt = turretT(), fs = clamp(cam.s * 260, 9, 22);
+    veh.modules.forEach((m, k) => {
+      const inT = tt && inTurret(veh, m), mh = tt && !inT ? Math.min(m.h, ringY(veh) - m.y) : m.h, w = m.w * cam.s, h = mh * cam.s;
+      if (w < 14 || h < 14) return;
+      const st = shownState(k, now), T = V.MODULES[m.type], ctr = moveBy(inT ? tt : null, [m.x + m.w / 2, m.y + mh / 2]);
+      const cx = toSX(ctr[0]), cy = toSY(ctr[1]), big = w > 70 && h > 46;
       c.font = `${Math.min(fs, h * 0.5, w * 0.6)}px system-ui, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
-      c.fillStyle = '#fff'; c.globalAlpha = st === 2 ? 0.55 : 1; c.fillText(T.icon, x + w / 2, y + h / 2 - (big ? fs * 0.35 : 0)); c.globalAlpha = 1;
-      if (st === 2) { c.strokeStyle = '#ff6d60'; c.lineWidth = 2; const r = Math.min(fs, h * 0.4, w * 0.4) * 0.45, cx = x + w / 2, cy = y + h / 2 - (big ? fs * 0.35 : 0); c.beginPath(); c.moveTo(cx - r, cy - r); c.lineTo(cx + r, cy + r); c.moveTo(cx + r, cy - r); c.lineTo(cx - r, cy + r); c.stroke(); }
-      if (big) { c.font = `600 ${clamp(fs * 0.55, 9, 12)}px system-ui, sans-serif`; c.fillStyle = st === 2 ? '#ffb3ab' : '#c9d2da'; c.fillText(fitText(c, m.n, w - 6), x + w / 2, y + h / 2 + fs * 0.55); }
-    }
+      c.fillStyle = '#fff'; c.globalAlpha = st === 2 ? 0.6 : 0.95; c.fillText(T.icon, cx, cy - (big ? fs * 0.35 : 0)); c.globalAlpha = 1;
+      if (st === 2) { c.strokeStyle = '#ff6d60'; c.lineWidth = 2; const r = Math.min(fs, h * 0.4, w * 0.4) * 0.45, y = cy - (big ? fs * 0.35 : 0); c.beginPath(); c.moveTo(cx - r, y - r); c.lineTo(cx + r, y + r); c.moveTo(cx + r, y - r); c.lineTo(cx - r, y + r); c.stroke(); }
+      if (big) { c.font = `600 ${clamp(fs * 0.55, 9, 12)}px system-ui, sans-serif`; c.fillStyle = st === 2 ? '#ffb3ab' : '#c9d2da'; c.fillText(fitText(c, m.n, w - 6), cx, cy + fs * 0.55); }
+    });
   }
   function fitText(c, t, w) { if (c.measureText(t).width <= w) return t; while (t.length > 2 && c.measureText(t + '…').width > w) t = t.slice(0, -1); return t + '…'; }
 
   function overlays(c, now) {
     const P = projDef(), sh = sim && sim.shape;
     // chemical rounds are drawn as a picture while they fly in
-    if (sim && P.kind !== 'ke' && (state === 'ready' || state === 'approach')) {
+    if (sim && sh && P.kind !== 'ke' && (state === 'ready' && !VR || state === 'approach')) {
       const len = (sh.x1 - sh.x0) * cam.s, sc = Math.max(0.2, len / 60);
       let off = 0; if (state === 'approach') { const f = Math.min(1, (now - approachT0) / 450); off = -(1 - (1 - Math.pow(1 - f, 2))) * Math.max(W / cam.s, 400); }
       const p = fr.toV([sim.noseX + off, sim.aimY]);
@@ -379,20 +471,21 @@
       drawShell(c, P.kind === 'heat' ? 'heat' : P.kind === 'hesh' ? 'hesh' : 'he', toSX(p[0]), toSY(p[1]), Math.atan2(-fr.s, fr.c), sc, 1);
       c.restore();
     }
-    // aim line before firing
-    if (sim && state === 'ready') {
+    // the aim line before firing
+    if (sim && state === 'ready' && !VR) {
       const far = 3 * Math.max(W, H) / cam.s, h0 = fr.toV([sim.hitX, sim.aimY]), s0 = fr.toV([sim.hitX - far, sim.aimY]);
       reticle(c, s0, h0, '#ffb020', false);
     }
-    if (state === 'miss' && VR) {
-      const f = V.frameFor(VR.shot), far = 3 * Math.max(W, H) / cam.s, a = f.toV([-far, 0]), b = f.toV([far, 0]);
-      reticle(c, a, b, '#e86a5c', true);
+    if (VR && VR.run && (state === 'ready' || state === 'done')) {
+      const f = V.frameFor(shotOf(VR.veh)), far = 3 * Math.max(W, H) / cam.s;
+      if (VR.entry) { const e = f.toE(VR.entry); reticle(c, f.toV([e[0] - far, 0]), VR.entry, '#ffb020', false); }
+      else reticle(c, f.toV([-far, 0]), f.toV([far, 0]), '#e86a5c', true);
     }
-    if (hover && VR && !ED && (state === 'ready' || state === 'miss' || state === 'done')) {
+    if (hover && VR && VR.run && (state === 'ready' || state === 'done')) {
       c.strokeStyle = 'rgba(255,255,255,.55)'; c.lineWidth = 1.5; const x = toSX(hover[0]), y = toSY(hover[1]);
       c.beginPath(); c.arc(x, y, 7, 0, Math.PI * 2); c.moveTo(x - 11, y); c.lineTo(x + 11, y); c.moveTo(x, y - 11); c.lineTo(x, y + 11); c.stroke();
     }
-    if (POST) drawPost(c, now);
+    if (VR && VR.run) drawTrails(c, now);
     // flashes from explosions
     for (const f of flashes) {
       const life = f.big ? 1400 : 700, a = (now - f.at) / life, r = Math.max(8, (f.r || 40) * cam.s) * (0.4 + a * 0.9), x = toSX(f.x), y = toSY(f.y);
@@ -410,7 +503,8 @@
     // clock
     if (!sim) return;
     c.textAlign = 'right'; c.textBaseline = 'top'; c.font = '700 13px "JetBrains Mono", monospace';
-    c.fillStyle = 'rgba(9,12,15,.8)'; const tt = `t = ${sim.time.toFixed(1)} µs`; const tw = c.measureText(tt).width;
+    c.fillStyle = 'rgba(9,12,15,.8)';
+    const tt = state === 'flight' ? '⏩ following the bits' : state === 'debris' ? '⏩ real time' : `t = ${(sim.time - (VR && VR.run ? sim.shotT0 || 0 : 0)).toFixed(1)} µs`, tw = c.measureText(tt).width;
     const cy = W - tw - 22 < tagEnd + 8 ? 30 : 8;   // narrow screen: drop below the label
     c.fillRect(W - tw - 22, cy, tw + 14, 24); c.fillStyle = '#ffb020'; c.fillText(tt, W - 15, cy + 5);
   }
@@ -421,34 +515,54 @@
     const x = toSX(at[0]), y = toSY(at[1]);
     c.strokeStyle = color; c.lineWidth = 2; c.beginPath(); c.arc(x, y, 9, 0, Math.PI * 2); c.moveTo(x - 15, y); c.lineTo(x + 15, y); c.moveTo(x, y - 15); c.lineTo(x, y + 15); c.stroke();
   }
-  function drawPost(c, now) {
-    const tp = state === 'done' ? Infinity : (now - POST.t0) / 1000, d0 = tp * POST.vs, out = POST.out;
-    if (state !== 'done') {   // tracers: the shell and the bits of armor flying through the inside
-      c.save(); c.globalCompositeOperation = 'lighter'; c.lineCap = 'round';
-      for (const r of out.rays) {
-        const d = d0 - (r.delay || 0); if (d <= 0) continue;
-        const head = Math.min(d, r.stop), tail = Math.max(0, head - (r.proj && r.big ? 700 : 260)), fade = d > r.stop ? Math.max(0, 1 - (d - r.stop) / 900) : 1;
-        if (fade <= 0 || head <= tail) continue;
-        c.strokeStyle = r.frag ? `rgba(255,214,90,${0.75 * fade})` : r.proj ? `rgba(255,236,190,${fade})` : `rgba(255,150,60,${(r.big ? 0.95 : 0.6) * fade})`;
-        c.lineWidth = r.proj && r.big ? 3.2 : r.big ? 2.2 : 1.2;
-        c.beginPath(); c.moveTo(toSX(r.x + r.dx * tail), toSY(r.y + r.dy * tail)); c.lineTo(toSX(r.x + r.dx * head), toSY(r.y + r.dy * head)); c.stroke();
+  function drawTrails(c, now) {
+    c.save(); c.globalCompositeOperation = 'lighter'; c.lineCap = 'round';
+    if (physicsOn() || state === 'approach') {   // fast loose bits leave short streaks
+      const al = sim.alist, k = 110;
+      c.lineWidth = 1.3; c.beginPath();
+      let n = 0;
+      for (let q = 0; q < sim.an && n < 3000; q++) {
+        const i = al[q];
+        if (!sim.alive[i] || !sim.awake[i] || (sim.body[i] > 0 && sim.attached[i])) continue;
+        const vx = sim.vx[i], vy = sim.vy[i];
+        if (vx * vx + vy * vy < 0.15 * 0.15) continue;
+        const a = fr.toV([sim.px[i], sim.py[i]]), b = fr.toV([sim.px[i] - vx * k, sim.py[i] - vy * k]);
+        c.moveTo(toSX(a[0]), toSY(a[1])); c.lineTo(toSX(b[0]), toSY(b[1])); n++;
       }
-      c.restore();
+      c.strokeStyle = 'rgba(255,170,70,.55)'; c.stroke();
     }
-    // smoke and flames
-    const fireMods = VR.veh.modules.filter((m, k) => m.type === 'fuel' && moduleState(k, now) === 2);
+    if (state === 'flight' && VR.fl) {   // the lumps still flying, and the explosive shell's fragments
+      const d0 = (now - VR.flT0) / 1000 * VR.vs;
+      for (const p of VR.fl.pieces) {
+        const head = Math.min(p.stop, d0), tail = Math.max(0, head - (p.own ? 700 : 300)), fade = d0 > p.stop ? Math.max(0, 1 - (d0 - p.stop) / 900) : 1;
+        if (fade <= 0 || head <= tail) continue;
+        c.strokeStyle = p.own ? `rgba(255,236,190,${fade})` : `rgba(255,150,60,${(p.big > 3 ? 0.9 : 0.55) * fade})`; c.lineWidth = p.own ? 3 : p.big > 3 ? 2.2 : 1.2;
+        c.beginPath(); c.moveTo(toSX(p.X + p.dx * tail), toSY(p.Y + p.dy * tail)); c.lineTo(toSX(p.X + p.dx * head), toSY(p.Y + p.dy * head)); c.stroke();
+      }
+      for (const f of VR.fl.frags) {
+        const d = d0 - (f.delay || 0); if (d <= 0) continue;
+        const head = Math.min(d, f.stop), tail = Math.max(0, head - 260), fade = d > f.stop ? Math.max(0, 1 - (d - f.stop) / 900) : 1;
+        if (fade <= 0 || head <= tail) continue;
+        c.strokeStyle = `rgba(255,214,90,${0.75 * fade})`; c.lineWidth = 1.2;
+        c.beginPath(); c.moveTo(toSX(f.x + f.dx * tail), toSY(f.y + f.dy * tail)); c.lineTo(toSX(f.x + f.dx * head), toSY(f.y + f.dy * head)); c.stroke();
+      }
+    }
+    c.restore();
+    // fire and smoke
     const t = now / 1000;
-    for (const m of fireMods) {
-      for (let k = 0; k < 7; k++) {
-        const f = (t * 1.6 + k / 7) % 1, x = m.x + m.w * (0.15 + 0.7 * ((k * 0.37) % 1)), y = m.y + m.h * 0.3 + f * (m.h * 0.9 + 500);
+    VR.veh.modules.forEach((m, k) => {
+      if (m.type !== 'fuel' || shownState(k, now) !== 2) return;
+      if (!VR.fireAt) VR.fireAt = now;
+      for (let j = 0; j < 7; j++) {
+        const f = (t * 1.6 + j / 7) % 1, x = m.x + m.w * (0.15 + 0.7 * ((j * 0.37) % 1)), y = m.y + m.h * 0.3 + f * (m.h * 0.9 + 500);
         c.fillStyle = `rgba(255,${Math.round(120 + 100 * (1 - f))},40,${0.55 * (1 - f)})`;
         c.beginPath(); c.arc(toSX(x), toSY(y), Math.max(3, (90 + 120 * (1 - f)) * cam.s), 0, Math.PI * 2); c.fill();
       }
-    }
-    if (POST.boom) {
-      const a = (now - POST.boom.at) / 1000;
-      for (let k = 0; k < 9; k++) {
-        const f = ((a * 0.35 + k / 9) % 1), x = POST.boom.x + Math.sin(k * 2.1) * 500 * f, y = POST.boom.y + 400 + f * 2600;
+    });
+    if (VR.boom) {
+      const a = (now - VR.boom.at) / 1000;
+      for (let j = 0; j < 9; j++) {
+        const f = ((a * 0.35 + j / 9) % 1), x = VR.boom.x + Math.sin(j * 2.1) * 500 * f, y = VR.boom.y + 400 + f * 2600;
         c.fillStyle = `rgba(70,74,80,${0.35 * (1 - f) * Math.min(1, a * 2)})`;
         c.beginPath(); c.arc(toSX(x), toSY(y), (250 + 700 * f) * cam.s, 0, Math.PI * 2); c.fill();
       }
@@ -461,9 +575,9 @@
   };
   function formulaEstimate(P, v) {   // the classic formulas from the Calculator, for comparison
     const d = P.d, g = P.group;
+    if (P.kind === 'heat') return Math.round(d.q * d.cal);   // a shaped charge goes about its design depth
     let s = null;
-    if (P.kind === 'heat') s = { type: 'heat', cal: d.cal, q: Math.max(0, [3.2, 4.6, 6].indexOf(d.q)) };
-    else if (P.kind === 'hesh') s = { type: 'hesh', cal: d.cal };
+    if (P.kind === 'hesh') s = { type: 'hesh', cal: d.cal };
     else if (P.kind === 'he') s = { type: 'he', cal: d.cal };
     else if (d.shape === 'rod') s = { type: 'apfsds', len: d.len, v };
     else if (/APCR/.test(g)) s = { type: 'apcr', cal: P.bore || d.cal, v };
@@ -473,18 +587,19 @@
   }
   function liveLine() {
     const r = sim.res;
-    return `⏱ ${sim.time.toFixed(0)} µs · ${sim.n.toLocaleString()} particles · ${sim.broken.toLocaleString()} bonds snapped · 🔥 hottest ${Math.round((sim.maxT || 293) - 273).toLocaleString()} °C${r && r.depth ? ` · deepest ${Math.round(r.depth)} mm` : ''}`;
+    let awake = '';
+    if (VR && VR.run) { let a = 0; for (let q = 0; q < sim.an; q++) a += sim.awake[sim.alist[q]]; awake = ` · ${a.toLocaleString()} awake`; }
+    return `${VR && VR.run ? `Shot ${VR.shots} · ` : ''}⏱ ${(sim.time - (VR && VR.run ? sim.shotT0 || 0 : 0)).toFixed(0)} µs · ${sim.n.toLocaleString()} particles${awake} · ${sim.broken.toLocaleString()} bonds snapped · 🔥 hottest ${Math.round((sim.maxT || 293) - 273).toLocaleString()} °C${r && r.depth ? ` · deepest ${Math.round(r.depth)} mm` : ''}`;
   }
   function renderLive() { $('sb-live').textContent = sim ? liveLine() : ''; }
   const estHTML = (P, est) => est ? `<p class="sb-est">📏 Classic formula: this ${esc(P.name)} beats about <b>${est.toLocaleString()} mm</b> of flat armor steel${P.kind === 'ke' ? ` at ${speedOf().toLocaleString()} m/s` : ''}. The sim is a 2D slice, so it won't match exactly.</p>` : '';
   function renderResult() {
     const box = $('sb-result'), P = projDef();
     if (ED) { box.innerHTML = '<span class="badge idle">BUILDING</span><div class="txt">You\'re building a vehicle. Press <b>Save &amp; try it</b> to shoot at it.</div>'; $('sb-live').textContent = ''; return; }
-    if (state === 'miss') { box.innerHTML = '<span class="badge idle">AIM</span><div class="txt">That shot would miss the armor. <b>Click on the vehicle</b> where you want the shell to hit.</div>'; $('sb-live').textContent = ''; return; }
     if (!sim) return;
-    if (VR && (state === 'post' || state === 'done')) { renderVehResult(); return; }
+    if (VR && VR.run) { renderVehResult(); return; }
     if (state !== 'done') {
-      const msg = state === 'ready' ? (VR ? 'Press <b>Fire</b> (or Space). Click the vehicle to aim somewhere else.' : 'Press <b>Fire</b> (or Space). Click the armor to aim somewhere else.') : 'Simulating… every particle is doing its own physics.';
+      const msg = state === 'ready' ? 'Press <b>Fire</b> (or Space). Click the armor to aim somewhere else.' : 'Simulating… every particle is doing its own physics.';
       box.innerHTML = `<span class="badge idle">${state === 'ready' ? 'READY' : 'LIVE'}</span><div class="txt">${msg}</div>`;
       $('sb-live').textContent = state === 'ready' ? `${sim.n.toLocaleString()} particles · ${sim.nb.toLocaleString()} bonds · particle size ${sim.h.toFixed(sim.h < 1 ? 2 : 1)} mm` : liveLine();
       return;
@@ -492,7 +607,7 @@
     const r = sim.measure(), v = verdict, [st, badge] = SB_WORDS[v] || SB_WORDS.stop, est = formulaEstimate(P, speedOf());
     const kind = P.kind;
     let text;
-    if (v === 'pen') text = kind === 'heat' ? `The jet cut all the way through${r.residual ? ` and came out at ${Math.round(r.residual * 1000).toLocaleString()} m/s` : ''}.` : kind === 'he' ? 'The blast tore through and sent fragments out the back.' : `It punched all the way through and came out at ${Math.round(r.residual * 1000).toLocaleString()} m/s.`;
+    if (v === 'pen') text = kind === 'heat' ? `The jet cut all the way through${r.residual ? ` and came out at ${Math.round(r.residual * 1000).toLocaleString()} m/s` : ''}.` : kind === 'he' ? 'The blast tore through and sent fragments out the back.' : r.residual < 0.05 ? 'It only just got through, with almost no speed left.' : `It punched all the way through and came out at ${Math.round(r.residual * 1000).toLocaleString()} m/s.`;
     else if (v === 'rico') text = 'The shell glanced off the armor.';
     else if (v === 'spall') text = kind === 'hesh' ? 'The shock wave knocked a scab of metal off the inside of the armor.' : `It didn't get through, but pieces broke off the inside (spall). Deepest point: ${Math.round(r.depth)} mm.`;
     else text = kind === 'hesh' ? 'The shock wave wasn\'t strong enough to knock anything off the inside.' : kind === 'he' ? 'The blast didn\'t get through.' : `The armor held. The deepest the ${kind === 'heat' ? 'jet' : 'shell'} got was ${Math.round(r.depth)} mm.`;
@@ -509,30 +624,40 @@
       ${estHTML(P, est)}</div>`;
     $('sb-live').textContent = liveLine();
   }
+  function armorLine(L) {   // what happened at the armor on the last shot, in words
+    const g = L.group, kind = L.P.kind, what = g.map(h => h.part.n.toLowerCase()).join(' and the '), los = g.reduce((s, h) => s + h.T / Math.max(0.05, h.cos), 0);
+    const ang = Math.round(Math.acos(Math.min(1, g[0].cos)) / DEG), armor = `the ${what} (${g.map(h => `${h.T} mm`).join(' + ')} at ${ang}° = ${Math.round(los)} mm in the way)`;
+    if (L.v === 'pen') return kind === 'heat' ? `✓ The jet cut through ${armor}.` : kind === 'he' ? `✓ The blast broke through ${armor}.` : L.resid < 0.05 ? `✓ It only just got through ${armor}, with almost no speed left.` : `✓ It punched through ${armor} and flew on at ${Math.round(L.resid * 1000).toLocaleString()} m/s.`;
+    if (L.v === 'rico') return `↗ It bounced off ${armor}.`;
+    if (L.v === 'spall') return `💥 It didn't get through ${armor}, but bits broke off the inside.`;
+    return `✗ ${armor.charAt(0).toUpperCase() + armor.slice(1)} stopped it.`;
+  }
   function renderVehResult() {
-    const box = $('sb-result'), P = projDef(), r = sim.measure(), v = verdict, out = POST.out, fate = out.fate, veh = VR.veh;
-    const g = VR.built.group, what = g.map(h => h.part.n.toLowerCase()).join(' and the '), los = g.reduce((s, h) => s + h.T / Math.max(0.05, h.cos), 0);
-    const first = g[0], ang = Math.round(Math.acos(Math.min(1, first.cos)) / DEG), kind = P.kind;
-    const armor = `the ${what} (${g.map(h => `${h.T} mm`).join(' + ')} at ${ang}° = ${Math.round(los)} mm in the way)`;
-    let line;
-    if (v === 'pen') line = kind === 'heat' ? `✓ The jet cut through ${armor}.` : kind === 'he' ? `✓ The blast broke through ${armor}.` : `✓ It punched through ${armor} and flew on at ${Math.round(r.residual * 1000).toLocaleString()} m/s.`;
-    else if (v === 'rico') line = `↗ It bounced off ${armor}.`;
-    else if (v === 'spall') line = `💥 It didn't get through ${armor}, but bits broke off the inside.`;
-    else line = `✗ ${armor.charAt(0).toUpperCase() + armor.slice(1)} stopped it.`;
-    if (P.aphe && out.burst) line += ' Then its explosive filling went off inside!';
-    if (state === 'post') {
-      box.innerHTML = `<span class="badge idle">LIVE</span><div class="txt">${esc(line)}<br>Following the bits flying around inside…</div>`;
+    const box = $('sb-result'), veh = VR.veh, run = VR.run;
+    if (!VR.shots) {
+      box.innerHTML = `<span class="badge idle">READY</span><div class="txt">The whole ${esc(veh.name)} is made of ${sim.n.toLocaleString()} particles. Click where you want to hit, then press <b>Fire</b>. Damage stays, so you can keep shooting it; <b>Repair</b> fixes it.</div>`;
+      $('sb-live').textContent = `${sim.n.toLocaleString()} particles · ${sim.nb.toLocaleString()} bonds · particle size ${sim.h.toFixed(1)} mm`;
+      return;
+    }
+    if (state !== 'done') {
+      const msg = state === 'approach' || state === 'running' ? 'Simulating the hit… every particle is doing its own physics.' : state === 'inside' ? 'Bits are flying around inside…' : state === 'flight' ? 'Following the bits flying around inside…' : state === 'blast' ? '💥 The ammo exploded!' : state === 'debris' ? '💥 Pieces are flying off…' : 'Paused.';
+      box.innerHTML = `<span class="badge idle">LIVE</span><div class="txt">${VR.last ? esc(armorLine(VR.last)) + '<br>' : ''}${msg}</div>`;
       $('sb-live').textContent = liveLine(); return;
     }
-    const order = V.MOD_KEYS, mods = veh.modules.map((m, k) => ({ m, k, s: out.states[k] })).sort((a, b) => order.indexOf(a.m.type) - order.indexOf(b.m.type));
+    const { states, fate } = V.fateOf(run), L = VR.last, P = L ? L.P : projDef();
+    let line = L ? armorLine(L) : '';
+    if (VR.burst) line += ' Then its explosive filling went off inside!';
+    const order = V.MOD_KEYS, mods = veh.modules.map((m, k) => ({ m, k, s: states[k] })).sort((a, b) => order.indexOf(a.m.type) - order.indexOf(b.m.type));
     const chips = mods.map(({ m, s }) => `<span class="mchip s${s}">${V.MODULES[m.type].icon} ${esc(m.n)} <b>${s === 2 ? '✖ ' : s === 1 ? '⚠ ' : '✓ '}${V.MODULES[m.type].words[s]}</b></span>`).join('');
     const crew = veh.modules.filter(m => m.type === 'crew').length, ko = mods.filter(x => x.m.type === 'crew' && x.s === 2).length;
+    const g = L && L.group, los = g ? g.reduce((s, h) => s + h.T / Math.max(0.05, h.cos), 0) : 0;
     const stats = [
-      ['Armor hit', esc(first.part.n)], ['In the way', `${Math.round(los)} mm`],
-      v === 'pen' && kind !== 'he' ? ['Exit speed', `${Math.round(r.residual * 1000).toLocaleString()} m/s`] : ['Deepest point', `${Math.round(r.depth)} mm`],
-      crew ? ['Crew out', `${ko} of ${crew}`] : null, ['Hottest', `${Math.round(r.maxT - 273).toLocaleString()} °C`],
+      ['Shots fired', VR.shots.toLocaleString()],
+      g ? ['Armor hit', esc(g[0].part.n)] : null, g ? ['In the way', `${Math.round(los)} mm`] : null,
+      L ? (L.v === 'pen' && P.kind !== 'he' ? ['Exit speed', `${Math.round(L.resid * 1000).toLocaleString()} m/s`] : ['Deepest point', `${Math.round(L.depth)} mm`]) : null,
+      crew ? ['Crew out', `${ko} of ${crew}`] : null,
     ].filter(Boolean);
-    box.innerHTML = `<span class="badge ${fate.st}">${fate.badge}</span><div class="txt">${esc(line)} ${esc(fate.text)}
+    box.innerHTML = `<span class="badge ${fate.st}">${fate.badge}</span><div class="txt">${esc(line)} ${esc(fate.text)}${fate.id === 'fine' || fate.id === 'damaged' ? ' Fire again: the damage stays.' : ''}
       <div class="mchips">${chips}</div>
       <div class="sb-stats">${stats.map(([k, val]) => `<div><small>${k}</small><b>${val}</b></div>`).join('')}</div>
       ${estHTML(P, formulaEstimate(P, speedOf()))}</div>`;
@@ -544,7 +669,7 @@
   $('sb-proj').innerHTML = groups.map(g => `<optgroup label="${esc(g)}">${E.PROJECTILES.filter(p => p.group === g).map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</optgroup>`).join('');
   $('sb-preset').innerHTML = E.ARMORS.map(a => `<option value="${a.id}">${esc(a.name)}</option>`).join('') + '<option value="custom">Custom (your own)</option>';
   const matGroups = [...new Set(E.MAT_KEYS.map(k => E.MATERIALS[k].group))];
-  const matOptions = sel => matGroups.map(g => `<optgroup label="${esc(g)}">${E.MAT_KEYS.filter(k => E.MATERIALS[k].group === g).map(k => `<option value="${k}" ${k === sel ? 'selected' : ''}>${esc(E.MATERIALS[k].name)}</option>`).join('')}</optgroup>`).join('');
+  const matOptions = sel => matGroups.map(g => `<optgroup label="${esc(g)}">${E.MAT_KEYS.filter(k => E.MATERIALS[k].group === g && !E.MATERIALS[k].hidden).map(k => `<option value="${k}" ${k === sel ? 'selected' : ''}>${esc(E.MATERIALS[k].name)}</option>`).join('')}</optgroup>`).join('');
   const seg = (id, map, cur, key) => { $(id).innerHTML = Object.entries(map).map(([k, v]) => `<button data-${key}="${k}" class="${k === cur ? 'on' : ''}">${Array.isArray(v) ? v[0] : v}</button>`).join(''); };
 
   function renderProjControls() {
@@ -553,7 +678,7 @@
     const ke = P.kind === 'ke';
     $('sb-v-field').hidden = !ke; $('sb-v-note').hidden = ke && !P.aphe;
     if (ke) { $('sb-v').value = speedOf(); $('sb-v-out').textContent = speedOf().toLocaleString() + ' m/s'; }
-    $('sb-v-note').textContent = P.aphe ? 'Has a little explosive inside: if it gets into a vehicle, it goes off a moment later.' : P.kind === 'heat' ? 'Speed doesn\'t matter: the jet does the work (its tip flies at ' + P.d.vTip + ' km/s).' : 'Speed doesn\'t matter: it works by exploding on contact.';
+    $('sb-v-note').textContent = P.aphe ? 'Has a little explosive inside: if it gets into a vehicle, it goes off a moment later.' : P.d.tandem ? 'Two charges: a small one sets off reactive armor first, then the main jet goes through.' : P.kind === 'heat' ? 'Speed doesn\'t matter: the jet does the work (its tip flies at ' + P.d.vTip + ' km/s).' : 'Speed doesn\'t matter: it works by exploding on contact.';
     $('sb-aim').value = SB.aim; $('sb-aim-out').textContent = (SB.aim > 0 ? '+' : '') + SB.aim + ' mm';
     $('sb-proj-art').innerHTML = projSVG(P);
     const d = P.d, size = d.shape === 'rod' ? `${d.dia} mm × ${d.len} mm rod` : `${P.bore ? P.bore + ' mm gun, ' + d.cal + ' mm penetrator' : d.cal + ' mm'}${d.len ? ' · ' + d.len + ' mm long' : ''}`;
@@ -593,7 +718,7 @@
     $('sb-target-kind').textContent = ED ? 'builder' : veh ? 'vehicles' : 'cut-aways';
     $('sb-aim-field').hidden = veh;
     cv.parentElement.classList.toggle('veh', veh || !!ED);
-    cv.setAttribute('aria-label', veh ? 'Side cut-away of the vehicle. Click it to choose where the shell hits; the part being hit is simulated as particles.' : 'Particle simulation of the projectile and the armor. Drag to look around, scroll to zoom, click the armor to aim.');
+    cv.setAttribute('aria-label', veh ? 'Side cut-away of the vehicle, all made of particles. Click it to choose where the shell hits.' : 'Particle simulation of the projectile and the armor. Drag to look around, scroll to zoom, click the armor to aim.');
     if (!veh || ED) return;
     const list = allVeh(), vg = [...new Set(list.map(v => v.group))];
     $('sb-veh').innerHTML = vg.map(g => `<optgroup label="${esc(g)}">${list.filter(v => v.group === g).map(v => `<option value="${esc(v.id)}">${esc(v.name)}</option>`).join('')}</optgroup>`).join('');
@@ -607,19 +732,20 @@
   let hover = null;
   function renderAimInfo(hoverPt) {
     if (SB.target !== 'vehicle' || ED) return;
-    const veh = vehDef(), shot = hoverPt ? { ...shotOf(veh), at: hoverPt } : shotOf(veh), pr = V.probe(veh, shot);
+    const veh = vehDef(), shot = hoverPt ? { ...shotOf(veh), at: hoverPt } : shotOf(veh), pr = V.probe(veh, shot, VR && VR.veh === veh ? VR.run : null);
     $('sb-aim-info').innerHTML = pr
       ? `🎯 ${hoverPt ? 'Pointing at' : 'Aiming at'} ${pr.map(p => `<b>${esc(p.name)}</b>: ${p.T} mm at ${p.ang}° → <b>${p.los} mm</b> in the way`).join(', then ')}`
       : `🎯 ${hoverPt ? 'No armor there.' : 'Not aimed at the armor.'} Click the vehicle where you want to hit.`;
   }
   function renderControlsState() {
-    const running = state === 'running' || state === 'approach' || state === 'post';
-    $('sb-fire').textContent = state === 'done' ? '🔥 Fire again' : '🔥 Fire';
-    $('sb-fire').disabled = running || !!ED;
-    $('sb-pause').disabled = !(state === 'running' || state === 'approach' || state === 'paused');
+    const running = busyNow();
+    $('sb-fire').textContent = state === 'done' ? (VR && VR.run ? '🔥 Fire again' : '🔥 Fire again') : '🔥 Fire';
+    $('sb-fire').disabled = running || !!ED || state === 'paused';
+    $('sb-pause').disabled = !(physicsOn() || state === 'approach' || state === 'paused');
     $('sb-pause').textContent = state === 'paused' ? '▶ Resume' : '⏸ Pause';
     $('sb-step').disabled = state !== 'paused';
-    $('sb-reset').disabled = !!ED;
+    $('sb-reset').disabled = !!ED || running;
+    $('sb-reset').textContent = VR && VR.run ? '🔧 Repair' : '↺ Reset';
     seg('sb-view', VIEWS, SB.view, 'view'); seg('sb-speed', SPEEDS, SB.speed, 'speed'); seg('sb-quality', QUALITY, SB.quality, 'quality');
     $('sb-legend').innerHTML = legendHTML();
   }
@@ -630,19 +756,20 @@
     if (SB.view === 'speed') return `<span>💨 Speed</span><i style="background:${bar(SPEED)}"></i><span>still → 3 km/s</span>${inside}`;
     if (SB.view === 'damage') return `<span>💔 Damage</span><i style="background:${bar(DMG)}"></i><span>intact → shattered</span><span><b style="color:#aa6ef0">■</b> torn off</span>${inside}`;
     const used = new Set(VR ? VR.veh.parts.flatMap(p => p.layers.map(l => l.mat)) : SB.plates.flatMap(p => p.layers.map(l => l.mat)));
-    return [...used].map(k => `<span><b style="color:${E.MATERIALS[k].color}">■</b> ${esc(E.MATERIALS[k].name)}</span>`).join('') + (VR ? inside + '<span>· particles = the part being hit</span>' : '<span>· glowing = hot</span>');
+    return [...used].map(k => `<span><b style="color:${E.MATERIALS[k].color}">■</b> ${esc(E.MATERIALS[k].name)}</span>`).join('') + inside + '<span>· glowing = hot</span>';
   }
   let toastT = 0;
   function toast(msg) { const t = $('sb-toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 3400); }
 
   // events: projectile and plain armor
-  const vehView = () => SB.target === 'vehicle';   // vehicles keep the view; plain armor re-fits around the new shell
-  $('sb-proj').addEventListener('change', e => { SB.proj = e.target.value; SB.v = null; renderProjControls(); rebuildSoon(vehView()); });
-  $('sb-v').addEventListener('input', e => { SB.v = +e.target.value; $('sb-v-out').textContent = SB.v.toLocaleString() + ' m/s'; rebuildSoon(vehView()); });
+  const vehMode = () => SB.target === 'vehicle';
+  const projChanged = () => { if (vehMode()) { if (!busyNow()) { renderResult(); draw(); } } else rebuildSoon(); };   // a vehicle keeps its damage: the new shell is used for the next shot
+  $('sb-proj').addEventListener('change', e => { SB.proj = e.target.value; SB.v = null; renderProjControls(); saveSB(); projChanged(); });
+  $('sb-v').addEventListener('input', e => { SB.v = +e.target.value; $('sb-v-out').textContent = SB.v.toLocaleString() + ' m/s'; saveSB(); projChanged(); });
   $('sb-aim').addEventListener('input', e => { SB.aim = +e.target.value; $('sb-aim-out').textContent = (SB.aim > 0 ? '+' : '') + SB.aim + ' mm'; rebuildSoon(); });
   $('sb-preset').addEventListener('change', e => {
     const a = E.ARMORS.find(x => x.id === e.target.value); if (!a) return;
-    SB.preset = a.id; SB.plates = clone(a.plates).map(p => ({ ...p, len: 'auto' })); SB.aim = 0;
+    SB.preset = a.id; SB.plates = clone(a.plates).map(p => ({ ...p, len: p.len || 'auto' })); SB.aim = 0;
     renderPlates(); renderProjControls(); rebuildSoon();
   });
   const customized = () => { SB.preset = 'custom'; $('sb-preset').value = 'custom'; };
@@ -677,23 +804,23 @@
   });
   // events: vehicles
   $('sb-target').addEventListener('click', e => {
-    const b = e.target.closest('[data-target]'); if (!b || b.dataset.target === SB.target) return;
+    const b = e.target.closest('[data-target]'); if (!b || b.dataset.target === SB.target || busyNow()) return;
     SB.target = b.dataset.target; saveSB(); renderTarget(); renderControlsState(); rebuild();
   });
   $('sb-veh').addEventListener('change', e => { SB.veh = e.target.value; SB.vaim = null; saveSB(); renderTarget(); rebuild(); });
   $('sb-from').addEventListener('click', e => {
     const b = e.target.closest('[data-from]'); if (!b) return;
-    SB.from = b.dataset.from; saveSB(); renderTarget(); rebuild(true);
+    SB.from = b.dataset.from; saveSB(); renderTarget(); aimChanged();
   });
-  $('sb-tilt').addEventListener('input', e => { SB.tilt = +e.target.value; $('sb-tilt-out').textContent = SB.tilt === 0 ? 'level' : SB.tilt > 0 ? `${SB.tilt}° down` : `${-SB.tilt}° up`; renderAimInfo(); rebuildSoon(true); });
-  $('sb-veh-edit').addEventListener('click', () => startEdit(vehDef(), false));
-  $('sb-veh-new').addEventListener('click', () => startEdit(null, true));
+  $('sb-tilt').addEventListener('input', e => { SB.tilt = +e.target.value; $('sb-tilt-out').textContent = SB.tilt === 0 ? 'level' : SB.tilt > 0 ? `${SB.tilt}° down` : `${-SB.tilt}° up`; saveSB(); aimChanged(); });
+  $('sb-veh-edit').addEventListener('click', () => { if (!busyNow()) startEdit(vehDef(), false); });
+  $('sb-veh-new').addEventListener('click', () => { if (!busyNow()) startEdit(null, true); });
   // events: the bar under the picture
   $('sb-fire').addEventListener('click', fire);
-  $('sb-reset').addEventListener('click', () => { rebuild(!!VR); });
+  $('sb-reset').addEventListener('click', () => { if (!busyNow()) { rebuild(!!VR); if (VR && VR.run) toast('Good as new!'); } });
   $('sb-pause').addEventListener('click', () => {
-    if (state === 'running' || state === 'approach') state = 'paused';
-    else if (state === 'paused') { state = 'running'; runStart = performance.now(); loop(); }
+    if (physicsOn() || state === 'approach') { paused = state === 'approach' ? 'running' : state; state = 'paused'; }
+    else if (state === 'paused') { state = paused || 'running'; paused = null; runStart = performance.now(); lastNow = 0; loop(); }
     renderControlsState();
   });
   $('sb-step').addEventListener('click', () => {
@@ -705,7 +832,7 @@
     const v = e.target.closest('[data-view]'), sp = e.target.closest('[data-speed]'), q = e.target.closest('[data-quality]');
     if (v) { SB.view = v.dataset.view; saveSB(); renderControlsState(); draw(); }
     if (sp) { SB.speed = sp.dataset.speed; saveSB(); renderControlsState(); }
-    if (q) { SB.quality = q.dataset.quality; saveSB(); renderControlsState(); if (!ED) rebuild(!!VR); }
+    if (q && !busyNow()) { SB.quality = q.dataset.quality; saveSB(); renderControlsState(); if (!ED) rebuild(!!VR); }
   });
   const stopGlide = () => { glide = null; };
   $('sb-zoom-in').addEventListener('click', () => { stopGlide(); cam.s *= 1.3; draw(); });
@@ -724,7 +851,7 @@
       if (gun && d && d.barrel) gun.barrel = Math.round(gun.x - d.barrel.x1);
       v = V.sanitize({ ...c, id: undefined, name: ('My ' + base.name).slice(0, 40) });
     }
-    if (state === 'running' || state === 'approach' || state === 'paused') state = 'idle';
+    if (state === 'paused') state = 'idle';
     ED = { veh: v, srcId: base && base.mine && !fresh ? base.id : null, sel: null, drag: null };
     $('ed-name').value = v.name; $('ed-tracks').checked = v.tracks !== false; $('ed-link').hidden = true; $('ed-delete').hidden = !ED.srcId;
     cv.parentElement.classList.add('editing');
@@ -854,6 +981,15 @@
       const m = v.modules[sel.i], x = toSX(m.x + m.w), y = toSY(m.y + m.h);
       c.fillStyle = '#ffb020'; c.strokeStyle = '#101418'; c.fillRect(x - 6, y - 6, 12, 12); c.strokeRect(x - 6, y - 6, 12, 12);
     }
+    // names and icons on the boxes
+    const fs = clamp(cam.s * 260, 9, 22);
+    v.modules.forEach(m => {
+      const w = m.w * cam.s, h = m.h * cam.s; if (w < 14 || h < 14) return;
+      const cx = toSX(m.x + m.w / 2), cy = toSY(m.y + m.h / 2), big = w > 70 && h > 46;
+      c.font = `${Math.min(fs, h * 0.5, w * 0.6)}px system-ui, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#fff';
+      c.fillText(V.MODULES[m.type].icon, cx, cy - (big ? fs * 0.35 : 0));
+      if (big) { c.font = `600 ${clamp(fs * 0.55, 9, 12)}px system-ui, sans-serif`; c.fillStyle = '#c9d2da'; c.fillText(fitText(c, m.n, w - 6), cx, cy + fs * 0.55); }
+    });
   }
   function edHit(wx, wy) {
     const v = ED.veh, tol = 13 / cam.s;
@@ -930,7 +1066,7 @@
       if (drag.moved) { cam.x = drag.cx - dx / cam.s; cam.y = drag.cy + dy / cam.s; draw(); }
       return;
     }
-    if (VR && e.pointerType === 'mouse' && (state === 'ready' || state === 'miss' || state === 'done')) {   // show what you'd hit
+    if (VR && VR.run && e.pointerType === 'mouse' && (state === 'ready' || state === 'done')) {   // show what you'd hit
       hover = world(e);
       if (!hoverRaf) hoverRaf = requestAnimationFrame(() => { hoverRaf = 0; renderAimInfo(hover); draw(); });
     }
@@ -939,10 +1075,11 @@
   cv.addEventListener('pointerup', e => {
     if (ED) { edUp(); return; }
     if (drag && !drag.moved) {
-      if (state === 'post' && POST) POST.t0 -= 60000;   // skip the replay
-      else if (state === 'ready' || state === 'done' || state === 'miss') {   // aim where you clicked
+      if (state === 'flight' && VR) VR.flT0 -= 60000;          // skip the replay
+      else if (state === 'debris' && VR) VR.deb.t = 99;        // skip the falling pieces
+      else if (state === 'ready' || state === 'done') {        // aim where you clicked
         const [wx, wy] = world(e);
-        if (VR) { SB.vaim = [Math.round(wx), Math.round(wy)]; hover = null; saveSB(); rebuild(true); }
+        if (VR) { SB.vaim = [Math.round(wx), Math.round(wy)]; hover = null; saveSB(); aimChanged(); }
         else { SB.aim = clamp(Math.round(wy), -400, 400); renderProjControls(); rebuild(); saveSB(); }
       }
     }
@@ -965,10 +1102,10 @@
     if (e.key !== ' ' || ED) return;
     if (a && (a.tagName === 'BUTTON' || a.tagName === 'A' || typing)) return;
     e.preventDefault();
-    if (state === 'running' || state === 'approach' || state === 'paused') $('sb-pause').click(); else fire();
+    if (physicsOn() || state === 'approach' || state === 'paused') $('sb-pause').click(); else fire();
   });
   let rsT = 0;
-  new ResizeObserver(() => { if (!visible) return; clearTimeout(rsT); rsT = setTimeout(() => { fit(); draw(); }, 80); }).observe(cv);
+  new ResizeObserver(() => { if (!visible) return; clearTimeout(rsT); rsT = setTimeout(() => { if (!busyNow()) fit(); draw(); }, 80); }).observe(cv);
 
   // ===================== Shared links (#v=…) =====================
   let linkMsg = null;
@@ -989,13 +1126,13 @@
   window.Sandbox = {
     show() {
       visible = true;
-      if (!sim && !VR) rebuild(); else { fit(); draw(); }
-      if (state === 'running' || state === 'approach' || state === 'post') loop();
+      if (!sim && !VR) rebuild(); else { if (!busyNow()) fit(); draw(); }
+      if (busyNow()) loop();
       if (linkMsg) { toast(linkMsg); linkMsg = null; }
     },
-    hide() { visible = false; if (state === 'running' || state === 'approach') state = 'paused'; renderControlsState(); },
-    get sim() { return sim; }, get state() { return state; }, get verdict() { return verdict; }, get post() { return POST; }, get vr() { return VR; }, get editor() { return ED; },
-    get mine() { return mine; }, fire, rebuild, SB, startEdit, toast,
+    hide() { visible = false; if (physicsOn() || state === 'approach') { paused = state === 'approach' ? 'running' : state; state = 'paused'; } renderControlsState(); },
+    get sim() { return sim; }, get state() { return state; }, get verdict() { return verdict; }, get vr() { return VR; }, get editor() { return ED; },
+    get mine() { return mine; }, fire, rebuild, SB, startEdit, toast, aim(x, y) { SB.vaim = [x, y]; aimChanged(); },
   };
   renderProjControls(); renderPlates(); renderTarget(); renderControlsState();
   if (linkMsg && S.mode !== 'sandbox') setMode('sandbox');

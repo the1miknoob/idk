@@ -8,7 +8,7 @@ Live at: https://the1miknoob.github.io/idk/
 - **Music Player** (`music-player/`): play your own songs with skins, visualizers and stickers
 - **Personal Dashboard** (`dashboard/`): clock, weather, to-dos, notes, focus timer and more
 - **World Watch** (`world-watch/`): a live world map with news, conflict zones, war news, earthquakes, storms, the space station, live news TV, markets and famous battles
-- **Armor Pen Sim** (`armor-sim/`): a particle physics sandbox where shells, bullets and darts smash into armor you build yourself (steel, ceramics, glass, reactive tiles…) and plates bend, crack, heat up and spall. Shoot at tank cut-aways (Tiger I, Panther, T-34-85, Sherman, T-72…) and see what happens to the crew, ammo and engine inside, or build your own vehicle and share it with a link. Also has a quick calculator, a target range with made-up tanks, and a Learn tab
+- **Armor Pen Sim** (`armor-sim/`): a particle physics sandbox where shells, bullets, darts, rockets and missiles smash into armor you build yourself (steel, ceramics, uranium, glass, reactive tiles, sandbags, water…) and plates bend, crack, heat up and spall. Shoot at whole tanks made of particles (Tiger I and II, Panther, KV-1, T-34-85, Sherman, Churchill, T-72, Leopard 1…): see what happens to the crew, ammo and engine inside, blow the turret off, keep shooting the wreck, or build your own vehicle and share it with a link. Also has a quick calculator, a target range with made-up tanks, and a Learn tab
 - **Typing Test** (`typing-test/`), **Tier List Maker** (`tier-list/`) and **Spin the Wheel** (`spin-wheel/`)
 
 ## Site-wide features
