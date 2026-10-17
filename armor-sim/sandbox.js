@@ -485,7 +485,7 @@
       c.strokeStyle = 'rgba(255,255,255,.55)'; c.lineWidth = 1.5; const x = toSX(hover[0]), y = toSY(hover[1]);
       c.beginPath(); c.arc(x, y, 7, 0, Math.PI * 2); c.moveTo(x - 11, y); c.lineTo(x + 11, y); c.moveTo(x, y - 11); c.lineTo(x, y + 11); c.stroke();
     }
-    if (VR && VR.run) drawTrails(c, now);
+    if (VR && VR.run) drawEffects(c, now);
     // flashes from explosions
     for (const f of flashes) {
       const life = f.big ? 1400 : 700, a = (now - f.at) / life, r = Math.max(8, (f.r || 40) * cam.s) * (0.4 + a * 0.9), x = toSX(f.x), y = toSY(f.y);
@@ -515,39 +515,16 @@
     const x = toSX(at[0]), y = toSY(at[1]);
     c.strokeStyle = color; c.lineWidth = 2; c.beginPath(); c.arc(x, y, 9, 0, Math.PI * 2); c.moveTo(x - 15, y); c.lineTo(x + 15, y); c.moveTo(x, y - 15); c.lineTo(x, y + 15); c.stroke();
   }
-  function drawTrails(c, now) {
-    c.save(); c.globalCompositeOperation = 'lighter'; c.lineCap = 'round';
-    if (physicsOn() || state === 'approach') {   // fast loose bits leave short streaks
-      const al = sim.alist, k = 110;
-      c.lineWidth = 1.3; c.beginPath();
-      let n = 0;
-      for (let q = 0; q < sim.an && n < 3000; q++) {
-        const i = al[q];
-        if (!sim.alive[i] || !sim.awake[i] || (sim.body[i] > 0 && sim.attached[i])) continue;
-        const vx = sim.vx[i], vy = sim.vy[i];
-        if (vx * vx + vy * vy < 0.15 * 0.15) continue;
-        const a = fr.toV([sim.px[i], sim.py[i]]), b = fr.toV([sim.px[i] - vx * k, sim.py[i] - vy * k]);
-        c.moveTo(toSX(a[0]), toSY(a[1])); c.lineTo(toSX(b[0]), toSY(b[1])); n++;
-      }
-      c.strokeStyle = 'rgba(255,170,70,.55)'; c.stroke();
-    }
-    if (state === 'flight' && VR.fl) {   // the lumps still flying, and the explosive shell's fragments
+  function drawEffects(c, now) {
+    if (state === 'flight' && VR.fl) {   // an explosive shell's fragments (they aren't particles, so each is shown as a dot)
       const d0 = (now - VR.flT0) / 1000 * VR.vs;
-      for (const p of VR.fl.pieces) {
-        const head = Math.min(p.stop, d0), tail = Math.max(0, head - (p.own ? 700 : 300)), fade = d0 > p.stop ? Math.max(0, 1 - (d0 - p.stop) / 900) : 1;
-        if (fade <= 0 || head <= tail) continue;
-        c.strokeStyle = p.own ? `rgba(255,236,190,${fade})` : `rgba(255,150,60,${(p.big > 3 ? 0.9 : 0.55) * fade})`; c.lineWidth = p.own ? 3 : p.big > 3 ? 2.2 : 1.2;
-        c.beginPath(); c.moveTo(toSX(p.X + p.dx * tail), toSY(p.Y + p.dy * tail)); c.lineTo(toSX(p.X + p.dx * head), toSY(p.Y + p.dy * head)); c.stroke();
-      }
+      c.save(); c.globalCompositeOperation = 'lighter'; c.fillStyle = 'rgba(255,214,90,.9)';
       for (const f of VR.fl.frags) {
-        const d = d0 - (f.delay || 0); if (d <= 0) continue;
-        const head = Math.min(d, f.stop), tail = Math.max(0, head - 260), fade = d > f.stop ? Math.max(0, 1 - (d - f.stop) / 900) : 1;
-        if (fade <= 0 || head <= tail) continue;
-        c.strokeStyle = `rgba(255,214,90,${0.75 * fade})`; c.lineWidth = 1.2;
-        c.beginPath(); c.moveTo(toSX(f.x + f.dx * tail), toSY(f.y + f.dy * tail)); c.lineTo(toSX(f.x + f.dx * head), toSY(f.y + f.dy * head)); c.stroke();
+        const d = d0 - (f.delay || 0); if (d <= 0 || d > f.stop) continue;
+        c.fillRect(toSX(f.x + f.dx * d) - 1.5, toSY(f.y + f.dy * d) - 1.5, 3, 3);
       }
+      c.restore();
     }
-    c.restore();
     // fire and smoke
     const t = now / 1000;
     VR.veh.modules.forEach((m, k) => {
