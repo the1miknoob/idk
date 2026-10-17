@@ -122,7 +122,7 @@
     sound(v === 'rico' ? 'rico' : v === 'pen' ? 'pen' : v === 'spall' ? 'boom' : 'stop');
     state = 'done';
     renderResult(); renderControlsState();
-    checkChallenges({ veh: null, P: projDef(), v, held: v === 'stop' || v === 'spall', thick: SB.plates.reduce((t, p) => t + E.plateThickness(p), 0) });
+    checkChallenges({ veh: null, P: projDef(), v, tally: sim.tally, preset: SB.preset, held: v === 'stop' || v === 'spall', thick: SB.plates.reduce((t, p) => t + E.plateThickness(p), 0) });
   }
 
   // ---------- vehicle phases ----------
@@ -182,7 +182,7 @@
     renderResult(); renderControlsState(); draw();
     const { states, fate } = V.fateOf(VR.run), f = fate.id;
     checkChallenges({ veh: VR.veh.id, modern: /^Modern/.test(VR.veh.group), from: SB.from, P: VR.last.P, v: VR.last.v, tally: VR.last.tally, fate: f, out: f === 'destroyed' || f === 'knocked',
-      turret: !!VR.turret, shots: VR.shots, fuelFire: VR.veh.modules.some((m, k) => m.type === 'fuel' && states[k] === 2) });
+      turret: !!VR.turret, shots: VR.shots, missed: VR.last.missed, saved: fate.saved || 0, fuelFire: VR.veh.modules.some((m, k) => m.type === 'fuel' && states[k] === 2) });
   }
 
   // ===================== The loop =====================
@@ -413,7 +413,7 @@
     if (!VR.run) return 0;
     const st = state === 'done' || state === 'ready' ? V.fateOf(VR.run).states : V.states(VR.run);
     if (VR.reveal && state === 'flight') return (now - VR.flT0) / 1000 >= VR.reveal[k] ? st[k] : VR.before[k];
-    if (VR.boom && VR.veh.modules[k].type === 'crew' && !VR.boom.vent) return 2;   // nobody survives the ammo going up
+    if (VR.boom && VR.veh.modules[k].type === 'crew' && !VR.veh.modules[k].capsule && !VR.boom.vent) return 2;   // nobody survives the ammo going up (unless sealed in an armored capsule)
     return st[k];
   }
   function drawVehicle(c, now) {
@@ -601,6 +601,7 @@
   function formulaEstimate(P, v) {   // the classic formulas from the Calculator, for comparison
     const d = P.d, g = P.group;
     if (P.kind === 'heat') return Math.round(d.q * d.cal);   // a shaped charge goes about its design depth
+    if (g === 'Strange darts (made up)') return null;          // the formula only knows tungsten and uranium
     let s = null;
     if (P.kind === 'hesh') s = { type: 'hesh', cal: d.cal };
     else if (P.kind === 'he') s = { type: 'he', cal: d.cal };
@@ -696,8 +697,8 @@
 
   // ===================== Challenges =====================
   // ✏️ Goals to try. Each test gets what just happened: veh (vehicle id, or null for plain armor), P (the round), v (how it went at the armor),
-  // and for vehicles from, tally (several shots at once), fate, out (destroyed or knocked out), turret (thrown off), shots (since the last repair) and fuelFire;
-  // for plain armor held and thick.
+  // tally (several shots at once), and for vehicles from, fate, out (destroyed or knocked out), turret (thrown off), shots (since the last repair),
+  // missed, saved (crew a capsule kept alive) and fuelFire; for plain armor held, thick and preset.
   const gunSize = P => (P.group === 'Rockets & missiles' || P.group === 'Just for fun' ? Infinity : P.bore || (P.d.shape === 'rod' ? Infinity : P.d.cal));
   const CHALLENGES = [
     { id: 'bounce', text: 'Bounce a shell off a vehicle', test: c => c.veh && (c.v === 'rico' || !!(c.tally && c.tally.rico)) },
@@ -710,6 +711,11 @@
     { id: 'five', text: 'Hit the same vehicle 5 times without repairing it', test: c => c.veh && c.shots >= 5 },
     { id: 'rpg', text: 'Stop an RPG-7 with armor less than 200 mm thick (all the layers added up)', test: c => !c.veh && c.P.id === 'rpg7' && c.held && c.thick < 200 },
     { id: 'vest', text: 'Stop a 12.7 mm AP bullet with armor less than 40 mm thick', test: c => !c.veh && c.P.id === 'b127' && c.held && c.thick < 40 },
+    { id: 'plutonium', text: 'Get the plutonium dart through 500 mm of armor (it won\'t go nuclear)', test: c => !c.veh && c.P.id === 'fspu' && c.v === 'pen' && c.thick >= 500 },
+    { id: 'ship', text: 'Put a cannonball right through the side of a wooden warship', test: c => !c.veh && /^cannon/.test(c.P.id) && c.v === 'pen' && c.preset === 'ship' },
+    { id: 'semple', text: 'Knock out the Bob Semple tank with a bullet', test: c => c.veh === 'semple' && c.P.group === 'Bullets' && c.out },
+    { id: 'capsule', text: 'Blow up a T-14\'s ammo while its crew lives through it in their capsule', test: c => c.veh === 't14' && c.fate === 'destroyed' && c.saved > 0 },
+    { id: 'volley8', text: 'Get all 8 shots of an 8-shot volley through', test: c => !!c.tally && c.tally.n === 8 && c.tally.pen === 8 && !c.missed },
   ];
   let won = store.get('armor-challenges', {}) || {};
   function checkChallenges(c) {
@@ -740,9 +746,9 @@
     const P = projDef();
     $('sb-proj').value = P.id;
     const ke = P.kind === 'ke';
-    $('sb-v-field').hidden = !ke; $('sb-v-note').hidden = ke && !P.aphe;
+    $('sb-v-field').hidden = !ke; $('sb-v-note').hidden = ke && !P.aphe && !P.note;
     if (ke) { $('sb-v').value = speedOf(); $('sb-v-out').textContent = speedOf().toLocaleString() + ' m/s'; }
-    $('sb-v-note').textContent = P.aphe ? 'Has a little explosive inside: if it gets into a vehicle, it goes off a moment later.' : P.d.tandem ? 'Two charges: a small one sets off reactive armor first, then the main jet goes through.' : P.kind === 'heat' ? 'Speed doesn\'t matter: the jet does the work (its tip flies at ' + P.d.vTip + ' km/s).' : 'Speed doesn\'t matter: it works by exploding on contact.';
+    $('sb-v-note').textContent = P.note ? P.note : P.aphe ? 'Has a little explosive inside: if it gets into a vehicle, it goes off a moment later.' : P.d.tandem ? 'Two charges: a small one sets off reactive armor first, then the main jet goes through.' : P.kind === 'heat' ? 'Speed doesn\'t matter: the jet does the work (its tip flies at ' + P.d.vTip + ' km/s).' : 'Speed doesn\'t matter: it works by exploding on contact.';
     $('sb-aim').value = SB.aim; $('sb-aim-out').textContent = (SB.aim > 0 ? '+' : '') + SB.aim + ' mm';
     $('sb-proj-art').innerHTML = projSVG(P);
     const d = P.d, size = d.shape === 'rod' ? `${d.dia} mm × ${d.len} mm rod` : `${P.bore ? P.bore + ' mm gun, ' + d.cal + ' mm penetrator' : d.cal + ' mm'}${d.len ? ' · ' + d.len + ' mm long' : ''}`;

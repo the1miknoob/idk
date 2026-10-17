@@ -317,6 +317,20 @@
       deco: { track: [-80, 7280, 1950], wheels: [[350, 1500, 320], ...wheelsRow(900, 6300, 11, 150, 170), [6850, 1500, 320]], barrel: { x0: 1800, x1: -900, y: 2400, d: 90, brake: true } },
     },
     {
+      id: 'semple', name: 'Bob Semple tank', group: 'WW2 (approx.)', year: 1941, from: 'New Zealand', aim: [200, 2300],
+      about: 'A farm tractor with a box of corrugated steel bolted on, built in a hurry in New Zealand in case of invasion. Often called the worst tank ever made: it rocked, it was slow, and its thin plating only just keeps out rifle bullets. It carried 8 crew, 6 of them machine gunners.',
+      parts: [
+        ...chain('h', [[400, 650], [100, 1300], [300, 3300], [4300, 3300], [4500, 650]], [
+          ['Lower front plate', L('mild', 10)], ['Front plate (corrugated)', L('mild', 10)], ['Roof', L('mild', 10)], ['Back plate', L('mild', 10)], ['Floor (the tractor)', L('mild', 12)]], true),
+      ],
+      modules: [
+        M('engine', 'Tractor engine', 500, 720, 1500, 1700), M('fuel', 'Fuel tank', 1550, 720, 2050, 1300), M('trans', 'Gearbox', 3700, 720, 4400, 1300),
+        M('crew', 'Driver', 1550, 1350, 1950, 2300), M('crew', 'Machine gunner 1', 2000, 1350, 2400, 2300), M('crew', 'Machine gunner 2', 2450, 1350, 2850, 2300), M('crew', 'Machine gunner 3', 2900, 1350, 3300, 2300),
+        M('crew', 'Commander', 1600, 2350, 2000, 3200), M('crew', 'Machine gunner 4', 2050, 2350, 2450, 3200), M('crew', 'Machine gunner 5', 2500, 2350, 2900, 3200), M('crew', 'Machine gunner 6', 2950, 2350, 3350, 3200),
+      ],
+      deco: { track: [-50, 4650, 900], wheels: [[250, 600, 300], ...wheelsRow(800, 3800, 5, 230, 240), [4350, 650, 320]] },
+    },
+    {
       id: 't55', name: 'T-55', group: 'Cold War (approx.)', year: 1958, from: 'Soviet Union', aim: [640, 1200],
       about: 'One of the most-built tanks ever. A thick cast dome turret and a 100 mm gun. Some shells sit in a rack next to the driver.',
       parts: [
@@ -469,6 +483,45 @@
         M('gun', 'Gun breech', 2850, 1920, 3900, 2080), M('engine', 'Engine', 5150, 560, 6300, 1600), M('trans', 'Transmission', 6300, 520, 6800, 1150),
       ],
       deco: { track: [-80, 6900, 800], wheels: [[150, 560, 280], ...wheelsRow(800, 5800, 6, 375, 380), [6650, 560, 280]], barrel: { x0: 2350, x1: -3650, y: 1990, d: 135, brake: false } },
+    },
+    {
+      id: 'merkava', name: 'Merkava Mk 4', group: 'Modern (approx.)', year: 2004, from: 'Israel', aim: [950, 1300],
+      about: 'Israel\'s main battle tank. Unlike most tanks, its engine is in the front, so a shot through the front has to get through the engine before it reaches the crew. There\'s a door in the back for the crew to get out. Its real armor is secret, so this uses rough public estimates.',
+      parts: [
+        ...chain('h', [[6300, 1700], [7450, 1700], [7650, 1050], [7350, 480], [500, 480], [0, 950], [1900, 1650], [2900, 1650]], [
+          ['Rear roof', L('rha', 30)], ['Rear door', L('rha', 30)], ['Lower rear plate', L('rha', 30)], ['Belly', L('rha', 30)],
+          ['Lower front plate', L('rha', 60)], ['Upper front plate (layered)', L('hhs', 40, 'al2o3', 80, 'rha', 40)], ['Hull roof', L('rha', 40)]]),
+        ...chain('t', [[2850, 1720], [2200, 2050], [3200, 2600], [6200, 2600], [6500, 2150], [6250, 1720]], [
+          ['Turret front (lower, layered)', L('hhs', 50, 'al2o3', 150, 'rubber', 30, 'al2o3', 120, 'rha', 50)], ['Turret front (upper, layered)', L('hhs', 40, 'al2o3', 100, 'rha', 40)],
+          ['Turret roof', L('rha', 40)], ['Turret rear', L('rha', 40)], ['Bustle floor', L('rha', 30)]]),
+      ],
+      modules: [
+        M('trans', 'Transmission', 450, 640, 850, 920), M('engine', 'Engine (in front, shields the crew)', 900, 560, 1950, 1100),
+        M('fuel', 'Fuel tanks', 2000, 560, 2450, 950), M('crew', 'Driver', 2000, 1000, 2450, 1590),
+        M('crew', 'Gunner', 2950, 1150, 3350, 2450), M('crew', 'Commander', 3450, 1300, 3900, 2540), M('crew', 'Loader', 4000, 560, 4450, 2500),
+        M('gun', 'Gun breech', 2600, 2150, 4100, 2350), M('ammo', 'Ammo (rear hull, fire-proof boxes)', 5200, 560, 6800, 1300),
+      ],
+      deco: { track: [-50, 7700, 850], wheels: [[250, 650, 300], ...wheelsRow(950, 6700, 6, 370, 380), [7450, 650, 280]], barrel: { x0: 2300, x1: -2950, y: 2280, d: 140, brake: false, evac: -650 } },
+    },
+    {
+      id: 't14', name: 'T-14 Armata', group: 'Modern (approx.)', year: 2015, from: 'Russia', aim: [1000, 1426],
+      about: 'Russia\'s newest tank. Nobody sits in the turret: the 3 crew sit side by side in an armored capsule at the front of the hull (drawn one behind another here), walled off from the ammo, so they have a chance even if it blows up. Its real armor is secret, so this uses rough public estimates.',
+      parts: [
+        ...chain('h', [[5300, 1750], [8000, 1750], [8650, 1050], [8350, 500], [800, 500], [0, 1000], [2100, 1750], [2850, 1750]], [
+          ['Engine deck', L('rha', 25)], ['Rear plate', L('rha', 40)], ['Lower rear plate', L('rha', 30)], ['Belly', L('rha', 30)],
+          ['Lower front plate', L('rha', 80)], ['Upper front plate (layered)', L('rha', 80, 'al2o3', 100, 'rha', 80)], ['Hull roof (over the crew)', L('rha', 60)]]),
+        ...chain('h', [[214, 1145], [1768, 1700]], [['Reactive armor (heavy)', L('rha', 15, 'era', 20, 'rha', 15)]]),
+        ...chain('h', [[2950, 560], [2950, 1690]], [['Crew capsule wall', L('rha', 50)]]),
+        ...chain('t', [[2800, 1770], [2650, 2150], [3050, 2500], [5700, 2500], [5900, 1770]], [
+          ['Turret front (nobody inside)', L('rha', 60)], ['Turret front (upper)', L('rha', 45)], ['Turret roof', L('rha', 25)], ['Turret rear', L('rha', 30)]]),
+      ],
+      modules: [
+        M('fuel', 'Fuel tanks (front)', 900, 580, 1450, 1000), M('crew', 'Driver', 1500, 580, 1900, 1250, { capsule: true }),
+        M('crew', 'Gunner', 1950, 580, 2400, 1400, { capsule: true }), M('crew', 'Commander', 2450, 580, 2900, 1650, { capsule: true }),
+        M('ammo', 'Autoloader carousel (under the turret)', 3100, 580, 5200, 900), M('gun', 'Gun breech', 3000, 2050, 4600, 2250),
+        M('engine', 'Engine', 5400, 580, 7500, 1650), M('trans', 'Transmission', 7550, 580, 8250, 1200),
+      ],
+      deco: { track: [-60, 8700, 850], wheels: [[200, 600, 280], ...wheelsRow(900, 7800, 7, 380, 390), [8450, 600, 260]], barrel: { x0: 2700, x1: -3300, y: 2150, d: 140, brake: false } },
     },
     {
       id: 'warden', name: 'Warden MBT (made up)', group: 'Made-up vehicles', year: 2030, from: 'Made up', aim: [800, 1300],
@@ -736,7 +789,7 @@
   }
   function fateOf(run) {
     const st = states(run), fate = judge(run.veh, st);
-    if (fate.id === 'destroyed') run.veh.modules.forEach((m, k) => { if (m.type === 'crew') st[k] = 2; });
+    if (fate.id === 'destroyed') run.veh.modules.forEach((m, k) => { if (m.type === 'crew' && !m.capsule) st[k] = 2; });
     return { states: st, fate };
   }
   // Is anything still flying around inside? (the replay keeps going until it settles)
@@ -1046,7 +1099,11 @@
     const crew = of('crew'), crewKO = crew.filter(s => s === 2).length;
     const boom = ms.some((m, k) => m.type === 'ammo' && states[k] === 2 && !m.vent), vented = ms.some((m, k) => m.type === 'ammo' && states[k] === 2 && m.vent);
     const any = states.some(s => s > 0);
-    if (boom) return { id: 'destroyed', badge: '💥 DESTROYED', st: 'crit', text: 'The ammo exploded. Nobody inside could survive that.' };
+    if (boom) {
+      const safe = ms.filter((m, k) => m.type === 'crew' && m.capsule && states[k] < 2).length;   // crew in an armored capsule can live through it
+      return safe ? { id: 'destroyed', badge: '💥 DESTROYED', st: 'crit', text: `The ammo exploded and wrecked it, but the armored capsule kept ${safe === crew.length ? 'the crew' : `${safe} of the ${crew.length} crew`} alive.`, saved: safe }
+        : { id: 'destroyed', badge: '💥 DESTROYED', st: 'crit', text: 'The ammo exploded. Nobody inside could survive that.' };
+    }
     if (crew.length && crewKO > crew.length / 2) return { id: 'knocked', badge: '☠️ KNOCKED OUT', st: 'crit', text: 'Too few crew are left to keep fighting.' };
     if (of('fuel').some(s => s === 2)) return { id: 'fire', badge: '🔥 ON FIRE', st: 'serious', text: 'A fuel tank caught fire. The crew will have to get out.', vented };
     if (of('engine').concat(of('trans')).some(s => s === 2)) return { id: 'stuck', badge: '🛑 IMMOBILIZED', st: 'serious', text: 'It can\'t drive any more, but it can still shoot.', vented };
@@ -1071,6 +1128,7 @@
       const o = { type: m.type, n: str(m.n, 40, MODULES[m.type].name), x: num(m.x, -C, C), y: num(m.y, -C, C), w: num(m.w, 60, 8000, 400), h: num(m.h, 60, 8000, 400) };
       if (m.type === 'gun') o.barrel = num(m.barrel, 0, 8000, 0);
       if (m.type === 'ammo' && m.vent) o.vent = true;
+      if (m.type === 'crew' && m.capsule) o.capsule = true;
       return o;
     });
     if (!parts.length) return null;
@@ -1081,13 +1139,13 @@
   // Short text versions for links: plates as [name, ax, ay, bx, by, turret?, mat, t, mat, t…]
   function pack(v) {
     return { n: v.name, t: v.tracks === false ? 0 : 1, p: v.parts.map(p => [p.n, p.a[0], p.a[1], p.b[0], p.b[1], p.g === 't' ? 1 : 0, ...p.layers.flatMap(l => [l.mat, l.t])]),
-      m: v.modules.map(m => [m.type, m.n, m.x, m.y, m.w, m.h, m.type === 'gun' ? m.barrel || 0 : m.vent ? 1 : 0]) };
+      m: v.modules.map(m => [m.type, m.n, m.x, m.y, m.w, m.h, m.type === 'gun' ? m.barrel || 0 : m.vent || m.capsule ? 1 : 0]) };
   }
   function unpack(o) {
     if (!o || !Array.isArray(o.p)) return null;
     return sanitize({ name: o.n, tracks: o.t !== 0,
       parts: o.p.map(a => ({ n: a[0], a: [a[1], a[2]], b: [a[3], a[4]], g: a[5] ? 't' : 'h', layers: Array.from({ length: Math.floor((a.length - 6) / 2) }, (_, k) => ({ mat: a[6 + 2 * k], t: a[7 + 2 * k] })) })),
-      modules: (o.m || []).map(a => ({ type: a[0], n: a[1], x: a[2], y: a[3], w: a[4], h: a[5], barrel: a[0] === 'gun' ? a[6] : 0, vent: a[0] === 'ammo' && a[6] === 1 })) });
+      modules: (o.m || []).map(a => ({ type: a[0], n: a[1], x: a[2], y: a[3], w: a[4], h: a[5], barrel: a[0] === 'gun' ? a[6] : 0, vent: a[0] === 'ammo' && a[6] === 1, capsule: a[0] === 'crew' && a[6] === 1 })) });
   }
   function toLink(v) {
     const s = JSON.stringify(pack(v)), bytes = new TextEncoder().encode(s);
