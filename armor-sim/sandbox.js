@@ -421,16 +421,10 @@
     // the ground
     const gy = toSY(0);
     if (gy < H) { c.fillStyle = '#12171c'; c.fillRect(0, gy, W, H - gy); c.strokeStyle = '#2b333c'; c.lineWidth = 1; c.beginPath(); c.moveTo(0, gy); c.lineTo(W, gy); c.stroke(); }
-    // tracks, wheels and the gun barrel (drawn only: they aren't armor)
-    if (deco.track) { const [a, b, t] = deco.track; c.fillStyle = '#1a2026'; c.strokeStyle = '#2b343e'; c.lineWidth = 1; c.beginPath(); c.roundRect(toSX(a), toSY(t), (b - a) * cam.s, t * cam.s, t * cam.s / 2); c.fill(); c.stroke(); }
-    for (const [x, y, r] of deco.wheels || []) { c.fillStyle = '#212932'; c.strokeStyle = '#34404b'; c.beginPath(); c.arc(toSX(x), toSY(y), r * cam.s, 0, Math.PI * 2); c.fill(); c.stroke(); c.fillStyle = '#2c3640'; c.beginPath(); c.arc(toSX(x), toSY(y), r * cam.s * 0.3, 0, Math.PI * 2); c.fill(); }
-    if (deco.barrel) {
-      const b = deco.barrel, x0 = Math.min(b.x0, b.x1), x1 = Math.max(b.x0, b.x1), m = p => moveBy(tt, p);
-      c.fillStyle = '#58636e';
-      path(c, [[x0, b.y - b.d / 2], [x1, b.y - b.d / 2], [x1, b.y + b.d / 2], [x0, b.y + b.d / 2]].map(m)); c.fill();
-      if (b.brake) { const w = Math.min(260, Math.abs(b.x0 - b.x1) * 0.12); path(c, [[b.x1 - 30, b.y - b.d * 0.85], [b.x1 - 30 + w, b.y - b.d * 0.85], [b.x1 - 30 + w, b.y + b.d * 0.85], [b.x1 - 30, b.y + b.d * 0.85]].map(m)); c.fill(); }
-      if (b.evac != null) { path(c, [[b.evac - 200, b.y - b.d * 0.75], [b.evac + 200, b.y - b.d * 0.75], [b.evac + 200, b.y + b.d * 0.75], [b.evac - 200, b.y + b.d * 0.75]].map(m)); c.fill(); }
-    }
+    // tracks, wheels, the gun barrel and outside details like the commander's cupola (drawn only: they aren't armor)
+    if (deco.wheels && deco.wheels.length > 1) drawRunningGear(c, deco);
+    if (deco.barrel) drawBarrel(c, deco.barrel, p => moveBy(tt, p));
+    for (const sh of deco.shapes || []) { path(c, sh.p.map(p => (sh.t ? moveBy(tt, p) : p))); c.fillStyle = '#4a5560'; c.fill(); c.strokeStyle = 'rgba(0,0,0,.35)'; c.lineWidth = 1; c.stroke(); }
     // the inside
     const hullPts = veh.parts.filter(p => p.g !== 't').flatMap(p => [p.a, p.b]), turPts = veh.parts.filter(p => p.g === 't').flatMap(p => [p.a, p.b]);
     c.fillStyle = '#151c23';
@@ -449,6 +443,43 @@
       });
       if (ED) drawEditHandles(c);
     }
+  }
+  function drawRunningGear(c, d) {   // the track belt round the outside of the wheels, its links, then the wheels on top
+    const t = d.trackT || 60, outer = V.trackLoop(d), inner = V.trackLoop(d, 0);
+    path(c, outer); c.fillStyle = '#1d242b'; c.fill();
+    path(c, inner); c.fillStyle = '#12171d'; c.fill();   // between the top and bottom runs
+    c.save(); path(c, outer); c.clip();
+    c.setLineDash([Math.max(1.5, 120 * cam.s), Math.max(1, 45 * cam.s)]); c.lineWidth = Math.max(1, 1.6 * t * cam.s); c.strokeStyle = '#2b343e';
+    path(c, outer); c.stroke(); c.restore();
+    const wheel = ([x, y, r], face) => {
+      const X = toSX(x), Y = toSY(y), R = r * cam.s;
+      c.fillStyle = face; c.strokeStyle = '#3a4652'; c.lineWidth = 1; c.beginPath(); c.arc(X, Y, R, 0, Math.PI * 2); c.fill(); c.stroke();
+      c.strokeStyle = 'rgba(255,255,255,.05)'; c.beginPath(); c.arc(X, Y, R * 0.8, 0, Math.PI * 2); c.stroke();
+      c.fillStyle = '#2c3640'; c.beginPath(); c.arc(X, Y, R * 0.28, 0, Math.PI * 2); c.fill();
+    };
+    const sprocket = ([x, y, r]) => {   // the drive wheel has teeth that pull the track
+      const X = toSX(x), Y = toSY(y), R = r * cam.s, n = 13;
+      c.beginPath();
+      for (let k = 0; k < 2 * n; k++) { const a = k / (2 * n) * 2 * Math.PI, q = R * (k % 2 ? 0.86 : 1.04); k ? c.lineTo(X + Math.cos(a) * q, Y + Math.sin(a) * q) : c.moveTo(X + q, Y); }
+      c.closePath(); c.fillStyle = '#262f38'; c.fill(); c.strokeStyle = '#3a4652'; c.lineWidth = 1; c.stroke();
+      c.fillStyle = '#2c3640'; c.beginPath(); c.arc(X, Y, R * 0.45, 0, Math.PI * 2); c.fill();
+    };
+    for (const w of d.rollers || []) wheel(w, '#252d36');
+    const road = d.wheels.slice(1, -1);
+    if (d.interleave) { road.forEach((w, k) => { if (k % 2) wheel(w, '#1b2229'); }); road.forEach((w, k) => { if (!(k % 2)) wheel(w, '#222a33'); }); }   // the inner row sits behind
+    else road.forEach(w => wheel(w, '#212932'));
+    const [front, back] = [d.wheels[0], d.wheels[d.wheels.length - 1]], rear = d.drive === 'rear';
+    if (d.drive) { (rear ? sprocket : w => wheel(w, '#212932'))(back); (rear ? w => wheel(w, '#212932') : sprocket)(front); }
+    else { wheel(front, '#212932'); wheel(back, '#212932'); }
+  }
+  function drawBarrel(c, b, m) {   // narrower at the muzzle, with a muzzle brake (one or two baffles) and a fume extractor
+    const dir = Math.sign(b.x1 - b.x0) || -1, r0 = b.d / 2, r1 = r0 * (b.taper || 1), at = f => b.x1 - dir * f;   // f mm back from the muzzle
+    c.fillStyle = '#58636e'; c.strokeStyle = 'rgba(0,0,0,.3)'; c.lineWidth = 1;
+    const blk = (xa, xb, h) => { path(c, [[xa, b.y - h], [xb, b.y - h], [xb, b.y + h], [xa, b.y + h]].map(m)); c.fill(); c.stroke(); };
+    path(c, [[b.x0, b.y - r0], [b.x1, b.y - r1], [b.x1, b.y + r1], [b.x0, b.y + r0]].map(m)); c.fill(); c.stroke();
+    if (b.evac != null) { const r = r0 + (r1 - r0) * (b.evac - b.x0) / (b.x1 - b.x0); blk(b.evac - 220, b.evac + 220, r * 1.55); }
+    if (b.brake === 'double') { const u = b.d * 1.05; blk(at(0), at(u), r1 * 1.9); blk(at(u * 1.45), at(u * 2.45), r1 * 1.9); }
+    else if (b.brake) blk(at(0), at(b.d * 1.5), r1 * 1.8);
   }
   // once the turret has been thrown off, boxes that reached up into it (a loader standing on the floor…) end at the turret ring
   const ringY = veh => { const ys = veh.parts.filter(p => p.g === 't').flatMap(p => [p.a[1], p.b[1]]); return ys.length ? Math.min(...ys) : Infinity; };
