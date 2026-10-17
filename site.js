@@ -9,7 +9,7 @@
     ['🎵', 'Music Player', 'music-player/', 'songs audio play skins stickers'],
     ['📊', 'Dashboard', 'dashboard/', 'clock weather todo notes timer countdown'],
     ['🛰️', 'World Watch', 'world-watch/', 'map news war conflicts earthquakes space live tv'],
-    ['🛡️', 'Armor Pen Sim', 'armor-sim/', 'tank shell armor penetration ricochet heat sim sandbox physics particles vehicle builder destruction turret rocket missile rpg challenges volley burst tiger panther maus t-34 sherman kv-1 churchill pershing leopard abrams t-90 bmp'],
+    ['🛡️', 'Armor Pen Sim', 'armor-sim/', 'tank shell armor penetration ricochet heat sim sandbox physics particles vehicle builder destruction turret rocket missile rpg challenges volley burst formulas ballistic limit plutonium dart cannonball musket pykrete tiger panther maus t-34 sherman kv-1 churchill pershing leopard abrams t-90 bmp merkava armata t-14 bob semple'],
     ['🎮', 'Games Arcade', 'games/', 'all games play'],
     ['🧩', 'Block Pop', 'games/block-pop/', 'puzzle blocks'],
     ['🪐', 'Merge Drop', 'games/merge-drop/', 'planets merge puzzle'],

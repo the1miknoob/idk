@@ -28,6 +28,7 @@
     cast:     { name: 'Cast steel', group: 'Steel', rho: 7.8, E: 200, Y: 750, ef: 0.14, ec: 0.5, cp: 0.46, melt: 1720, duct: 25, color: '#767e86' },
     mild:     { name: 'Mild steel', group: 'Steel', rho: 7.85, E: 200, Y: 320, ef: 0.35, ec: 0.6, cp: 0.46, melt: 1780, duct: 60, color: '#69727b' },
     shot:     { name: 'Shell steel', group: 'Steel', rho: 7.85, E: 210, Y: 1300, ef: 0.16, ec: 0.55, cp: 0.46, melt: 1750, duct: 30, color: '#b7a78a' },
+    iron:     { name: 'Cast iron', group: 'Steel', rho: 7.2, E: 110, Y: 350, ef: 0.012, ec: 0.35, cp: 0.46, melt: 1450, duct: 4, color: '#5b6067' },
     cap:      { name: 'Hardened cap steel', group: 'Steel', rho: 7.85, E: 210, Y: 1900, ef: 0.07, ec: 0.45, cp: 0.46, melt: 1750, duct: 10, color: '#8e7c60' },
     alu:      { name: 'Aluminium', group: 'Light metals', rho: 2.66, E: 70, Y: 280, ef: 0.18, ec: 0.55, cp: 0.9, melt: 900, duct: 40, color: '#c7cfd7' },
     ti:       { name: 'Titanium', group: 'Light metals', rho: 4.43, E: 115, Y: 900, ef: 0.14, ec: 0.5, cp: 0.52, melt: 1940, duct: 30, color: '#9aa1b6' },
@@ -35,10 +36,14 @@
     wc:       { name: 'Tungsten carbide', group: 'Heavy metals', rho: 15.6, E: 600, Y: 3800, ef: 0.012, ec: 0.18, cp: 0.2, melt: 3000, duct: 0, color: '#4e545e' },
     du:       { name: 'Depleted uranium', group: 'Heavy metals', rho: 18.6, E: 170, Y: 1450, ef: 0.12, ec: 0.42, cp: 0.12, melt: 1400, duct: 10, color: '#717862' },
     cu:       { name: 'Copper', group: 'Heavy metals', rho: 8.96, E: 120, Y: 250, ef: 0.6, ec: 0.85, cp: 0.385, melt: 1358, duct: 80, color: '#c8784b' },
+    au:       { name: 'Gold', group: 'Heavy metals', rho: 19.3, E: 79, Y: 120, ef: 0.5, ec: 0.85, cp: 0.129, melt: 1337, duct: 100, color: '#e2b33c' },
+    pu:       { name: 'Plutonium', group: 'Heavy metals', rho: 19.8, E: 96, Y: 300, ef: 0.05, ec: 0.4, cp: 0.13, melt: 913, duct: 15, color: '#8f8a66' },   // weak, and melts at 640 °C
+    os:       { name: 'Osmium', group: 'Heavy metals', rho: 22.6, E: 560, Y: 1000, ef: 0.008, ec: 0.25, cp: 0.13, melt: 3300, duct: 2, color: '#7f93ab' },     // the densest metal, but brittle
     lead:     { name: 'Lead', group: 'Heavy metals', rho: 11.3, E: 16, Y: 25, ef: 0.5, ec: 0.9, cp: 0.13, melt: 600, duct: 120, color: '#7a838d' },
     al2o3:    { name: 'Alumina ceramic', group: 'Ceramics', rho: 3.9, E: 370, Y: 3000, ef: 0.006, ec: 0.3, cp: 0.88, melt: 2300, duct: 6, color: '#e6e0cd' },
     sic:      { name: 'Silicon carbide', group: 'Ceramics', rho: 3.2, E: 420, Y: 3800, ef: 0.005, ec: 0.3, cp: 0.75, melt: 2800, duct: 6, color: '#5d6878' },
     b4c:      { name: 'Boron carbide', group: 'Ceramics', rho: 2.5, E: 450, Y: 4500, ef: 0.005, ec: 0.3, cp: 0.95, melt: 2700, duct: 6, color: '#3f444c' },
+    diamond:  { name: 'Diamond', group: 'Ceramics', rho: 3.5, E: 1050, Y: 9000, ef: 0.003, ec: 0.25, cp: 0.5, melt: 4000, duct: 0, color: '#d6f1fa' },
     glass:    { name: 'Glass', group: 'Ceramics', rho: 2.5, E: 70, Y: 900, ef: 0.004, ec: 0.06, cp: 0.84, melt: 1700, duct: 0, color: '#9ed6e4' },
     aramid:   { name: 'Aramid fabric', group: 'Fibres & plastics', rho: 1.44, E: 60, Y: 1200, ef: 0.15, ec: 0.6, cp: 1.4, melt: 800, duct: 60, color: '#d6b14a' },
     uhmwpe:   { name: 'Polyethylene fibre (UHMWPE)', group: 'Fibres & plastics', rho: 0.97, E: 40, Y: 1300, ef: 0.2, ec: 0.65, cp: 1.85, melt: 500, duct: 80, color: '#ecebe2' },
@@ -49,6 +54,10 @@
     brick:    { name: 'Brick', group: 'Building & nature', rho: 1.9, E: 15, Y: 12, ef: 0.0008, ec: 0.05, cp: 0.84, melt: 1800, duct: 0, color: '#a65a42' },
     sand:     { name: 'Sand', group: 'Building & nature', rho: 1.6, E: 10, Y: 0.5, ef: 0.002, ec: 0.5, cp: 0.83, melt: 1900, duct: 0, color: '#cdb07a' },
     wood:     { name: 'Wood', group: 'Building & nature', rho: 0.6, E: 11, Y: 50, ef: 0.03, ec: 0.3, cp: 1.7, melt: 600, duct: 4, color: '#a2723f' },
+    oak:      { name: 'Oak (ship timber)', group: 'Building & nature', rho: 0.75, E: 12, Y: 12, ef: 0.02, ec: 0.4, cp: 1.7, melt: 600, duct: 6, color: '#8a5d32' },   // hit across the grain
+    stone:    { name: 'Stone (masonry)', group: 'Building & nature', rho: 2.6, E: 40, Y: 35, ef: 0.0008, ec: 0.05, cp: 0.79, melt: 1500, duct: 0, color: '#9b978e' },
+    ice:      { name: 'Ice', group: 'Building & nature', rho: 0.92, E: 9, Y: 4, ef: 0.0005, ec: 0.05, cp: 2.1, melt: 420, duct: 0, color: '#cfe9f5' },          // (melt: it goes soft as soon as it's heated)
+    pykrete:  { name: 'Pykrete (ice + sawdust)', group: 'Building & nature', rho: 0.98, E: 5, Y: 20, ef: 0.015, ec: 0.35, cp: 2, melt: 450, duct: 3, color: '#d9cfb2' },
     water:    { name: 'Water', group: 'Building & nature', rho: 1.0, E: 2.2, Y: 1, ef: 0.5, ec: 0.95, cp: 4.18, melt: 600, duct: 250, color: '#3f86c4' },
     era:      { name: 'Reactive explosive', group: 'Explosives', rho: 1.7, E: 8, Y: 30, ef: 0.08, ec: 0.25, cp: 1, melt: 600, duct: 0, color: '#d8a21c', explosive: true },
     fill:     { name: 'Shell explosive', group: 'Explosives', rho: 1.7, E: 8, Y: 30, ef: 0.1, ec: 0.3, cp: 1, melt: 600, duct: 0, color: '#dfc25c' },
@@ -115,6 +124,15 @@
     { id: 'he75', group: 'High explosive (HE)', name: '75 mm HE', kind: 'he', v: 550, d: { shape: 'shell', cal: 75, len: 280, nose: 2, mat: 'shot', fill: 0.62 } },
     { id: 'he122', group: 'High explosive (HE)', name: '122 mm HE', kind: 'he', v: 680, d: { shape: 'shell', cal: 122, len: 460, nose: 2, mat: 'shot', fill: 0.62 } },
     { id: 'he152', group: 'High explosive (HE)', name: '152 mm HE', kind: 'he', v: 650, d: { shape: 'shell', cal: 152, len: 600, nose: 2, mat: 'shot', fill: 0.62 } },
+    // the same dart as the 550 mm tungsten one, made of other things (density helps, but so do strength and a high melting point)
+    { id: 'fspu', bore: 120, group: 'Strange darts (made up)', name: 'Plutonium dart ☢️ (never do this)', kind: 'ke', v: 1650,
+      note: 'Made up: never do this. It won\'t go nuclear (that takes plutonium squeezed together in a very precise way, and a dart just smashes apart), but the bits are hot, poisonous and radioactive, and plutonium catches fire in air.', d: { shape: 'rod', dia: 26, len: 550, mat: 'pu' } },
+    { id: 'fsau', bore: 120, group: 'Strange darts (made up)', name: 'Gold dart', kind: 'ke', v: 1650, note: 'Made up. Gold is even denser than tungsten, but very soft.', d: { shape: 'rod', dia: 26, len: 550, mat: 'au' } },
+    { id: 'fsos', bore: 120, group: 'Strange darts (made up)', name: 'Osmium dart (densest metal)', kind: 'ke', v: 1650, note: 'Made up. Osmium is the densest metal there is, but it\'s brittle.', d: { shape: 'rod', dia: 26, len: 550, mat: 'os' } },
+    { id: 'fsdia', bore: 120, group: 'Strange darts (made up)', name: 'Diamond dart', kind: 'ke', v: 1650, note: 'Made up. Diamond is the hardest thing there is, but it\'s light and brittle.', d: { shape: 'rod', dia: 26, len: 550, mat: 'diamond' } },
+    { id: 'musket', group: 'Old-time guns', name: 'Musket ball (lead, 1700s)', kind: 'ke', v: 420, d: { shape: 'ball', cal: 17.5, mat: 'lead' } },
+    { id: 'cannon12', group: 'Old-time guns', name: '12-pounder cannonball (iron, 1800s)', kind: 'ke', v: 450, note: 'Solid iron balls fired by sailing warships. Splinters knocked off the inside of a ship\'s side did much of the harm.', d: { shape: 'ball', cal: 117, mat: 'iron' } },
+    { id: 'cannon32', group: 'Old-time guns', name: '32-pounder cannonball (iron, 1800s)', kind: 'ke', v: 480, note: 'The big gun of a sailing warship\'s lower deck.', d: { shape: 'ball', cal: 160, mat: 'iron' } },
     { id: 'ball', group: 'Just for fun', name: '50 mm steel ball', kind: 'ke', v: 1000, d: { shape: 'ball', cal: 50, mat: 'hhs' } },
     { id: 'wcube', group: 'Just for fun', name: '40 mm tungsten block', kind: 'ke', v: 1500, d: { shape: 'block', cal: 40, len: 40, mat: 'wha' } },
     { id: 'rail', group: 'Just for fun', name: 'Railgun slug (made up, 2.5 km/s)', kind: 'ke', v: 2500, d: { shape: 'rod', dia: 30, len: 240, mat: 'wha' } },
@@ -149,6 +167,11 @@
     { id: 'cardoor', name: 'Car door (two thin steel skins)', plates: [{ x: 0, ang: 0, len: 500, layers: [{ mat: 'mild', t: 2 }] }, { x: 60, ang: 0, len: 500, layers: [{ mat: 'mild', t: 2 }] }] },   // tall, so the particles aren't tiny
     { id: 'shield', name: 'Police shield (polyethylene)', plates: [{ x: 0, ang: 0, len: 'auto', layers: [{ mat: 'uhmwpe', t: 14 }] }] },
     { id: 'engine', name: 'Engine block (metal walls with gaps)', plates: [0, 70, 140].map(x => ({ x, ang: 0, len: 'auto', layers: [{ mat: 'cast', t: 18 }] })) },
+    { id: 'ship', name: 'Wooden warship side (600 mm of oak)', plates: [{ x: 0, ang: 0, len: 'auto', layers: [{ mat: 'oak', t: 600 }] }] },
+    { id: 'castle', name: 'Castle wall (1.2 m of stone)', plates: [{ x: 0, ang: 0, len: 'auto', layers: [{ mat: 'stone', t: 1200 }] }] },
+    { id: 'breastplate', name: 'Knight\'s breastplate (2.5 mm steel)', plates: [{ x: 0, ang: 0, len: 'auto', layers: [{ mat: 'mild', t: 2.5 }] }] },
+    { id: 'ice', name: 'Block of ice (200 mm)', plates: [{ x: 0, ang: 0, len: 'auto', layers: [{ mat: 'ice', t: 200 }] }] },
+    { id: 'pykrete', name: 'Block of pykrete (200 mm, WWII ice + sawdust)', plates: [{ x: 0, ang: 0, len: 'auto', layers: [{ mat: 'pykrete', t: 200 }] }] },
     { id: 'water', name: 'Water tank (500 mm of water)', plates: [{ x: 0, ang: 0, len: 'auto', layers: [{ mat: 'mild', t: 6 }, { mat: 'water', t: 500 }, { mat: 'mild', t: 6 }] }] },
   ];
 
