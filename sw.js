@@ -1,6 +1,6 @@
 // Offline support: keeps a copy of the site so pages and games still open without internet.
 // Live data (news, weather, maps…) is never stored here; it always comes fresh from the internet.
-const VERSION = 'v4';
+const VERSION = 'v5';
 const CACHE = 'mikaeel-site-' + VERSION;
 const PAGES = ['', '404.html', 'site.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png',
   'music-player/', 'dashboard/', 'world-watch/', 'armor-sim/', 'armor-sim/engine.js', 'armor-sim/vehicles.js', 'armor-sim/sandbox.js', 'typing-test/', 'tier-list/', 'spin-wheel/',

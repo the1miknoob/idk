@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Armor Pen Sim · Mikaeel</title>
-  <meta name="description" content="A particle physics sandbox: fire bullets, shells, darts and shaped charges at armor and tank cut-aways, see what happens inside, and build your own vehicles. Plus a calculator and a target range.">
+  <meta name="description" content="A particle physics sandbox: fire bullets, shells, darts, rockets and missiles at armor or at whole tanks made of particles, watch them get torn apart, and build your own vehicles. Plus a calculator and a target range.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -498,14 +498,24 @@
       </div>
       <div class="card">
         <h3>🚜 Vehicles and the builder</h3>
-        <p>Pick <b>Vehicles</b> in the Sandbox to shoot at side cut-aways of tanks. Only the armor plates the shell actually hits are turned into particles; the rest of the vehicle is drawn solid. After the hit, the shell and every bit of armor it knocked loose fly on through the inside:</p>
+        <p>Pick <b>Vehicles</b> in the Sandbox to shoot at side cut-aways of 15 real tanks and 2 made-up vehicles. The <b>whole vehicle is made of particles</b>, tens of thousands of them. Most of them "sleep" until something hits them, which keeps it fast. After the hit, the shell and every bit of armor it knocked loose fly on through the inside:</p>
         <ul>
           <li><b>🧑 Crew</b> get hurt or knocked out. If more than half are out, the vehicle is knocked out.</li>
-          <li><b>💣 Ammo</b> can explode and destroy the whole vehicle, unless it's behind blow-out panels.</li>
+          <li><b>💣 Ammo</b> can explode: the blast throws the turret off and tears armor loose, and the pieces fly and land with gravity. Blow-out panels send the blast outside instead.</li>
           <li><b>⛽ Fuel</b> can catch fire, and a wrecked <b>⚙️ engine</b> or gearbox stops it moving.</li>
           <li><b>APHE</b> shells carry a little explosive that goes off just after they get inside.</li>
         </ul>
-        <p>The real tanks use rough armor numbers from public sources, and their insides are simplified. With <b>Build a new one</b> you can draw your own vehicle, save it, and send it to a friend with a link.</p>
+        <p><b>Damage stays</b>, so you can keep shooting the same vehicle: a hole lets the next shell straight through. <b>🔧 Repair</b> makes it good as new.</p>
+        <p>To keep it quick, full physics runs for the first 1.2 milliseconds after the hit. After that, anything still flying carries on in a straight line as one solid lump, and flying wreckage is slowed down so you can watch it. The real tanks use rough armor numbers from public sources, and their insides are simplified. With <b>Build a new one</b> you can draw your own vehicle, save it, and send it to a friend with a link.</p>
+      </div>
+      <div class="card">
+        <h3>🚀 Rockets, uranium and sandbags</h3>
+        <ul>
+          <li><b>Rockets and missiles</b> (bazooka, Panzerfaust, RPG-7, wire-guided missile) carry shaped charges, so their speed doesn't matter. The <b>tandem missile</b> fires a small charge first to set off reactive armor, then the main jet goes through.</li>
+          <li>The <b>top-attack slug</b> is a lump of copper shaped by an explosion, flying at 2 km/s. Try it on a tank from above, where the armor is thin.</li>
+          <li><b>Uranium darts</b> are heavier than tungsten and shed metal instead of flattening, so the same dart goes a bit deeper.</li>
+          <li><b>Sand, water and brick</b> are weak but thick. A shaped-charge jet goes about three times deeper in water than in steel, and sandbags stop bullets.</li>
+        </ul>
       </div>
       <div class="card">
         <h3>🧮 How the Calculator works</h3>
