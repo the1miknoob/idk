@@ -50,7 +50,7 @@ DEFAULTS := Map(
     "UpgradeKey", "e",
     "CancelKey", "q",
     "SpeedClicks", "1",
-    "ZoomOutNotches", "0",
+    "ZoomOutNotches", "30",
     "StepTimeoutSec", "240",
     "RestartDelaySec", "3"
 )
@@ -695,7 +695,7 @@ RunSetup() {
         Ask("SETUP`n"
             . "1. Start a Hardcore match on Wretched Front and stay at wave 0 (don't press READY).`n"
             . "2. Hotbar: " Mac.cfg["BoomerangKey"] " = Boomerang, " Mac.cfg["CrookKey"] " = Crook Boss, " Mac.cfg["FarmKey"] " = Farm.`n"
-            . "3. From now on don't walk, turn or zoom the camera - the macro clicks exact spots on your screen.`n`n"
+            . "3. The macro zooms the camera all the way out now and at the start of every match. Don't walk or turn it - the macro clicks exact spots on your screen.`n`n"
             . "Press F8 to begin.")
         ZoomOut()
 

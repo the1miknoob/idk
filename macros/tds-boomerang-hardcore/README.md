@@ -36,7 +36,7 @@ The macro only presses keys and clicks the mouse like you would. It doesn't chan
    - the **upgrade** button and the red **sell** button of a tower menu. Place any tower and click it so its menu opens.
 3. Sell that tower (or start a new match).
 
-**From now on, don't walk, turn or zoom the camera.** The macro clicks exact spots on your screen. Keep Roblox the same size too: if you set it up in fullscreen, play in fullscreen.
+**The macro zooms the camera all the way out** when setup starts and at the start of every match, so the view is the same each time (Roblox resets the zoom on every new server). **Don't walk or turn the camera**, because the macro clicks exact spots on your screen. Keep Roblox the same size too: if you set it up in fullscreen, play in fullscreen.
 
 ## Run it
 
@@ -78,7 +78,7 @@ The file is made the first time you run the macro. Edit it with Notepad, then re
 | `UpgradeKey` | e | TDS upgrade key |
 | `CancelKey` | q | TDS cancel-placing key |
 | `SpeedClicks` | 1 | How many times to click the speed button |
-| `ZoomOutNotches` | 0 | Set to about 20 to zoom all the way out at the start of every match (and during setup) |
+| `ZoomOutNotches` | 30 | Mouse-wheel steps used to zoom all the way out at the start of setup and of every match. 0 turns it off |
 | `StepTimeoutSec` | 240 | How long one step waits for cash before skipping it |
 | `RestartDelaySec` | 3 | Wait on the end screen before clicking play again |
 
