@@ -29,13 +29,13 @@ All the controls are F keys. On a laptop, if F1 or F2 changes the volume or brig
 2. Click on Roblox and press **F1**. A box next to your mouse tells you what to point at. Hover over it and press **F8**:
    - the green **READY** button
    - the **speed** button (x1/x2). If you don't have it, press **F9** to skip.
-   - an **empty** bit of ground on the **right half** of the screen. Tower menus open on the left, and the macro clicks this spot to close them.
+   - an **empty** bit of ground on the **right half** of the screen, away from where your towers will go. Tower menus open on the left, and the macro clicks this spot to close them.
    - the enemy **path**, somewhere away from where your towers will go. The macro picks up a farm for a moment to see the path turn red, so have $300. (Skipping this isn't a good idea: blocked spots then can't be fixed.)
-   - **10 farm spots**, **5 boomerang spots** and **5 crook boss spots**. Press F9 to stop early (you need at least 1 farm and 1 boomerang).
+   - **10 farm spots**, **5 boomerang spots** and **5 crook boss spots**. Press F9 to stop early (the first farm and the first boomerang can't be skipped).
      - Farms: anywhere off the path. A tidy block works well.
      - Boomerangs and Crook Bosses: right next to the path where it bends a lot (the middle of the map). Crook Bosses are big, so give them room.
-     - Leave a bit of space between spots, and keep them away from the path point you picked. If a spot is blocked, the macro moves the tower a little and remembers the new spot.
-   - the **upgrade** button and the red **sell** button of a tower menu: place a **farm**, click it so its menu opens, then point at the buttons. The macro also checks that your empty-ground spot isn't under that menu.
+     - Leave a bit of space between spots. Keep them away from the **SAFE** and **PATH** marks on screen (your empty-ground spot and path point); the macro won't take spots too close to them. If a spot is blocked, the macro moves the tower a little and remembers the new spot.
+   - the **upgrade** button and the red **sell** button of a tower menu: place a **farm**, click it so its menu opens, then point at the buttons. The macro also checks that your empty-ground spot isn't under that menu or on a tower spot, and that clicking it closes the menu.
 3. Leave the match and start a new one. (You can sell the farm instead, but then you may not have the cash for 3 farms at wave 0.)
 
 The macro zooms the camera all the way out when setup starts and at the start of every match, so the view is the same each time (Roblox resets the zoom on every new server). **Don't walk or turn the camera**, because the macro clicks exact spots on your screen. Keep Roblox the same size too: if you set it up in fullscreen, play in fullscreen.
@@ -45,8 +45,8 @@ The macro zooms the camera all the way out when setup starts and at the start of
 - At wave 0 of a Hardcore match on Wretched Front, press **F2**. You can also press it while the match is still loading; the macro waits for the READY button. A small status box shows what it's doing.
 - **F3** pause / resume, **F4** stop, **Ctrl+F4** close the macro.
 - **After your first run** (on the YOU LOST screen): press **F3** to pause, hover over the button that starts the next match, press **F6**, then **F3** again. After that the macro starts every new run by itself. (If you forget F3, the first F6 pauses the macro for you. Then hover and press F6 again.)
-- **Need two clicks to get to the next match?** Press F3, hover over button 1, press F6, click it, hover over button 2, press **Shift+F6**, then F3.
-- **F7** shows where everything is saved (stop the macro first). **F1** does the setup again. After a new setup, save the play-again button with F6 again.
+- **Need two clicks to get to the next match?** Press F3, hover over button 1, press F6, click it, hover over button 2, press **Shift+F6**, then F3. The macro clicks button 2 for you.
+- **F7** shows where everything is saved. **F1** does the setup again. Press **F4** to stop the macro before either of them. After a new setup, save the play-again button with F6 again.
 
 ## What it does
 
@@ -66,7 +66,7 @@ It follows the build order from the video. Every step waits until you have the c
 How it knows what's going on:
 
 - **Can I afford it?** The upgrade button turns green when you can buy the upgrade. The path turns red while you're holding a tower to place.
-- **Did the upgrade go through?** The menu changes to the next upgrade. The macro waits for that before it counts a level, so lag can't make it miscount.
+- **Did the upgrade go through?** The menu changes to the next upgrade. The macro waits for that before it counts a level, so normal lag doesn't make it miscount. (A really long lag spike can still make it buy one level early.)
 - **Is the menu open?** The red sell button shows.
 - **Is the run over?** The "play again" button you saved with F6 shows up, or tower menus stop opening. A new match is spotted by the READY button (and by your towers being gone, so a vote button in the same spot doesn't fool it).
 
@@ -91,12 +91,12 @@ The file is made the first time you run the macro. Edit it with Notepad, then re
 ## If something goes wrong
 
 - Look at `tds_boomerang_macro_log.txt` next to the macro. It lists every step.
-- **Towers go in the wrong place:** the setup was done after you walked or turned the camera, or Roblox changed size. Join a new match and, without walking or turning, press F1 and do the setup again.
+- **Towers go in the wrong place:** the setup was done after you walked or turned the camera, or Roblox changed size. Press F4 to stop the macro, join a new match and, without walking or turning, press F1 and do the setup again.
 - **Your character walks when the macro clicks:** in Roblox settings, set Movement Mode to "Default" (not "Click to Move").
 - **It never upgrades:** redo the setup, and for the upgrade button pick a plain spot at its right end (not the text).
 - **It waits forever at "waiting for a match":** it needs to see the green READY button at the spot you saved. Join a Hardcore match on Wretched Front at wave 0.
 - **The log says the empty-ground spot doesn't close tower menus:** redo the setup and pick a plain spot further right.
-- **It stops when you click another window:** that's on purpose. Nothing is clicked or typed outside Roblox. Click back on Roblox and it carries on.
+- **It stops when you switch to another window:** that's on purpose. Nothing is clicked or typed outside Roblox. Go back with **Alt+Tab** (or Roblox's button on the taskbar) and it carries on. Don't click inside the game to go back: that click goes to the game and could upgrade or sell a tower.
 - **You run two Roblox windows:** the macro sticks to the one you pressed F2 in.
 
 Heads up: auto-farming with a macro may be against the game's rules. Use it at your own risk. This isn't made by or connected to Paradoxum Games or Roblox.

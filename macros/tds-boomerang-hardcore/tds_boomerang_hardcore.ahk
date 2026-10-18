@@ -256,16 +256,9 @@ WaitForMatchStart() {
             return
         }
         ; still on the end screen: press play again once more now and then
-        if Mac.hasEnd && A_TickCount - lastClick > 10000 {
-            if LooksSaved(Mac.pts["end1"]) {
-                ClickRestart()
-                lastClick := A_TickCount
-            } else if Mac.pts.Has("end2") && LooksSaved(Mac.pts["end2"]) {
-                p := Mac.pts["end2"]
-                ClickAt(p.x, p.y)
-                MoveAway()
-                lastClick := A_TickCount
-            }
+        if Mac.hasEnd && A_TickCount - lastClick > 10000 && EndShowing() {
+            ClickRestart()
+            lastClick := A_TickCount
         }
         if A_TickCount - since > 60000
             Status("still no match - join a Hardcore match on Wretched Front (the macro starts at wave 0)")
@@ -311,7 +304,7 @@ PlaceTower(kind, n) {
     spot := Mac.spots[kind][n]
     key := Mac.cfg[HOTBAR_SETTING[kind]]
     nudges := [[0, 0], [15, 0], [-15, 0], [0, 15], [0, -15], [22, 22], [-22, 22], [22, -22], [-22, -22]]
-    tryNo := 1, probed := 0, blocked := false, misses := 0
+    tryNo := 1, probed := 0, taken := 0, blocked := false, misses := 0
     start := lastAlive := A_TickCount, b0 := Mac.blockedMs
     ; before READY your cash can't go up, so don't wait long for it
     limit := Mac.readyDone ? Mac.timeout : 8000
@@ -334,26 +327,34 @@ PlaceTower(kind, n) {
             probed := tryNo
             if SelectAt(x, y) {
                 Deselect()
-                blocked := true
-                if ++tryNo > nudges.Length {
+                ; only a taken first spot counts as blocked (then the spot that works gets saved)
+                blocked := blocked || tryNo = 1
+                if ++taken >= nudges.Length {
                     Log("couldn't place " kind " " n " - every spot around it is taken")
                     return
                 }
+                tryNo := Mod(tryNo, nudges.Length) + 1
                 continue
             }
+            taken := 0
         }
         if Mac.pathOk {
             ; hold the tower with the cursor on empty ground, like during setup, so it can't hide the path check
             MoveAway()
-            PressKey(key)
-            Sleep 300
-            if !IsPlacing() {
-                ; the path didn't light up: the tower isn't affordable yet
-                PressKey(Mac.cfg["CancelKey"])
-                ; now and then also try it without the path check, in case the check is hidden
+            ; red with nothing in hand: an enemy is covering the check point, so it can't tell us anything now
+            covered := IsPlacing()
+            if !covered {
+                PressKey(key)
+                Sleep 300
+            }
+            if covered || !IsPlacing() {
+                ; the path didn't light up: the tower isn't affordable yet (or the check point is covered)
+                if !covered
+                    PressKey(Mac.cfg["CancelKey"])
+                ; now and then also try it without the path check, in case the check stays hidden
                 if ++misses >= 8 && Mod(misses, 8) = 0 && Mac.readyDone && BlindPlace(x, y, key)
                     break
-                Sleep 700
+                Sleep covered ? 300 : 700
                 continue
             }
             ; the tower is in hand, so cash is fine: only the normal time limit applies from here
@@ -363,22 +364,28 @@ PlaceTower(kind, n) {
             Sleep 450
             MoveAway()
             Sleep 150
-            if IsPlacing() {
-                ; still holding it = the spot was refused (or the click got lost)
-                PressKey(Mac.cfg["CancelKey"])
-                Sleep 250
-                ; nothing stood here before, so a menu here now is this tower
+            if !IsPlacing() {
+                ; let go of it: make sure a tower really stands here (an enemy on the check point can fake the red path)
                 if SelectAt(x, y)
                     break
-                blocked := true
-                if ++tryNo > nudges.Length {
-                    Log("couldn't place " kind " " n " - the spot seems blocked")
-                    Deselect()
-                    return
-                }
                 continue
             }
-            break
+            ; still holding it = the spot was refused (or the click got lost)
+            PressKey(Mac.cfg["CancelKey"])
+            Sleep 250
+            ; still red with nothing in hand: the check point is covered, so this tells us nothing
+            if IsPlacing()
+                continue
+            ; nothing stood here before, so a menu here now is this tower
+            if SelectAt(x, y)
+                break
+            blocked := blocked || tryNo = 1
+            if ++tryNo > nudges.Length {
+                Log("couldn't place " kind " " n " - the spot seems blocked")
+                Deselect()
+                return
+            }
+            continue
         }
         ; no path check saved: place, then see if a tower menu opens there
         if BlindPlace(x, y, key)
@@ -426,7 +433,7 @@ UpgradeTower(kind, n, target) {
     t := Mac.placed[kind][n]
     key := kind n
     start := lastAlive := A_TickCount, b0 := Mac.blockedMs
-    misses := 0, unseen := 0
+    misses := 0, unseen := 0, before := ""
     while t.level < target {
         CheckAbort()
         if A_TickCount - start - (Mac.blockedMs - b0) > Mac.timeout {
@@ -448,21 +455,38 @@ UpgradeTower(kind, n, target) {
                 continue
             }
         }
+        ; an earlier press that showed up late (button grey now, or the menu changed since before it)
+        if unseen && (!CanUpgrade() || CountChanged(before, Grab(UpgradeArea())) >= 12) {
+            unseen := 0, t.level++
+            Log(kind " " n " -> lvl " t.level " (the upgrade showed up late)")
+            Sleep 250
+            continue
+        }
         if !CanUpgrade() {
             Sleep 250
             continue
         }
-        before := Grab(UpgradeArea())
+        ; compare with the menu from before the first press, even when pressing again
+        if !unseen
+            before := Grab(UpgradeArea())
+        ; a wait for Roblox above may have changed the open menu: then click our tower again first
+        EnsureRoblox()
+        if Mac.selKey != key
+            continue
         PressKey(Mac.cfg["UpgradeKey"])
-        ; only count it once the menu shows the next upgrade, so lag can't make it miscount
-        if !UpgradeShowed(before) && ++unseen < 3 {
+        ; only count it once the menu shows the next upgrade, so normal lag can't make it miscount
+        if UpgradeShowed(before, unseen ? 5000 : 3000) {
+            unseen := 0, t.level++
+            Log(kind " " n " -> lvl " t.level)
+            Sleep 250
+            continue
+        }
+        if ++unseen < 2 {
             Log("the upgrade of " kind " " n " didn't show up - pressing again")
             continue
         }
-        unseen := 0
-        t.level++
-        Log(kind " " n " -> lvl " t.level)
-        Sleep 250
+        unseen := 0, t.level++
+        Log(kind " " n " -> lvl " t.level " (couldn't see it on screen, counted anyway)")
     }
     Deselect()
 }
@@ -483,7 +507,7 @@ MaxOut(types) {
                     continue
                 }
                 opened++
-                if CanUpgrade() {
+                if Mac.selKey = kind n && CanUpgrade() {
                     PressKey(Mac.cfg["UpgradeKey"])
                     t.level++
                     Log(kind " " n " -> lvl " t.level)
@@ -491,9 +515,9 @@ MaxOut(types) {
                 }
             }
         }
-        ; none of the towers opened its menu twice in a row: the run is over
+        ; none of the towers opened its menu twice in a row (and at least 6 misses): the run is over
         deadPasses := tried && !opened ? deadPasses + 1 : 0
-        if deadPasses >= 2
+        if deadPasses >= 2 && Mac.failedSelects >= 6
             throw GameOverSignal("tower menus stopped opening")
         Deselect()
         SleepChecked(500)
@@ -540,10 +564,14 @@ AliveCheck() {
 ClickRestart() {
     Status("run over - pressing play again")
     UserSleep(Integer(Mac.cfg["RestartDelaySec"]) * 1000)
-    p := Mac.pts["end1"]
-    ClickAt(p.x, p.y)
+    ; already on the 2nd screen? Then only the 2nd button is needed
+    if !(Mac.pts.Has("end2") && LooksSaved(Mac.pts["end2"])) {
+        p := Mac.pts["end1"]
+        ClickAt(p.x, p.y)
+        if Mac.pts.Has("end2")
+            UserSleep(2000)
+    }
     if Mac.pts.Has("end2") {
-        UserSleep(2000)
         p := Mac.pts["end2"]
         ClickAt(p.x, p.y)
     }
@@ -564,7 +592,7 @@ CheckUser() {
     while Mac.paused || !WinActive(GameWin()) {
         if Mac.stop
             throw StopSignal("stopped")
-        Status(Mac.paused ? "paused - press F3 to go on" : "Roblox isn't in front - click on Roblox and the macro carries on")
+        Status(Mac.paused ? "paused - press F3 to go on" : "Roblox isn't in front - Alt+Tab back to it (don't click in the game)")
         Sleep 300
     }
     ; waiting doesn't count towards a step's time limit
@@ -582,7 +610,7 @@ CheckAbort() {
     Mac.lastCheck := A_TickCount
     ; each has to show up a few checks in a row, so one odd frame can't end a run
     if Mac.hasEnd {
-        Mac.endSeen := LooksSaved(Mac.pts["end1"]) ? Mac.endSeen + 1 : 0
+        Mac.endSeen := EndShowing() ? Mac.endSeen + 1 : 0
         if Mac.endSeen >= 2
             throw GameOverSignal("end screen")
     }
@@ -599,12 +627,15 @@ CheckAbort() {
     }
 }
 
-; The saved "play again" button is on screen (seen twice, a moment apart)
+; One of the saved end screen buttons (F6 / Shift+F6) is on screen
+EndShowing() => Mac.hasEnd && (LooksSaved(Mac.pts["end1"]) || Mac.pts.Has("end2") && LooksSaved(Mac.pts["end2"]))
+
+; The end screen shows (seen twice, a moment apart)
 EndVisible() {
-    if !Mac.hasEnd || !LooksSaved(Mac.pts["end1"])
+    if !EndShowing()
         return false
     Sleep 250
-    return LooksSaved(Mac.pts["end1"])
+    return EndShowing()
 }
 
 ; Don't click into the world once the run is over
@@ -760,8 +791,8 @@ CountChanged(a, b) {
 }
 
 ; After pressing upgrade: did the menu change (next upgrade, price, level bar) or the button stop being green?
-UpgradeShowed(before) {
-    stopAt := A_TickCount + 2500
+UpgradeShowed(before, ms := 3000) {
+    stopAt := A_TickCount + ms
     while A_TickCount < stopAt {
         Sleep 120
         if !PanelOpen() || !CanUpgrade()
@@ -793,9 +824,9 @@ EnsureRoblox() {
         if Mac.stop && (Mac.running || Mac.inSetup)
             throw StopSignal("stopped")
         if Mac.running
-            Status("Roblox isn't in front - click on Roblox and the macro carries on")
+            Status("Roblox isn't in front - Alt+Tab back to it (don't click in the game)")
         else
-            ToolTip "Roblox isn't in front - click on Roblox to carry on"
+            ToolTip "Roblox isn't in front - Alt+Tab back to it to carry on"
         Sleep 300
     }
     if !Mac.running
@@ -850,6 +881,7 @@ MoveAway() {
 Deselect() {
     if Mac.selKey = "" && !PanelOpen()
         return
+    StopIfOver()
     p := Mac.pts["safe"]
     ClickAt(p.x, p.y)
     Sleep 200
@@ -915,8 +947,11 @@ ReleaseKeys(*) {
 ; ============================================================================
 
 RunSetup() {
-    if Mac.running || Mac.inSetup
+    if Mac.running || Mac.inSetup {
+        if Mac.running
+            Tip("Press F4 to stop the macro first, then F1.", 3000)
         return
+    }
     HideSpots()
     LoadSettings()
     LoadPoints()
@@ -941,11 +976,16 @@ RunSetup() {
         else
             ForgetPoint("speed")
 
-        p := Ask("Hover over an EMPTY bit of ground on the RIGHT half of the screen (no path, no towers, nothing to click) and press F8.`n"
+        p := Ask("Hover over an EMPTY bit of ground on the RIGHT half of the screen, away from where your towers will go`n"
+            . "(no path, no towers, nothing to click) and press F8.`n"
             . "Tower menus open on the left, so keep away from there. The macro clicks here to close tower menus.")
         SaveWithColors("safe", p)
 
         SetupPath()
+        ; show the empty-ground spot and the path check, so the tower spots stay clear of them
+        for name, tag in Map("safe", "SAFE", "path", "PATH")
+            if Mac.pts.Has(name)
+                AddMarker(Mac.pts[name], tag, "333333")
         for kind in TOWER_ORDER
             SetupSpots(kind)
         SetupMenu()
@@ -960,8 +1000,8 @@ RunSetup() {
             . "1. Leave this match and start a new one. (Or sell the farm you placed, but then you may not have the cash for 3 farms at wave 0.)`n"
             . "2. At wave 0 of a Hardcore match on Wretched Front, press F2 in Roblox. The macro waits for the READY button, so you can also press F2 before the match loads.`n"
             . "3. When your first run ends (YOU LOST screen): press F3 to pause, hover over the button that starts the next match, press F6, then press F3 again. From then on the macro starts every run by itself.`n"
-            . "    Need two clicks to get to the next match? F3, hover button 1, F6, click it, hover button 2, Shift+F6, then F3.`n`n"
-            . "F7 shows the saved spots. F1 does the setup again (save the play-again button with F6 again after that).", "TDS macro", "Iconi"
+            . "    Need two clicks to get to the next match? F3, hover button 1, F6, click it, hover button 2, Shift+F6, then F3 (the macro clicks button 2 for you).`n`n"
+            . "F7 shows the saved spots. F4 then F1 does the setup again (save the play-again button with F6 again after that).", "TDS macro", "Iconi"
     } catch StopSignal {
         Log("setup cancelled")
         ToolTip()
@@ -981,6 +1021,11 @@ SetupPath() {
             ForgetPoint("path")
             Log("setup: path check skipped")
             return
+        }
+        if TooClose(p, "safe", 0.1) {
+            msg := "That's too close to your empty-ground spot (the macro holds towers there while it checks the path).`n"
+                . "Hover over the middle of the PATH somewhere else and press F8."
+            continue
         }
         MoveAway()
         Sleep 300
@@ -1010,13 +1055,20 @@ SetupSpots(kind) {
     newSpots := []
     loop count {
         i := A_Index
+        ; the macro needs at least one farm and one boomerang
+        canSkip := i > 1 || kind = "crook"
         note := ""
         loop {
-            p := Ask(note "Hover where " name " #" i " (of " count ") should go and press F8.`n"
-                . SPOT_HINT[kind] "`n(F9 = no more " PLURAL[kind] ")", true)
-            if !IsObject(p) || !TooCloseToPath(p)
+            p := Ask(note "Hover where " name " #" i " (of " count ") should go and press F8.`n" SPOT_HINT[kind]
+                . (canSkip ? "`n(F9 = no more " PLURAL[kind] ")" : "`n(You need at least one " name ".)"), canSkip)
+            if !IsObject(p)
                 break
-            note := "Too close to the path check point - a tower there would hide it. Pick a spot a bit further away.`n"
+            if TooClose(p, "path")
+                note := "Too close to the path check point - a tower there would hide it. Pick a spot a bit further away.`n"
+            else if TooClose(p, "safe")
+                note := "Too close to your empty-ground spot - the macro clicks there to close tower menus. Pick a spot a bit further away.`n"
+            else
+                break
         }
         if !IsObject(p)
             break
@@ -1030,12 +1082,22 @@ SetupSpots(kind) {
     Mac.spots[kind] := newSpots
 }
 
-TooCloseToPath(p) {
-    if !Mac.pts.Has("path")
+; p is within a small distance (a share of the window height) of a saved point
+TooClose(p, name, frac := 0.05) {
+    if !Mac.pts.Has(name)
         return false
     WinGetClientPos(, , , &ch, GameWin())
-    q := Mac.pts["path"]
-    return Abs(p.x - q.x) < ch * 0.05 && Abs(p.y - q.y) < ch * 0.05
+    q := Mac.pts[name]
+    return Abs(p.x - q.x) < ch * frac && Abs(p.y - q.y) < ch * frac
+}
+
+; No tower spot is on (or right next to) the empty-ground spot
+SafeClearOfSpots() {
+    for kind in TOWER_ORDER
+        for q in Mac.spots[kind]
+            if TooClose(q, "safe")
+                return false
+    return true
 }
 
 ; The tower menu: the upgrade button and the sell button
@@ -1056,20 +1118,25 @@ SetupMenu() {
         msg := "That spot doesn't look red. Open the tower's menu again (click the tower), then`n"
             . "hover over the red part of the SELL button and press F8."
     }
-    ; the empty-ground spot must not be under the menu, or clicking it could press Sell
+    ; the empty-ground spot must not be under the menu or on a tower spot, or clicking it could press Sell
     loop {
         s := Mac.pts["safe"]
-        if s.x > Max(Mac.pts["upgrade"].x, Mac.pts["sell"].x) + 30 && LooksSaved(s) {
-            ; and clicking it has to close the menu
+        if s.x > Max(Mac.pts["upgrade"].x, Mac.pts["sell"].x) + 30 && LooksSaved(s) && SafeClearOfSpots() {
+            ; and clicking it has to close the menu (a test that only means something while a menu is open)
+            if !PanelOpen() {
+                Ask("The tower menu is closed. Click the Farm so its menu opens again, then press F8.")
+                continue
+            }
             ClickAt(s.x, s.y)
             Sleep 400
             if !PanelOpen()
                 return
             msg := "Clicking your empty-ground spot didn't close the tower menu.`n"
-                . "Click the Farm again so its menu opens, then hover over plain empty ground to the RIGHT of the menu and press F8."
+                . "Keep the Farm's menu open (click the Farm only if it closed), then hover over plain empty ground`n"
+                . "to the RIGHT of the menu and press F8."
         } else {
-            msg := "Your empty-ground spot is under (or too close to) the tower menu.`n"
-                . "Keep the menu open and hover over empty ground to the RIGHT of it (no path, no towers), then press F8."
+            msg := "Your empty-ground spot is under the tower menu or on one of your tower spots.`n"
+                . "Keep the menu open and hover over empty ground to the RIGHT of it, away from your tower spots, then press F8."
         }
         SaveWithColors("safe", Ask(msg))
     }
@@ -1078,6 +1145,14 @@ SetupMenu() {
 CaptureEndButton(name) {
     if Mac.inSetup
         return
+    win := WinActive("ahk_group Roblox")
+    if Mac.running && win != Mac.hwnd {
+        Tip("Press F6 in the Roblox window the macro is playing in.", 3000)
+        KeyWait "F6"
+        return
+    }
+    if !Mac.running
+        Mac.hwnd := win
     if Mac.running && !Mac.paused {
         ; pause first, so the macro stops moving the mouse; the next F6 saves the button
         Mac.paused := true
@@ -1085,23 +1160,27 @@ CaptureEndButton(name) {
         KeyWait "F6"
         return
     }
-    HideSpots()
-    LoadSettings()
-    LoadPoints()
-    MouseGetPos &x, &y
-    MoveAway()
-    MouseGetPos &ax, &ay
-    if Abs(x - ax) <= 15 && Abs(y - ay) <= 15 {
-        Tip("Hover over the play again button first, then press F6.", 3000)
+    try {
+        HideSpots()
+        LoadSettings()
+        LoadPoints()
+        MouseGetPos &x, &y
+        MoveAway()
+        MouseGetPos &ax, &ay
+        if Abs(x - ax) <= 15 && Abs(y - ay) <= 15 {
+            Tip("Hover over the play again button first, then press F6.", 3000)
+            KeyWait "F6"
+            return
+        }
+        Sleep 300
+        p := {x: x, y: y, colors: SampleCross(x, y)}
+        SavePoint(name, p)
+        Mac.hasEnd := Mac.pts.Has("end1")
+        Tip("Saved the end screen button" (name = "end2" ? " (2nd click)" : "") "." (Mac.running ? " Press F3 to go on." : ""), 3000)
         KeyWait "F6"
-        return
+    } catch StopSignal {
+        ToolTip()
     }
-    Sleep 300
-    p := {x: x, y: y, colors: SampleCross(x, y)}
-    SavePoint(name, p)
-    Mac.hasEnd := Mac.pts.Has("end1")
-    Tip("Saved the end screen button" (name = "end2" ? " (2nd click)" : "") "." (Mac.running ? " Press F3 to go on." : ""), 3000)
-    KeyWait "F6"
 }
 
 ShowSpots() {
