@@ -99,4 +99,4 @@ The file is made the first time you run the macro. Edit it with Notepad, then re
 - **It stops when you switch to another window:** that's on purpose. Nothing is clicked or typed outside Roblox. Go back with **Alt+Tab** (or Roblox's button on the taskbar) and it carries on. Don't click inside the game to go back: that click goes to the game and could upgrade or sell a tower.
 - **You run two Roblox windows:** the macro sticks to the one you pressed F2 in.
 
-Heads up: auto-farming with a macro may be against the game's rules. Use it at your own risk. This isn't made by or connected to Paradoxum Games or Roblox.
+This isn't made by or connected to Paradoxum Games or Roblox.
