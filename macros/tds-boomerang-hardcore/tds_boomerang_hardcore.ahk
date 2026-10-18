@@ -15,6 +15,7 @@
 ;    F3  pause / resume                               F4  stop
 ;    F6  save the end screen's "play again" button    (Shift+F6: a 2nd button)
 ;    F7  show the saved spots                         Ctrl+F4  close the macro
+;    F10 check what the macro sees right now (try it in each game situation)
 ;  (On a laptop you may have to hold Fn for the F keys.)
 ;
 ;  Hotbar like in the video: 1 = Boomerang, 2 = Crook Boss, 3 = Farm.
@@ -176,6 +177,7 @@ F6::CaptureEndButton("end1")
 F7::ShowSpots()
 F8::Capture("ok")
 F9::Capture("skip")
+F10::RunCheck()
 ^F4::ExitApp()
 #HotIf
 
@@ -716,16 +718,19 @@ CountMatches(p, test) {
 IsGreen(r, gn, b) => gn >= 70 && gn - r >= 25 && gn - b >= 15
 IsRed(r, gn, b) => r >= 150 && r - gn >= 70 && r - b >= 60
 
-; True when a saved point looks like it did when it was saved (4 of 5 pixels)
-LooksSaved(p, tol := 50) {
+; How many of a saved point's 5 pixels still look like they did when it was saved
+SavedHits(p, tol := 50) {
     if !IsObject(p) || p.colors.Length < CROSS.Length
-        return false
+        return 0
     hits := 0
     for i, off in CROSS
         if ColorDist(ColorAt(p.x + off[1], p.y + off[2]), p.colors[i]) <= tol
             hits++
-    return hits >= 4
+    return hits
 }
+
+; True when a saved point looks like it did when it was saved (4 of 5 pixels)
+LooksSaved(p, tol := 50) => SavedHits(p, tol) >= 4
 
 ; A tower's menu is open when its red SELL button shows
 PanelOpen() => CountMatches(Mac.pts["sell"], IsRed) >= 3
@@ -734,7 +739,10 @@ PanelOpen() => CountMatches(Mac.pts["sell"], IsRed) >= 3
 CanUpgrade() => CountMatches(Mac.pts["upgrade"], IsGreen) >= 3
 
 ; While you hold a tower to place it, the enemy path lights up red
-IsPlacing() {
+IsPlacing() => PathVotes() >= 3
+
+; How many of the path check's 5 pixels look red (closer to the "holding a tower" colour)
+PathVotes() {
     p := Mac.pts["path"]
     votes := 0
     for i, off in CROSS {
@@ -742,7 +750,7 @@ IsPlacing() {
         if ColorDist(c, p.pink[i]) < ColorDist(c, p.colors[i])
             votes++
     }
-    return votes >= 3
+    return votes
 }
 
 ; The part of the menu left of the saved upgrade point: upgrade name, price and level bar
@@ -966,6 +974,8 @@ RunSetup() {
             . "    From now on don't walk or turn it - the macro clicks exact spots on your screen.`n`n"
             . "Press F8 to begin.")
         ZoomOut()
+        ; the spots only fit a window of this size (saved once the setup is done)
+        WinGetClientPos(, , &cw, &ch, GameWin())
 
         p := Ask("Hover over a plain green part of the READY button (not the text) and press F8.")
         SaveWithColors("ready", p)
@@ -993,15 +1003,16 @@ RunSetup() {
         ForgetPoint("end1")
         ForgetPoint("end2")
         Mac.hasEnd := false
+        IniWrite cw "x" ch, INI_FILE, "Points", "window"
 
-        Log("setup saved")
+        Log("setup saved (Roblox window " cw "x" ch ")")
         ToolTip()
         MsgBox "Setup saved!`n`n"
             . "1. Leave this match and start a new one. (Or sell the farm you placed, but then you may not have the cash for 3 farms at wave 0.)`n"
             . "2. At wave 0 of a Hardcore match on Wretched Front, press F2 in Roblox. The macro waits for the READY button, so you can also press F2 before the match loads.`n"
             . "3. When your first run ends (YOU LOST screen): press F3 to pause, hover over the button that starts the next match, press F6, then press F3 again. From then on the macro starts every run by itself.`n"
             . "    Need two clicks to get to the next match? F3, hover button 1, F6, click it, hover button 2, Shift+F6, then F3 (the macro clicks button 2 for you).`n`n"
-            . "F7 shows the saved spots. F4 then F1 does the setup again (save the play-again button with F6 again after that).", "TDS macro", "Iconi"
+            . "F10 shows what the macro sees right now (handy to check it works). F7 shows the saved spots. F4 then F1 does the setup again (save the play-again button with F6 again after that).", "TDS macro", "Iconi"
     } catch StopSignal {
         Log("setup cancelled")
         ToolTip()
@@ -1183,6 +1194,72 @@ CaptureEndButton(name) {
     }
 }
 
+; F10: shows what the macro sees on your screen right now, so you can check it works with your game.
+; Try it at wave 0, while holding a Farm, with a tower menu open, and on the YOU LOST screen.
+RunCheck() {
+    if Mac.inSetup
+        return
+    if Mac.running && !Mac.paused {
+        Tip("Press F3 to pause the macro first, then F10.", 3000)
+        return
+    }
+    HideSpots()
+    if !Mac.running {
+        LoadSettings()
+        LoadPoints()
+        Mac.hwnd := WinActive("ahk_group Roblox")
+    }
+    if !Mac.pts.Has("ready") || !Mac.pts.Has("sell") || !Mac.pts.Has("upgrade") {
+        Tip("Do the setup first (F1), then F10 checks it.", 3000)
+        return
+    }
+    try {
+        MouseGetPos &mx, &my
+        MoveAway()
+        Sleep 300
+        WinGetClientPos(, , &cw, &ch, GameWin())
+        size := IniRead(INI_FILE, "Points", "window", "")
+        out := ["Roblox window: " cw "x" ch (size = "" ? "" : size = cw "x" ch
+            ? "  (same as the setup - good)" : "  DIFFERENT from the setup (" size ") - make it the same size or do F1 again")]
+        out.Push("READY button: " Seen("ready", "you're at wave 0", "not on screen (fine during a wave)"))
+        if Mac.pathOk {
+            votes := PathVotes()
+            out.Push("Path: " (votes >= 3 ? "RED - you're holding a tower" : "normal - nothing in hand") "  (" votes "/5 red)")
+        } else {
+            out.Push("Path check: not saved (the macro places towers a bit slower)")
+        }
+        red := CountMatches(Mac.pts["sell"], IsRed)
+        out.Push("Tower menu: " (red >= 3 ? "OPEN" : "closed") "  (" red "/5 red on the Sell spot)")
+        if red >= 3 {
+            green := CountMatches(Mac.pts["upgrade"], IsGreen)
+            out.Push("Upgrade button: " (green >= 3 ? "GREEN - you can afford it" : "not green - can't afford it (or max level)") "  (" green "/5 green)")
+        }
+        if Mac.pts.Has("end1")
+            out.Push("Play-again button (F6): " Seen("end1", "the run is over", "not on screen"))
+        else
+            out.Push("Play-again button: not saved yet (F6 on the YOU LOST screen)")
+        if Mac.pts.Has("end2")
+            out.Push("2nd end button (Shift+F6): " Seen("end2", "on screen", "not on screen"))
+        ; the exact colours, for the log
+        raw := []
+        for name in ["ready", "path", "safe", "upgrade", "sell", "end1", "end2"]
+            if Mac.pts.Has(name)
+                raw.Push(name "=" JoinColors(SampleCross(Mac.pts[name].x, Mac.pts[name].y)))
+        MouseMove mx, my, 0
+        Log("check: " Join(out, " | "))
+        Log("check colours: " Join(raw, " "))
+        MsgBox Join(out, "`n") "`n`n(Also written to tds_boomerang_macro_log.txt.)", "TDS macro check", "Iconi"
+    } catch StopSignal {
+        ToolTip()
+    }
+}
+
+; "SEEN" or not for a saved point, with how many of its 5 pixels match
+Seen(name, yes, no) {
+    n := SavedHits(Mac.pts[name])
+    return (n >= 4 ? "SEEN - " yes : no) "  (" n "/5 match)"
+}
+
 ShowSpots() {
     ; the markers would cover the pixels the macro reads, so not while it runs
     if Mac.running || Mac.inSetup {
@@ -1299,6 +1376,16 @@ LoadAll() {
     if missing.Length {
         MsgBox "Do the setup first: press F1 in Roblox.`n`nMissing: " Join(missing, ", "), "TDS macro", "Icon!"
         return false
+    }
+    ; the saved spots only fit a Roblox window of the size it had during the setup
+    size := IniRead(INI_FILE, "Points", "window", "")
+    if size != "" && (hwnd := WinActive("ahk_group Roblox")) {
+        WinGetClientPos(, , &cw, &ch, "ahk_id " hwnd)
+        if size != cw "x" ch {
+            MsgBox "Roblox's window is a different size than during the setup (setup: " size ", now: " cw "x" ch ").`n`n"
+                . "The saved spots only fit the old size. Make Roblox the same size again (for example fullscreen, like during the setup), or do the setup again with F1.", "TDS macro", "Icon!"
+            return false
+        }
     }
     try {
         Mac.steps := ParseBuildOrder(BUILD_ORDER)

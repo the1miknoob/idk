@@ -38,6 +38,19 @@ All the controls are F keys. On a laptop, if F1 or F2 changes the volume or brig
    - the **upgrade** button and the red **sell** button of a tower menu: place a **farm**, click it so its menu opens, then point at the buttons. The macro also checks that your empty-ground spot isn't under that menu or on a tower spot, and that clicking it closes the menu.
 3. Leave the match and start a new one. (You can sell the farm instead, but then you may not have the cash for 3 farms at wave 0.)
 
+## Check it works with your game (F10, 1 minute)
+
+Press **F10** in Roblox and a box tells you what the macro sees right now. Try it in these 4 situations, and each should say:
+
+| Situation | F10 should say |
+| --- | --- |
+| Wave 0, before READY | READY button: **SEEN** |
+| Holding a farm (press 3, don't place it, press F10, then Q) | Path: **RED** |
+| A tower's menu open, with enough cash for its upgrade | Tower menu: **OPEN**, Upgrade button: **GREEN** |
+| The YOU LOST screen (after saving it with F6) | Play-again button: **SEEN** |
+
+If one is wrong, do the setup again (F1) and pick that spot a little differently (a plain part of the button, not its text). Every check is also written to `tds_boomerang_macro_log.txt` with the exact colours.
+
 The macro zooms the camera all the way out when setup starts and at the start of every match, so the view is the same each time (Roblox resets the zoom on every new server). **Don't walk or turn the camera**, because the macro clicks exact spots on your screen. Keep Roblox the same size too: if you set it up in fullscreen, play in fullscreen.
 
 ## Run it
@@ -91,6 +104,7 @@ The file is made the first time you run the macro. Edit it with Notepad, then re
 ## If something goes wrong
 
 - Look at `tds_boomerang_macro_log.txt` next to the macro. It lists every step.
+- **"Roblox's window is a different size than during the setup":** the saved spots only fit the size Roblox had during the setup. Make it that size again (fullscreen if you set up in fullscreen) or redo the setup.
 - **Towers go in the wrong place:** the setup was done after you walked or turned the camera, or Roblox changed size. Press F4 to stop the macro, join a new match and, without walking or turning, press F1 and do the setup again.
 - **Your character walks when the macro clicks:** in Roblox settings, set Movement Mode to "Default" (not "Click to Move").
 - **It never upgrades:** redo the setup, and for the upgrade button pick a plain spot at its right end (not the text).
