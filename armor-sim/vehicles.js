@@ -42,11 +42,36 @@
   const gear = ({ ends, road, r, t = 60, rollers = [], ry = 0, rr = 90, drive = 'front', inter = false }) =>
     ({ wheels: [ends[0], ...road.map(x => [x, r + t, r]), ends[1]], rollers: rollers.map(x => [x, ry, rr]), trackT: t, drive, interleave: inter });
   const pairs = (xs, gap) => xs.flatMap(x => [x - gap / 2, x + gap / 2]);   // road wheels in twos (bogies)
+  const even = (x0, x1, n) => Array.from({ length: n }, (_, k) => Math.round(x0 + (x1 - x0) * k / (n - 1)));   // n road wheels evenly spaced
   // Outside details (drawn only): a commander's cupola on the turret roof, and plain boxes (t: moves with the turret)
   const cupola = (x0, x1, y, h) => ({ t: 1, p: [[x0, y - 20], [x0, y + h * 0.75], [x0 + (x1 - x0) * 0.15, y + h], [x1 - (x1 - x0) * 0.15, y + h], [x1, y + h * 0.75], [x1, y - 20]] });
   const box = (x0, y0, x1, y1, t = 0) => ({ t, p: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]] });
   const bowMG = (x, y, len = 240) => box(x - len, y - 25, x + 10, y + 25);   // a machine gun poking out of the front plate at (x, y)
   const roofMG = (x, y, len = 600) => [box(x - 20, y, x + 20, y + 230, 1), box(x - len, y + 195, x + 140, y + 240, 1)];   // on a post on the turret roof
+  // n blocks along the outside of the plate a → b (spare track links…), from f0 to f1 of the way along, h mm thick
+  const strip = (a, b, f0, f1, n, h, t = 0) => {
+    const dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy), ox = -dy / len * h, oy = dx / len * h, at = f => [a[0] + dx * f, a[1] + dy * f];
+    return Array.from({ length: n }, (_, k) => { const p = at(f0 + (f1 - f0) * k / n), q = at(f0 + (f1 - f0) * (k + 0.8) / n); return { t, p: [p, q, [q[0] + ox, q[1] + oy], [p[0] + ox, p[1] + oy]] }; });
+  };
+  const drum = (x, y, r) => ({ t: 0, c: [x, y, r], col: '#3d4842' });   // an extra fuel drum on the back, seen end-on
+  // chains with a ball on the end, hanging (len long, but no lower than low) from the line top(x) under the turret
+  const curtain = (xs, top, len, low) => xs.flatMap(x => { const y = Math.max(top(x) - len, low); return [{ t: 1, l: [[x, top(x)], [x, y]], w: 18, col: '#6f7a86' }, { t: 1, c: [x, y, 36], col: '#6f7a86' }]; });
+  const lamp = (x0, y0, x1, y1, t = 1, lens = '#cfe0ea') => [box(x0, y0, x1, y1, t), { ...box(x0 - 30, y0 + (y1 - y0) * 0.15, x0, y1 - (y1 - y0) * 0.15, t), col: lens }];   // a light, its glass at the front
+  // A rounded (cast) outline through the points (clockwise), each plate named after the way it faces. An upright plate is as thick as the
+  // front (or rear), a flat one as the roof (or the floor under a bustle), and a sloped one in between.
+  // spec: { name, front, roof, rear, floor (defaults to the front or rear), mat }, or { name, t, plain: true } for one thickness and name.
+  function rounded(g, pts, spec) {
+    const out = [], base = spec.name || 'Turret';
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1], len = Math.hypot(b[0] - a[0], b[1] - a[1]), nx = (a[1] - b[1]) / len, ny = (b[0] - a[0]) / len;   // the way it faces (out)
+      const th = nx < 0 ? spec.front : spec.rear, tv = ny > 0 ? spec.roof : spec.floor != null ? spec.floor : th;
+      const t = spec.t != null ? spec.t : th * Math.abs(nx) + tv * (1 - Math.abs(nx));
+      const side = ny > 0.866 ? 'roof' : ny < -0.866 ? 'floor' : nx < 0 ? 'front' : 'rear';
+      const sub = side === 'roof' ? (nx < -0.3 ? ' (front)' : nx > 0.3 ? ' (rear)' : '') : side === 'floor' ? '' : ny > 0.38 ? ' (upper)' : ny < -0.38 ? ' (lower)' : '';
+      out.push({ n: spec.plain ? base : side === 'floor' ? 'Bustle floor' : `${base} ${side}${sub}`, a: a.slice(), b: b.slice(), layers: L(spec.mat || 'cast', Math.round(t)), g });
+    }
+    return out;
+  }
 
 
   // ✏️ Vehicle cut-aways. Real ones use rough public armor numbers and simplified insides; the made-up ones are made up.
@@ -55,19 +80,20 @@
       id: 'tiger', name: 'Tiger I', group: 'WW2 (approx.)', year: 1942, from: 'Germany', aim: [565, 1500],
       about: 'Thick, flat armor and the famous 88 mm gun. Slow and heavy, but hard to hurt from the front.',
       parts: [
-        ...chain('h', [[3700, 1830], [5950, 1830], [6080, 1000], [5700, 450], [650, 450], [220, 760], [60, 1100], [520, 1180], [630, 1830], [1650, 1830]], [
+        ...chain('h', [[3700, 1830], [6250, 1830], [6380, 1000], [6000, 450], [650, 450], [220, 760], [60, 1100], [520, 1180], [630, 1830], [1650, 1830]], [
           ['Engine deck', L('rha', 25)], ['Rear plate', L('rha', 80)], ['Lower rear plate', L('rha', 60)], ['Belly', L('rha', 25)],
           ['Lower front plate', L('rha', 60)], ['Nose plate', L('rha', 100)], ['Glacis', L('rha', 60)], ["Driver's plate", L('rha', 100)], ['Hull roof', L('rha', 25)]]),
         ...chain('t', [[1450, 1860], [1450, 2900], [3750, 2900], [3860, 1860]], [['Turret front', L('rha', 100)], ['Turret roof', L('rha', 25)], ['Turret rear', L('rha', 80)]]),
-        ...chain('t', [[1250, 2020], [1250, 2780]], [['Gun mantlet', L('rha', 120)]]),
+        ...rounded('t', [[1290, 1990], [1255, 2060], [1250, 2400], [1255, 2740], [1290, 2810]], { name: 'Gun mantlet', plain: true, t: 120, mat: 'rha' }),
       ],
       modules: [
-        M('trans', 'Transmission', 300, 520, 850, 1000), M('crew', 'Driver', 760, 560, 1200, 1650), M('crew', 'Radio operator', 1240, 560, 1680, 1650),
+        M('trans', 'Transmission', 440, 700, 860, 1060), M('crew', 'Driver', 880, 560, 1280, 1650), M('crew', 'Radio operator', 1320, 560, 1720, 1650),
         M('ammo', 'Ammo (side racks)', 1780, 1360, 3600, 1790), M('ammo', 'Ammo (floor)', 1950, 500, 3450, 820),
         M('crew', 'Gunner', 1720, 1640, 2160, 2560), M('crew', 'Loader', 2240, 880, 2720, 2200), M('crew', 'Commander', 2820, 1950, 3300, 2850),
-        M('gun', 'Gun breech', 1450, 2290, 2650, 2490), M('fuel', 'Fuel tanks', 4100, 560, 4650, 1660), M('engine', 'Engine', 4720, 560, 5850, 1680),
+        M('gun', 'Gun breech', 1450, 2290, 2650, 2490), M('fuel', 'Fuel tanks', 4250, 560, 4700, 1660), M('engine', 'Engine', 4750, 560, 5950, 1680),
       ],
-      deco: { ...gear({ ends: [[330, 860, 330], [5900, 760, 300]], road: [1000, 1600, 2200, 2800, 3400, 4000, 4600, 5200], r: 400, inter: true }), barrel: { x0: 1250, x1: -2070, y: 2400, d: 130, taper: 0.75, brake: 'double' }, shapes: [bowMG(583, 1550), cupola(2900, 3400, 2900, 180), box(5990, 1350, 6090, 2150)] },
+      deco: { ...gear({ ends: [[330, 860, 330], [5950, 760, 300]], road: even(1150, 5000, 8), r: 400, inter: true }), barrel: { x0: 1250, x1: -2070, y: 2400, d: 130, taper: 0.75, brake: 'double' },
+        shapes: [bowMG(583, 1550), cupola(2900, 3400, 2900, 120), box(6330, 1300, 6430, 2150), { t: 1, p: [[3780, 2150], [4220, 2150], [4220, 2560], [3760, 2560]] }, ...lamp(380, 1175, 540, 1300, 0)] },
     },
     {
       id: 'tiger2', name: 'Tiger II', group: 'WW2 (approx.)', year: 1944, from: 'Germany', aim: [505, 1575],
@@ -81,9 +107,9 @@
         ...chain('t', [[1550, 2200], [1550, 2650]], [['Gun mantlet', L('cast', 100)]]),
       ],
       modules: [
-        M('trans', 'Transmission', 350, 570, 950, 1150), M('crew', 'Driver', 1000, 570, 1450, 1750), M('crew', 'Radio operator', 1500, 570, 1950, 1850),
-        M('ammo', 'Ammo (side racks)', 2050, 1450, 4200, 1950), M('ammo', 'Ammo (turret bustle)', 3950, 2150, 4650, 2850),
-        M('crew', 'Gunner', 2050, 1750, 2450, 2750), M('crew', 'Loader', 2550, 600, 3050, 2500), M('crew', 'Commander', 3150, 2050, 3650, 2900),
+        M('trans', 'Transmission', 650, 750, 990, 1250), M('crew', 'Driver', 1000, 570, 1450, 1750), M('crew', 'Radio operator', 1500, 570, 1950, 1850),
+        M('ammo', 'Ammo (side racks)', 2050, 1450, 4200, 1950), M('ammo', 'Ammo (turret bustle)', 3950, 2160, 4400, 2800),
+        M('crew', 'Gunner', 2050, 1800, 2450, 2750), M('crew', 'Loader', 2550, 600, 3050, 2500), M('crew', 'Commander', 3150, 2050, 3650, 2900),
         M('gun', 'Gun breech', 1900, 2340, 3150, 2540), M('fuel', 'Fuel tanks', 4350, 570, 4850, 1900), M('engine', 'Engine', 4900, 570, 6900, 1900),
       ],
       deco: { ...gear({ ends: [[250, 780, 330], [7050, 720, 300]], road: [1000, 1662, 2325, 2988, 3650, 4312, 4975, 5638, 6300], r: 400, inter: true }), barrel: { x0: 1550, x1: -2900, y: 2430, d: 120, taper: 0.75, brake: 'double' }, shapes: [bowMG(535, 1600), cupola(3150, 3600, 3000, 160), box(7150, 1600, 7250, 2300)] },
@@ -100,8 +126,8 @@
         ...chain('t', [[1830, 1960], [1700, 2200], [1700, 2480], [1830, 2730]], [['Mantlet (lower curve)', L('cast', 100)], ['Mantlet', L('cast', 100)], ['Mantlet (upper curve)', L('cast', 100)]]),
       ],
       modules: [
-        M('trans', 'Transmission', 200, 640, 820, 1100), M('crew', 'Driver', 1100, 640, 1530, 1600), M('crew', 'Radio operator', 1570, 640, 2000, 1600),
-        M('ammo', 'Ammo (side racks)', 2100, 1340, 3900, 1770), M('crew', 'Gunner', 2200, 1700, 2600, 2620), M('crew', 'Loader', 2700, 700, 3200, 2350),
+        M('trans', 'Transmission', 680, 640, 1080, 1080), M('crew', 'Driver', 1100, 640, 1530, 1600), M('crew', 'Radio operator', 1570, 640, 2000, 1600),
+        M('ammo', 'Ammo (side racks)', 2100, 1340, 3900, 1750), M('crew', 'Gunner', 2250, 1700, 2650, 2620), M('crew', 'Loader', 2700, 700, 3200, 2350),
         M('crew', 'Commander', 3350, 1950, 3800, 2900), M('gun', 'Gun breech', 1950, 2270, 3150, 2460),
         M('fuel', 'Fuel tanks', 4300, 640, 4900, 1700), M('engine', 'Engine', 4950, 640, 6200, 1720),
       ],
@@ -117,7 +143,7 @@
         ...chain('h', [[1271, 1900], [1209, 2162], [1689, 2498], [1914, 2350]], [['Gun mantlet (lower)', L('cast', 100)], ['Gun mantlet', L('cast', 100)], ['Gun mantlet (upper)', L('cast', 100)]]),
       ],
       modules: [
-        M('trans', 'Transmission', 250, 640, 820, 1100), M('crew', 'Driver', 1050, 640, 1500, 1640), M('crew', 'Radio operator', 1550, 640, 2000, 1800),
+        M('trans', 'Transmission', 680, 640, 1080, 1080), M('crew', 'Driver', 1100, 640, 1530, 1640), M('crew', 'Radio operator', 1570, 640, 2000, 1800),
         M('crew', 'Gunner', 2350, 1600, 2800, 2550), M('gun', 'Gun breech', 2100, 2150, 3300, 2350), M('crew', 'Loader', 2900, 640, 3350, 2550),
         M('crew', 'Commander', 3450, 1550, 3950, 2600), M('ammo', 'Ammo (side racks)', 3450, 640, 4250, 1500),
         M('fuel', 'Fuel tanks', 4550, 640, 5000, 1700), M('engine', 'Engine', 5050, 640, 6250, 1720),
@@ -140,7 +166,7 @@
         M('crew', 'Loader', 4350, 560, 4800, 2850), M('crew', 'Second loader', 4900, 560, 5350, 2850), M('crew', 'Commander', 5450, 1900, 5900, 2900),
         M('ammo', 'Ammo (racks)', 5450, 560, 6200, 1450),
       ],
-      deco: { ...gear({ ends: [[250, 680, 300], [6550, 680, 300]], road: [1090, 1910, 2790, 3610, 4490, 5310], r: 380, drive: 'rear' }), barrel: { x0: 3150, x1: -1340, y: 2450, d: 120, taper: 0.75, brake: 'double' }, shapes: [cupola(5450, 5850, 2970, 150)] },
+      deco: { ...gear({ ends: [[250, 680, 300], [6550, 680, 300]], road: [1090, 1910, 2790, 3610, 4490, 5310], r: 380, drive: 'rear' }), barrel: { x0: 3150, x1: -1340, y: 2450, d: 120, taper: 0.75, brake: 'double' }, shapes: [bowMG(111, 1500), cupola(5450, 5850, 2970, 150)] },
     },
     {
       id: 'maus', name: 'Maus', group: 'WW2 (approx.)', year: 1944, from: 'Germany', aim: [650, 1455],
@@ -159,13 +185,14 @@
         M('crew', 'Gunner', 2950, 2050, 3400, 3300), M('crew', 'Loader', 3500, 1950, 3950, 3450), M('crew', 'Second loader', 4050, 1950, 4500, 3450),
         M('crew', 'Commander', 4600, 2300, 5100, 3550), M('gun', 'Gun breech', 2800, 2600, 4600, 2850), M('ammo', 'Ammo (turret)', 5200, 2000, 5900, 3200),
       ],
-      deco: { ...gear({ ends: [[300, 820, 350], [8750, 820, 350]], road: [800, 1473, 2145, 2818, 3491, 4164, 4836, 5509, 6182, 6855, 7527, 8200], r: 270, drive: 'rear' }), barrel: { x0: 2250, x1: -1060, y: 2700, d: 160, taper: 0.8, brake: false } },
+      deco: { ...gear({ ends: [[300, 820, 350], [8750, 820, 350]], road: [800, 1473, 2145, 2818, 3491, 4164, 4836, 5509, 6182, 6855, 7527, 8200], r: 270, drive: 'rear' }), barrel: { x0: 2250, x1: -1060, y: 2700, d: 160, taper: 0.8, brake: false },
+        shapes: [box(1150, 2840, 2250, 2900, 1)] },   // the 75 mm gun next to the big one
     },
     {
       id: 'pz4', name: 'Panzer IV Ausf. H', group: 'WW2 (approx.)', year: 1943, from: 'Germany', aim: [600, 1380],
       about: 'The workhorse German tank. Thick 80 mm plates on the front of the hull, but a thin 50 mm turret front.',
       parts: [
-        ...chain('h', [[3500, 1700], [5600, 1700], [5800, 620], [5500, 400], [300, 400], [150, 950], [450, 1050], [550, 1700], [1900, 1700]], [
+        ...chain('h', [[3500, 1700], [5840, 1700], [6040, 620], [5740, 400], [300, 400], [150, 950], [450, 1050], [550, 1700], [1900, 1700]], [
           ['Engine deck', L('rha', 16)], ['Rear plate', L('rha', 20)], ['Lower rear plate', L('rha', 20)], ['Belly', L('rha', 10)],
           ['Lower front plate', L('rha', 80)], ['Glacis', L('rha', 25)], ["Driver's plate", L('rha', 80)], ['Hull roof', L('rha', 16)]]),
         ...chain('t', [[1650, 1730], [1760, 2340], [2200, 2560], [3500, 2600], [3800, 1730]], [
@@ -174,11 +201,12 @@
       ],
       modules: [
         M('trans', 'Transmission', 420, 470, 940, 950), M('crew', 'Driver', 760, 470, 1190, 1600), M('crew', 'Radio operator', 1230, 470, 1650, 1600),
-        M('crew', 'Gunner', 1850, 1450, 2220, 2400), M('crew', 'Loader', 2280, 500, 2720, 2200), M('crew', 'Commander', 2800, 1700, 3250, 2550),
+        M('crew', 'Gunner', 1850, 1450, 2220, 2350), M('crew', 'Loader', 2280, 500, 2720, 2200), M('crew', 'Commander', 2800, 1700, 3250, 2550),
         M('gun', 'Gun breech', 1700, 2040, 2700, 2200), M('ammo', 'Ammo (floor racks)', 1800, 470, 3400, 860),
-        M('fuel', 'Fuel tanks', 3460, 470, 3960, 1150), M('engine', 'Engine', 4020, 470, 5400, 1580),
+        M('fuel', 'Fuel tanks', 3550, 470, 4150, 1150), M('engine', 'Engine', 4250, 470, 5650, 1580),
       ],
-      deco: { ...gear({ ends: [[200, 640, 270], [5550, 600, 250]], road: [790, 1290, 1890, 2390, 2990, 3490, 4090, 4590], r: 235, rollers: [1040, 2140, 3240, 4340], ry: 760, rr: 100 }), barrel: { x0: 1550, x1: -1130, y: 2120, d: 85, taper: 0.8, brake: 'double' }, shapes: [bowMG(504, 1400), cupola(2800, 3250, 2600, 130), { t: 1, p: [[3700, 2000], [4060, 2000], [4060, 2380], [3570, 2380]] }] },
+      deco: { ...gear({ ends: [[200, 640, 270], [5790, 600, 250]], road: pairs([1060, 2230, 3400, 4570], 500), r: 235, rollers: [1060, 2230, 3400, 4570], ry: 760, rr: 100 }), barrel: { x0: 1550, x1: -980, y: 2120, d: 85, taper: 0.8, brake: 'double' },
+        shapes: [bowMG(504, 1400), cupola(2800, 3250, 2600, 130), { t: 1, p: [[3700, 2000], [4060, 2000], [4060, 2380], [3570, 2380]] }, ...strip([300, 400], [150, 950], 0.25, 0.95, 4, 60)] },
     },
     {
       id: 'stug3', name: 'StuG III Ausf. G', group: 'WW2 (approx.)', year: 1943, from: 'Germany', aim: [860, 1700],
@@ -192,9 +220,10 @@
       modules: [
         M('trans', 'Transmission', 620, 450, 1000, 1150), M('crew', 'Driver', 1050, 450, 1450, 1700), M('crew', 'Gunner', 1250, 1400, 1650, 2100),
         M('gun', 'Gun breech', 1000, 1700, 2300, 1900), M('crew', 'Loader', 1750, 450, 2200, 2100), M('crew', 'Commander', 2300, 1450, 2750, 2140),
-        M('ammo', 'Ammo (racks)', 2300, 450, 3150, 1350), M('fuel', 'Fuel tanks', 3350, 450, 3800, 1400), M('engine', 'Engine', 3850, 450, 5050, 1420),
+        M('ammo', 'Ammo (racks)', 2300, 450, 3150, 1350), M('fuel', 'Fuel tanks', 3350, 450, 3800, 1400), M('engine', 'Engine', 3850, 450, 4960, 1420),
       ],
-      deco: { ...gear({ ends: [[250, 640, 280], [5150, 640, 260]], road: [800, 1560, 2320, 3080, 3840, 4600], r: 260, rollers: [1180, 2700, 4220], ry: 690, rr: 90 }), barrel: { x0: 700, x1: -1390, y: 1800, d: 85, taper: 0.8, brake: 'double' }, shapes: [cupola(2300, 2700, 2160, 140)] },
+      deco: { ...gear({ ends: [[250, 640, 280], [5150, 640, 260]], road: [800, 1560, 2320, 3080, 3840, 4600], r: 260, rollers: [1180, 2700, 4220], ry: 690, rr: 90 }), barrel: { x0: 700, x1: -1390, y: 1800, d: 85, taper: 0.8, brake: 'double' },
+        shapes: [cupola(2300, 2700, 2160, 140), { t: 0, p: [[1600, 2160], [1640, 2160], [1690, 2440], [1650, 2440]] }, box(1150, 2320, 1720, 2360)] },   // the loader's machine gun behind its shield
     },
     {
       id: 'kv1', name: 'KV-1 (1941)', group: 'WW2 (approx.)', year: 1941, from: 'Soviet Union', aim: [195, 1375],
@@ -209,10 +238,11 @@
       modules: [
         M('crew', 'Driver', 700, 520, 1150, 1650), M('crew', 'Radio operator', 1200, 520, 1650, 1700),
         M('crew', 'Gunner', 1800, 1550, 2200, 2550), M('crew', 'Loader', 2300, 600, 2750, 2400), M('crew', 'Commander', 2850, 1550, 3300, 2600),
-        M('gun', 'Gun breech', 1750, 2180, 2850, 2380), M('ammo', 'Ammo (floor boxes)', 1850, 500, 3700, 800), M('ammo', 'Ammo (turret rack)', 3350, 2000, 3750, 2450),
-        M('fuel', 'Fuel tanks', 3900, 520, 4300, 1850), M('engine', 'Engine', 4350, 520, 5700, 1800), M('trans', 'Transmission', 5750, 500, 6300, 1250),
+        M('gun', 'Gun breech', 1750, 2180, 2850, 2380), M('ammo', 'Ammo (floor boxes)', 1850, 500, 3700, 800), M('ammo', 'Ammo (turret rack)', 3350, 2000, 3680, 2450),
+        M('fuel', 'Fuel tanks', 3900, 520, 4300, 1850), M('engine', 'Engine', 4350, 520, 5700, 1800), M('trans', 'Transmission', 5750, 500, 6250, 1250),
       ],
-      deco: { ...gear({ ends: [[250, 700, 300], [6450, 700, 320]], road: [900, 1860, 2820, 3780, 4740, 5700], r: 300, rollers: [1380, 3300, 5220], ry: 890, rr: 100, drive: 'rear' }), barrel: { x0: 1500, x1: -800, y: 2280, d: 95, taper: 0.85, brake: false }, shapes: [bowMG(205, 1400)] },
+      deco: { ...gear({ ends: [[250, 700, 300], [6450, 700, 320]], road: [900, 1860, 2820, 3780, 4740, 5700], r: 300, rollers: [1380, 3300, 5220], ry: 890, rr: 100, drive: 'rear' }), barrel: { x0: 1500, x1: -800, y: 2280, d: 95, taper: 0.85, brake: false },
+        shapes: [bowMG(205, 1400), box(3860, 2180, 4100, 2220, 1)] },   // (and a machine gun in the back of the turret)
     },
     {
       id: 't34', name: 'T-34-85', group: 'WW2 (approx.)', year: 1944, from: 'Soviet Union', aim: [700, 1240],
@@ -221,36 +251,36 @@
         ...chain('h', [[3600, 1630], [5300, 1630], [6000, 1000], [5600, 400], [600, 400], [0, 850], [1350, 1630], [1900, 1630]], [
           ['Engine deck', L('rha', 20)], ['Upper rear plate', L('rha', 45)], ['Lower rear plate', L('rha', 45)], ['Belly', L('rha', 20)],
           ['Lower front plate', L('rha', 45)], ['Upper front plate', L('rha', 45)], ['Hull roof', L('rha', 20)]]),
-        ...chain('t', [[1700, 1660], [1660, 2150], [1850, 2600], [3700, 2620], [3950, 1660]], [
-          ['Turret front', L('cast', 90)], ['Turret front (upper)', L('cast', 75)], ['Turret roof', L('rha', 20)], ['Turret rear', L('cast', 52)]]),
-        ...chain('t', [[1450, 1950], [1450, 2350]], [['Gun mantlet', L('cast', 40)]]),
+        ...rounded('t', [[1700, 1660], [1650, 1900], [1660, 2150], [1720, 2350], [1850, 2520], [2050, 2600], [2500, 2620], [3400, 2620], [3700, 2580], [3880, 2420], [3960, 2150], [3950, 1900], [3930, 1660]], { front: 90, roof: 20, rear: 52 }),
+        ...rounded('t', [[1500, 1930], [1455, 2050], [1445, 2150], [1455, 2250], [1500, 2370]], { name: 'Gun mantlet', plain: true, t: 40 }),
       ],
       modules: [
         M('crew', 'Driver', 1150, 470, 1560, 1390), M('crew', 'Bow gunner', 1600, 470, 2000, 1390),
         M('crew', 'Gunner', 1900, 1450, 2300, 2350), M('crew', 'Loader', 2350, 560, 2800, 2250), M('crew', 'Commander', 2900, 1650, 3400, 2560),
         M('gun', 'Gun breech', 1700, 2050, 2900, 2250), M('ammo', 'Ammo (floor boxes)', 1900, 460, 3600, 780),
-        M('fuel', 'Fuel tanks', 3700, 470, 4200, 1550), M('engine', 'Engine', 4250, 470, 5250, 1560), M('trans', 'Transmission', 5300, 450, 5750, 1050),
+        M('fuel', 'Fuel tanks', 3700, 470, 4200, 1550), M('engine', 'Engine', 4250, 470, 5250, 1560), M('trans', 'Transmission', 5300, 570, 5620, 1050),
       ],
-      deco: { ...gear({ ends: [[150, 600, 300], [5800, 620, 300]], road: [800, 1875, 2950, 4025, 5100], r: 415, drive: 'rear' }), barrel: { x0: 1450, x1: -2050, y: 2150, d: 100, taper: 0.8, brake: false }, shapes: [bowMG(779, 1300), cupola(2950, 3400, 2615, 150)] },
+      deco: { ...gear({ ends: [[150, 600, 300], [5800, 620, 300]], road: [800, 1875, 2950, 4025, 5100], r: 415, drive: 'rear' }), barrel: { x0: 1450, x1: -2050, y: 2150, d: 100, taper: 0.8, brake: false }, shapes: [bowMG(779, 1300), cupola(2950, 3350, 2620, 110)] },
     },
     {
       id: 'sherman', name: 'M4A3E8 Sherman', group: 'WW2 (approx.)', year: 1944, from: 'USA', aim: [500, 1600],
       about: 'Tall and reliable. This late version kept its ammo in water-jacketed "wet" racks, so it caught fire less often.',
       parts: [
-        ...chain('h', [[3700, 2000], [5400, 2000], [5700, 900], [5300, 430], [750, 430], [250, 750], [50, 1150], [960, 2000], [2000, 2000]], [
+        ...chain('h', [[3700, 2000], [5650, 2000], [5950, 900], [5550, 430], [750, 430], [450, 500], [250, 650], [110, 880], [50, 1150], [960, 2000], [2000, 2000]], [
           ['Engine deck', L('rha', 13)], ['Rear plate', L('rha', 38)], ['Lower rear plate', L('rha', 38)], ['Belly', L('rha', 13)],
-          ['Transmission cover (lower)', L('cast', 51)], ['Transmission cover (upper)', L('cast', 108)], ['Upper front plate', L('rha', 63)], ['Hull roof', L('rha', 19)]]),
-        ...chain('t', [[1900, 2030], [1850, 2600], [2150, 2950], [3700, 2950], [3950, 2030]], [
-          ['Turret front', L('cast', 64)], ['Turret front (upper)', L('cast', 64)], ['Turret roof', L('rha', 25)], ['Turret rear', L('cast', 64)]]),
-        ...chain('t', [[1650, 2250], [1650, 2700]], [['Gun mantlet', L('cast', 89)]]),
+          ['Transmission cover (bottom)', L('cast', 51)], ['Transmission cover (lower)', L('cast', 64)], ['Transmission cover', L('cast', 89)], ['Transmission cover (upper)', L('cast', 108)],
+          ['Upper front plate', L('rha', 63)], ['Hull roof', L('rha', 19)]]),
+        ...rounded('t', [[1900, 2030], [1860, 2280], [1870, 2500], [1940, 2690], [2080, 2820], [2330, 2880], [3300, 2880], [3650, 2840], [3880, 2700], [3990, 2460], [4000, 2230], [3950, 2030]], { front: 64, roof: 25, rear: 64 }),
+        ...rounded('t', [[1700, 2200], [1640, 2330], [1625, 2470], [1640, 2610], [1700, 2740]], { name: 'Gun mantlet', plain: true, t: 89 }),
       ],
       modules: [
-        M('trans', 'Transmission', 300, 500, 1000, 1100), M('crew', 'Driver', 1100, 600, 1540, 1820), M('crew', 'Assistant driver', 1580, 600, 2020, 1820),
-        M('crew', 'Gunner', 2150, 1500, 2550, 2500), M('crew', 'Loader', 2600, 700, 3100, 2400), M('crew', 'Commander', 3150, 1800, 3650, 2850),
+        M('trans', 'Transmission', 450, 620, 1050, 1150), M('crew', 'Driver', 1100, 600, 1540, 1820), M('crew', 'Assistant driver', 1580, 600, 2020, 1820),
+        M('crew', 'Gunner', 2150, 1500, 2550, 2500), M('crew', 'Loader', 2600, 700, 3100, 2400), M('crew', 'Commander', 3150, 1800, 3600, 2800),
         M('gun', 'Gun breech', 1900, 2370, 3100, 2570), M('ammo', 'Ammo (wet racks)', 2100, 500, 3700, 1000, { tough: 2.5 }),
-        M('fuel', 'Fuel tanks', 4000, 500, 4450, 1900), M('engine', 'Engine', 4500, 500, 5450, 1850),
+        M('fuel', 'Fuel tanks', 4200, 500, 4650, 1900), M('engine', 'Engine', 4700, 500, 5500, 1850),
       ],
-      deco: { ...gear({ ends: [[150, 620, 300], [5600, 600, 280]], road: [1050, 1610, 2550, 3110, 4050, 4610], r: 260, rollers: [1330, 2830, 4330], ry: 820, rr: 90 }), barrel: { x0: 1650, x1: -1600, y: 2470, d: 95, taper: 0.8, brake: 'single' }, shapes: [bowMG(585, 1650), ...roofMG(3550, 2950, 700), cupola(3150, 3550, 2950, 130)] },
+      deco: { ...gear({ ends: [[150, 620, 300], [5850, 600, 280]], road: pairs([1400, 2950, 4500], 560), r: 260, rollers: [1400, 2950, 4500], ry: 820, rr: 90 }), barrel: { x0: 1650, x1: -1350, y: 2470, d: 95, taper: 0.8, brake: 'single' },
+        shapes: [bowMG(585, 1650), ...roofMG(3600, 2840, 700), cupola(3100, 3450, 2880, 100), ...strip([50, 1150], [960, 2000], 0.05, 0.38, 3, 70)] },   // (spare track links on the front)
     },
     {
       id: 'hellcat', name: 'M18 Hellcat', group: 'WW2 (approx.)', year: 1944, from: 'USA', aim: [475, 1275],
@@ -278,42 +308,41 @@
         ...chain('h', [[3700, 1900], [5900, 1900], [6330, 1150], [6000, 480], [720, 480], [0, 1020], [910, 1900], [1900, 1900]], [
           ['Engine deck', L('rha', 22)], ['Rear plate', L('rha', 51)], ['Lower rear plate', L('rha', 51)], ['Belly', L('rha', 25)],
           ['Lower front plate', L('rha', 76)], ['Upper front plate', L('rha', 102)], ['Hull roof', L('rha', 22)]]),
-        ...chain('t', [[1950, 1920], [1880, 2550], [2200, 2780], [3700, 2780], [4100, 2200], [3750, 1950]], [
-          ['Turret front', L('cast', 102)], ['Turret roof (front)', L('rha', 25)], ['Turret roof', L('rha', 25)], ['Turret rear', L('cast', 76)], ['Bustle floor', L('rha', 25)]]),
-        ...chain('t', [[1700, 2050], [1700, 2500]], [['Gun mantlet', L('cast', 114)]]),
+        ...rounded('t', [[1950, 1920], [1890, 2200], [1890, 2420], [1960, 2570], [2150, 2680], [2450, 2710], [3500, 2710], [3850, 2660], [4060, 2520], [4130, 2350], [4080, 2150], [3750, 1970]], { front: 102, roof: 25, rear: 76, floor: 25 }),
+        ...rounded('t', [[1750, 2020], [1700, 2150], [1685, 2280], [1700, 2410], [1750, 2530]], { name: 'Gun mantlet', plain: true, t: 114 }),
       ],
       modules: [
         M('crew', 'Driver', 950, 560, 1400, 1700), M('crew', 'Assistant driver', 1450, 560, 1900, 1800),
-        M('crew', 'Gunner', 2100, 1500, 2500, 2550), M('crew', 'Loader', 2600, 600, 3050, 2450), M('crew', 'Commander', 3150, 1650, 3600, 2700),
+        M('crew', 'Gunner', 2100, 1500, 2500, 2550), M('crew', 'Loader', 2600, 600, 3050, 2450), M('crew', 'Commander', 3150, 1650, 3600, 2650),
         M('gun', 'Gun breech', 1950, 2180, 3150, 2380), M('ammo', 'Ammo (floor racks)', 1950, 560, 3650, 900),
         M('fuel', 'Fuel tanks', 3800, 560, 4250, 1800), M('engine', 'Engine', 4300, 560, 5450, 1800), M('trans', 'Transmission', 5500, 560, 5950, 1300),
       ],
-      deco: { ...gear({ ends: [[150, 650, 300], [6100, 650, 300]], road: [800, 1720, 2640, 3560, 4480, 5400], r: 330, rollers: [1260, 2180, 3100, 4020, 4940], ry: 850, rr: 80, drive: 'rear' }), barrel: { x0: 1700, x1: -2320, y: 2280, d: 110, taper: 0.75, brake: 'double' }, shapes: [bowMG(496, 1500), ...roofMG(3650, 2780, 700), cupola(3150, 3600, 2780, 130)] },
+      deco: { ...gear({ ends: [[150, 650, 300], [6100, 650, 300]], road: [800, 1720, 2640, 3560, 4480, 5400], r: 330, rollers: [1260, 2180, 3100, 4020, 4940], ry: 850, rr: 80, drive: 'rear' }), barrel: { x0: 1700, x1: -2320, y: 2280, d: 110, taper: 0.75, brake: 'double' }, shapes: [bowMG(496, 1500), ...roofMG(3650, 2690, 700), cupola(3150, 3550, 2710, 90)] },
     },
     {
       id: 'is2', name: 'IS-2', group: 'WW2 (approx.)', year: 1944, from: 'Soviet Union', aim: [550, 1270],
       about: 'A heavy tank with a huge 122 mm gun and a steep 120 mm front plate. It carried only 28 big shells.',
       parts: [
-        ...chain('h', [[3700, 1590], [5800, 1590], [6500, 900], [6300, 420], [300, 420], [0, 950], [1108, 1590], [1900, 1590]], [
+        ...chain('h', [[3700, 1590], [6070, 1590], [6770, 900], [6570, 420], [300, 420], [0, 950], [1108, 1590], [1900, 1590]], [
           ['Engine deck', L('rha', 30)], ['Upper rear plate', L('rha', 60)], ['Lower rear plate', L('rha', 60)], ['Belly', L('rha', 20)],
           ['Lower front plate', L('rha', 100)], ['Upper front plate', L('rha', 120)], ['Hull roof', L('rha', 30)]]),
-        ...chain('t', [[1750, 1620], [1700, 2150], [2000, 2600], [3500, 2700], [3900, 1620]], [
-          ['Turret front', L('cast', 100)], ['Turret front (upper)', L('cast', 100)], ['Turret roof', L('rha', 30)], ['Turret rear', L('cast', 90)]]),
-        ...chain('t', [[1450, 1850], [1450, 2450]], [['Gun mantlet', L('cast', 100)]]),
+        ...rounded('t', [[1750, 1620], [1680, 1850], [1670, 2100], [1740, 2310], [1900, 2490], [2150, 2600], [2600, 2650], [3200, 2650], [3550, 2580], [3800, 2400], [3920, 2150], [3930, 1850], [3880, 1620]], { front: 100, roof: 30, rear: 90 }),
+        ...rounded('t', [[1520, 1830], [1460, 1980], [1440, 2150], [1460, 2320], [1520, 2470]], { name: 'Gun mantlet', plain: true, t: 100 }),
       ],
       modules: [
-        M('crew', 'Driver', 1250, 500, 1700, 1450), M('crew', 'Gunner', 1850, 1250, 2220, 2350), M('crew', 'Loader', 2260, 550, 2660, 2250),
+        M('crew', 'Driver', 1250, 500, 1700, 1450), M('crew', 'Gunner', 1900, 1250, 2240, 2300), M('crew', 'Loader', 2260, 550, 2660, 2250),
         M('crew', 'Commander', 2700, 1700, 3100, 2600), M('gun', 'Gun breech', 1700, 2050, 3200, 2260),
-        M('ammo', 'Shells (turret rack)', 3150, 1650, 3480, 2150), M('ammo', 'Charges (hull racks)', 2000, 1200, 3700, 1570),
-        M('fuel', 'Fuel tanks', 4100, 500, 4600, 1500), M('engine', 'Engine', 4600, 500, 5800, 1500), M('trans', 'Transmission', 5800, 480, 6300, 1100),
+        M('ammo', 'Shells (turret rack)', 3150, 1650, 3480, 2150), M('ammo', 'Charges (hull racks)', 2000, 1200, 3700, 1550),
+        M('fuel', 'Fuel tanks', 4250, 500, 4750, 1500), M('engine', 'Engine', 4800, 500, 6000, 1500), M('trans', 'Transmission', 6100, 480, 6500, 1000),
       ],
-      deco: { ...gear({ ends: [[150, 620, 300], [6400, 640, 300]], road: [800, 1780, 2760, 3740, 4720, 5700], r: 275, rollers: [1290, 3250, 5210], ry: 820, rr: 90, drive: 'rear' }), barrel: { x0: 1450, x1: -3060, y: 2150, d: 140, taper: 0.7, brake: 'double' }, shapes: [cupola(2750, 3150, 2660, 140)] },
+      deco: { ...gear({ ends: [[150, 620, 300], [6670, 640, 300]], road: even(820, 5900, 6), r: 275, rollers: [1330, 3360, 5390], ry: 820, rr: 90, drive: 'rear' }), barrel: { x0: 1440, x1: -3130, y: 2150, d: 140, taper: 0.7, brake: 'double' },
+        shapes: [cupola(2750, 3150, 2650, 90), ...roofMG(2950, 2740, 650)] },
     },
     {
       id: 'churchill', name: 'Churchill VII', group: 'WW2 (approx.)', year: 1944, from: 'UK', aim: [60, 1550],
       about: 'A slow British infantry tank with some of the thickest armor of the war: 152 mm on the front. Its tracks run all the way round the hull.',
       parts: [
-        ...chain('h', [[3700, 2050], [6900, 2050], [7100, 1300], [6900, 500], [700, 500], [60, 1150], [60, 1950], [500, 2050], [1900, 2050]], [
+        ...chain('h', [[3700, 2050], [7100, 2050], [7300, 1300], [7100, 500], [700, 500], [60, 1150], [60, 1950], [500, 2050], [1900, 2050]], [
           ['Engine deck', L('rha', 20)], ['Rear plate', L('rha', 50)], ['Lower rear plate', L('rha', 50)], ['Belly', L('rha', 25)],
           ['Nose plate', L('rha', 140)], ['Front plate', L('rha', 152)], ['Glacis', L('rha', 58)], ['Hull roof', L('rha', 20)]]),
         ...chain('t', [[2000, 2070], [1950, 2700], [3550, 2750], [3700, 2070]], [['Turret front', L('cast', 152)], ['Turret roof', L('rha', 20)], ['Turret rear', L('cast', 95)]]),
@@ -321,11 +350,11 @@
       ],
       modules: [
         M('crew', 'Driver', 800, 600, 1250, 1850), M('crew', 'Hull gunner', 1300, 600, 1750, 1850),
-        M('crew', 'Gunner', 2200, 1600, 2600, 2600), M('crew', 'Loader', 2700, 650, 3150, 2450), M('crew', 'Commander', 3200, 1700, 3550, 2700),
+        M('crew', 'Gunner', 2200, 1600, 2600, 2600), M('crew', 'Loader', 2700, 650, 3150, 2450), M('crew', 'Commander', 3150, 1700, 3450, 2680),
         M('gun', 'Gun breech', 2150, 2300, 3150, 2500), M('ammo', 'Ammo (side bins)', 1800, 580, 3650, 1000),
-        M('fuel', 'Fuel tanks', 3800, 580, 4300, 1950), M('engine', 'Engine', 4350, 580, 6000, 1900), M('trans', 'Transmission', 6050, 560, 6800, 1400),
+        M('fuel', 'Fuel tanks', 3900, 580, 4400, 1950), M('engine', 'Engine', 4450, 580, 6200, 1900), M('trans', 'Transmission', 6250, 560, 7000, 1400),
       ],
-      deco: { ...gear({ ends: [[350, 1500, 320], [6850, 1500, 320]], road: [900, 1440, 1980, 2520, 3060, 3600, 4140, 4680, 5220, 5760, 6300], r: 140, drive: 'rear' }), barrel: { x0: 1800, x1: -300, y: 2400, d: 90, taper: 0.85, brake: false }, shapes: [bowMG(65, 1700), cupola(3150, 3550, 2750, 130)] },
+      deco: { ...gear({ ends: [[350, 1500, 320], [7050, 1500, 320]], road: even(900, 6500, 11), r: 140, drive: 'rear' }), barrel: { x0: 1800, x1: -300, y: 2400, d: 90, taper: 0.85, brake: false }, shapes: [bowMG(65, 1700), cupola(3150, 3550, 2750, 130)] },
     },
     {
       id: 'semple', name: 'Bob Semple tank', group: 'WW2 (approx.)', year: 1941, from: 'New Zealand', aim: [200, 2300],
@@ -339,26 +368,25 @@
         M('crew', 'Driver', 1550, 1350, 1950, 2300), M('crew', 'Machine gunner 1', 2000, 1350, 2400, 2300), M('crew', 'Machine gunner 2', 2450, 1350, 2850, 2300), M('crew', 'Machine gunner 3', 2900, 1350, 3300, 2300),
         M('crew', 'Commander', 1600, 2350, 2000, 3200), M('crew', 'Machine gunner 4', 2050, 2350, 2450, 3200), M('crew', 'Machine gunner 5', 2500, 2350, 2900, 3200), M('crew', 'Machine gunner 6', 2950, 2350, 3350, 3200),
       ],
-      deco: { ...gear({ ends: [[300, 700, 330], [4300, 800, 380]], road: [900, 1460, 2020, 2580, 3140, 3700], r: 180, rollers: [1600, 3000], ry: 900, rr: 90, drive: 'rear' }) },
+      deco: { ...gear({ ends: [[300, 700, 330], [4300, 800, 380]], road: [900, 1460, 2020, 2580, 3140, 3700], r: 180, rollers: [1600, 3000], ry: 900, rr: 90, drive: 'rear' }), shapes: [bowMG(160, 1900), bowMG(240, 2700)] },
     },
     {
       id: 't55', name: 'T-55', group: 'Cold War (approx.)', year: 1958, from: 'Soviet Union', aim: [640, 1200],
       about: 'One of the most-built tanks ever. A thick cast dome turret and a 100 mm gun. Some shells sit in a rack next to the driver.',
       parts: [
-        ...chain('h', [[3700, 1515], [5700, 1515], [6200, 800], [5900, 425], [650, 425], [0, 880], [1100, 1515], [1800, 1515]], [
+        ...chain('h', [[3700, 1515], [5950, 1515], [6450, 800], [6150, 425], [650, 425], [0, 880], [1100, 1515], [1800, 1515]], [
           ['Engine deck', L('rha', 20)], ['Rear plate', L('rha', 45)], ['Lower rear plate', L('rha', 20)], ['Belly', L('rha', 20)],
           ['Lower front plate', L('rha', 100)], ['Upper front plate', L('rha', 100)], ['Hull roof', L('rha', 30)]]),
-        ...chain('t', [[1600, 1540], [1500, 1950], [1800, 2250], [2700, 2350], [3700, 2250], [4000, 1540]], [
-          ['Turret front', L('cast', 200)], ['Turret front (upper)', L('cast', 160)], ['Turret roof (front)', L('cast', 40)],
-          ['Turret roof', L('cast', 30)], ['Turret rear', L('cast', 65)]]),
+        ...rounded('t', [[1600, 1540], [1450, 1700], [1400, 1850], [1450, 2000], [1600, 2150], [1850, 2270], [2200, 2340], [2700, 2370], [3200, 2340], [3600, 2260], [3900, 2100], [4050, 1900], [4050, 1700], [3950, 1540]], { front: 200, roof: 30, rear: 65 }),
       ],
       modules: [
         M('crew', 'Driver', 1250, 500, 1700, 1350), M('fuel', 'Fuel tank (front)', 1750, 480, 2150, 1450), M('ammo', 'Ammo (front rack)', 2200, 480, 2550, 1450),
-        M('crew', 'Gunner', 2050, 1250, 2450, 2150), M('crew', 'Loader', 2600, 500, 3050, 2100), M('crew', 'Commander', 3100, 1400, 3550, 2250),
+        M('crew', 'Gunner', 2050, 1250, 2450, 2150), M('crew', 'Loader', 2600, 500, 3050, 2100), M('crew', 'Commander', 3100, 1400, 3550, 2200),
         M('gun', 'Gun breech', 1550, 1820, 2700, 2000), M('ammo', 'Ammo (rear rack)', 3500, 600, 3900, 1450),
-        M('engine', 'Engine', 4300, 500, 5500, 1450), M('trans', 'Transmission', 5500, 480, 6000, 1100),
+        M('engine', 'Engine', 4400, 500, 5750, 1450), M('trans', 'Transmission', 5800, 480, 6150, 1100),
       ],
-      deco: { ...gear({ ends: [[150, 560, 290], [5900, 600, 280]], road: [830, 2000, 2950, 3900, 4850], r: 405, drive: 'rear' }), barrel: { x0: 1500, x1: -2750, y: 1900, d: 115, taper: 0.85, brake: false, evac: -2250 }, shapes: [...roofMG(2550, 2330), cupola(3100, 3500, 2280, 120)] },
+      deco: { ...gear({ ends: [[150, 560, 290], [6150, 600, 280]], road: [830, 2030, 3010, 3990, 4970], r: 405, drive: 'rear' }), barrel: { x0: 1500, x1: -2750, y: 1900, d: 115, taper: 0.85, brake: false, evac: -2250 },
+        shapes: [...roofMG(2550, 2360), cupola(3100, 3500, 2300, 120), ...lamp(1300, 2060, 1560, 2260), drum(6350, 1410, 270)] },   // (an infrared searchlight by the gun, and a spare fuel drum on the back)
     },
     {
       id: 't62', name: 'T-62', group: 'Cold War (approx.)', year: 1961, from: 'Soviet Union', aim: [580, 1215],
@@ -367,9 +395,7 @@
         ...chain('h', [[3900, 1550], [6000, 1550], [6630, 800], [6300, 425], [650, 425], [0, 880], [1160, 1550], [1850, 1550]], [
           ['Engine deck', L('rha', 20)], ['Rear plate', L('rha', 45)], ['Lower rear plate', L('rha', 20)], ['Belly', L('rha', 20)],
           ['Lower front plate', L('rha', 100)], ['Upper front plate', L('rha', 100)], ['Hull roof', L('rha', 30)]]),
-        ...chain('t', [[1650, 1575], [1520, 1980], [1850, 2300], [2900, 2400], [3900, 2280], [4150, 1575]], [
-          ['Turret front', L('cast', 230)], ['Turret front (upper)', L('cast', 160)], ['Turret roof (front)', L('cast', 40)],
-          ['Turret roof', L('cast', 30)], ['Turret rear', L('cast', 65)]]),
+        ...rounded('t', [[1650, 1575], [1500, 1750], [1460, 1900], [1520, 2050], [1700, 2200], [2000, 2320], [2500, 2400], [3000, 2410], [3500, 2370], [3900, 2260], [4150, 2050], [4200, 1800], [4150, 1575]], { front: 240, roof: 30, rear: 60 }),
       ],
       modules: [
         M('crew', 'Driver', 1250, 500, 1700, 1380), M('fuel', 'Fuel tank (front)', 1750, 480, 2100, 1450), M('ammo', 'Ammo (front rack)', 2150, 480, 2500, 1450),
@@ -377,7 +403,8 @@
         M('gun', 'Gun breech', 1800, 1870, 2950, 2060), M('ammo', 'Ammo (rear rack)', 3500, 550, 3850, 1450),
         M('engine', 'Engine', 4300, 500, 5650, 1450), M('trans', 'Transmission', 5650, 480, 6150, 1100),
       ],
-      deco: { ...gear({ ends: [[150, 560, 290], [6350, 600, 280]], road: [830, 1780, 2730, 4030, 5330], r: 405, drive: 'rear' }), barrel: { x0: 1520, x1: -2710, y: 1950, d: 125, taper: 0.85, brake: false, evac: -1300 }, shapes: [...roofMG(2650, 2380), cupola(3250, 3650, 2320, 120)] },
+      deco: { ...gear({ ends: [[150, 560, 290], [6350, 600, 280]], road: [830, 1780, 2730, 4030, 5330], r: 405, drive: 'rear' }), barrel: { x0: 1520, x1: -2710, y: 1950, d: 125, taper: 0.85, brake: false, evac: -1300 },
+        shapes: [...roofMG(2650, 2400), cupola(3250, 3650, 2350, 120), ...lamp(1330, 2080, 1600, 2280), drum(6460, 1425, 270)] },
     },
     {
       id: 't72', name: 'T-72 Ural', group: 'Cold War (approx.)', year: 1973, from: 'Soviet Union', aim: [1000, 1300],
@@ -386,17 +413,18 @@
         ...chain('h', [[4600, 1720], [6400, 1720], [6950, 900], [6600, 490], [700, 490], [0, 900], [2030, 1720], [2600, 1720]], [
           ['Engine deck', L('rha', 20)], ['Rear plate', L('rha', 40)], ['Lower rear plate', L('rha', 40)], ['Belly', L('rha', 20)],
           ['Lower front plate', L('rha', 85)], ['Upper front plate (layered)', L('rha', 80, 'grp', 105, 'rha', 20)], ['Hull roof', L('rha', 20)]]),
-        ...chain('t', [[2500, 1740], [2350, 1950], [2700, 2180], [3500, 2230], [4400, 2150], [4800, 1740]], [
-          ['Turret front', L('cast', 280)], ['Turret front (upper)', L('cast', 200)], ['Turret roof (front)', L('cast', 45)],
-          ['Turret roof', L('cast', 45)], ['Turret rear', L('cast', 70)]]),
+        ...chain('t', [[2500, 1740], [2350, 1950], [2700, 2180], [3100, 2225], [3500, 2235], [4000, 2210], [4400, 2150], [4650, 2010], [4790, 1850], [4780, 1740]], [
+          ['Turret front', L('cast', 280)], ['Turret front (upper)', L('cast', 200)], ['Turret roof (front)', L('cast', 45)], ['Turret roof', L('cast', 45)],
+          ['Turret roof', L('cast', 45)], ['Turret roof', L('cast', 45)], ['Turret rear (upper)', L('cast', 60)], ['Turret rear', L('cast', 70)], ['Turret rear', L('cast', 70)]]),
       ],
       modules: [
         M('fuel', 'Fuel tanks (front)', 1400, 560, 2200, 1150), M('crew', 'Driver', 2250, 560, 2700, 1450),
         M('ammo', 'Autoloader carousel', 2900, 560, 4700, 800), M('ammo', 'Extra ammo (hull)', 4750, 560, 5100, 1500),
         M('crew', 'Gunner', 2900, 1100, 3300, 2050), M('crew', 'Commander', 3400, 1150, 3850, 2150),
-        M('gun', 'Gun breech', 2500, 1920, 3800, 2080), M('engine', 'Engine', 5150, 560, 6300, 1600), M('trans', 'Transmission', 6300, 520, 6800, 1150),
+        M('gun', 'Gun breech', 2500, 1920, 3800, 2080), M('engine', 'Engine', 5150, 560, 6300, 1600), M('trans', 'Transmission', 6300, 560, 6580, 1100),
       ],
-      deco: { ...gear({ ends: [[150, 560, 280], [6650, 560, 280]], road: [800, 1800, 2800, 3800, 4800, 5800], r: 375, rollers: [1300, 3300, 5300], ry: 760, rr: 80, drive: 'rear' }), barrel: { x0: 2400, x1: -2580, y: 1990, d: 135, taper: 0.85, brake: false, evac: -1100 }, shapes: [...roofMG(3600, 2330), cupola(3350, 3800, 2200, 130)] },
+      deco: { ...gear({ ends: [[150, 560, 280], [6650, 560, 280]], road: [800, 1800, 2800, 3800, 4800, 5800], r: 375, rollers: [1300, 3300, 5300], ry: 760, rr: 80, drive: 'rear' }), barrel: { x0: 2400, x1: -2580, y: 1990, d: 135, taper: 0.85, brake: false, evac: -1100 },
+        shapes: [...roofMG(3600, 2345), cupola(3350, 3800, 2215, 130), ...lamp(2280, 2075, 2560, 2225), drum(6865, 1495, 260)] },
     },
     {
       id: 'leopard1', name: 'Leopard 1', group: 'Cold War (approx.)', year: 1965, from: 'West Germany', aim: [580, 1265],
@@ -410,10 +438,10 @@
         ...chain('t', [[1750, 1850], [1750, 2150]], [['Gun mantlet', L('rha', 60)]]),
       ],
       modules: [
-        M('crew', 'Driver', 900, 520, 1350, 1450), M('ammo', 'Ammo (hull rack)', 1400, 500, 2200, 1450),
+        M('crew', 'Driver', 1100, 520, 1500, 1430), M('ammo', 'Ammo (hull rack)', 1550, 500, 2250, 1450),
         M('crew', 'Gunner', 2500, 1350, 2900, 2300), M('crew', 'Commander', 3000, 1450, 3450, 2380), M('crew', 'Loader', 3550, 520, 4000, 2350),
-        M('gun', 'Gun breech', 2100, 1900, 3350, 2100), M('ammo', 'Ammo (turret)', 4150, 1880, 4650, 2300),
-        M('fuel', 'Fuel tanks', 4500, 500, 5000, 1500), M('engine', 'Engine', 5050, 500, 6300, 1500), M('trans', 'Transmission', 6300, 480, 6900, 1150),
+        M('gun', 'Gun breech', 2100, 1900, 3350, 2100), M('ammo', 'Ammo (turret)', 4150, 1880, 4650, 2270),
+        M('fuel', 'Fuel tanks', 4500, 500, 5000, 1500), M('engine', 'Engine', 5050, 500, 6250, 1500), M('trans', 'Transmission', 6300, 540, 6700, 1150),
       ],
       deco: { ...gear({ ends: [[200, 600, 300], [6850, 600, 280]], road: [900, 1767, 2633, 3500, 4367, 5233, 6100], r: 350, rollers: [1333, 2633, 3933, 5233], ry: 800, rr: 80, drive: 'rear' }), barrel: { x0: 1750, x1: -2450, y: 2000, d: 115, taper: 0.85, brake: false, evac: -1050 }, shapes: [cupola(3000, 3450, 2420, 130)] },
     },
@@ -453,7 +481,7 @@
         M('gun', 'Gun breech', 3150, 1830, 4400, 2030), M('ammo', 'Ammo (bustle, blow-out panels)', 5200, 1850, 6250, 2420, { vent: true }),
         M('fuel', 'Fuel tanks', 4800, 560, 5100, 1400), M('engine', 'Engine', 5150, 560, 6700, 1420), M('trans', 'Transmission', 6750, 540, 7250, 1200),
       ],
-      deco: { ...gear({ ends: [[250, 650, 300], [7450, 650, 300]], road: [950, 1908, 2867, 3825, 4783, 5742, 6700], r: 350, rollers: [1429, 2867, 4304, 5742], ry: 840, rr: 80, drive: 'rear' }), barrel: { x0: 2350, x1: -1870, y: 1930, d: 140, taper: 0.85, brake: false, evac: -700 }, shapes: [cupola(3700, 4150, 2480, 120), box(3400, 2470, 3600, 2700, 1)] },
+      deco: { ...gear({ ends: [[250, 650, 300], [7450, 650, 300]], road: [950, 1908, 2867, 3825, 4783, 5742, 6700], r: 350, rollers: [1429, 2867, 4304, 5742], ry: 840, rr: 80, drive: 'rear' }), barrel: { x0: 2350, x1: -1870, y: 1930, d: 140, taper: 0.85, brake: false, evac: -700 }, shapes: [cupola(3700, 4150, 2480, 120), box(3400, 2470, 3600, 2700, 1), ...roofMG(4500, 2480, 500)] },
     },
     {
       id: 'abrams', name: 'M1A1 Abrams', group: 'Modern (approx.)', year: 1985, from: 'USA', aim: [2618, 1750],
@@ -469,11 +497,12 @@
       ],
       modules: [
         M('fuel', 'Fuel tanks (front)', 800, 560, 1250, 1200), M('crew', 'Driver', 1300, 560, 1750, 1300),
-        M('crew', 'Gunner', 3350, 1500, 3800, 2350), M('crew', 'Commander', 3900, 1700, 4350, 2400), M('crew', 'Loader', 4450, 560, 4900, 2400),
+        M('crew', 'Gunner', 3350, 1500, 3800, 2350), M('crew', 'Commander', 3900, 1700, 4350, 2380), M('crew', 'Loader', 4450, 560, 4900, 2380),
         M('gun', 'Gun breech', 3300, 1900, 4700, 2100), M('ammo', 'Ammo (bustle, blow-out panels)', 5200, 1950, 6550, 2380, { vent: true }),
         M('engine', 'Engine and transmission', 5200, 560, 7300, 1550),
       ],
-      deco: { ...gear({ ends: [[250, 650, 300], [7550, 650, 300]], road: [900, 1900, 2900, 3900, 4900, 5900, 6900], r: 320, rollers: [2400, 5400], ry: 840, rr: 80, drive: 'rear' }), barrel: { x0: 2350, x1: -1900, y: 2000, d: 140, taper: 0.85, brake: false, evac: -700 }, shapes: [...roofMG(4150, 2610, 700), cupola(3900, 4350, 2440, 170)] },
+      deco: { ...gear({ ends: [[250, 650, 300], [7550, 650, 300]], road: [900, 1900, 2900, 3900, 4900, 5900, 6900], r: 320, rollers: [2400, 5400], ry: 840, rr: 80, drive: 'rear' }), barrel: { x0: 2350, x1: -1900, y: 2000, d: 140, taper: 0.85, brake: false, evac: -700 }, shapes: [...roofMG(4150, 2610, 700), cupola(3900, 4350, 2440, 170), ...roofMG(4650, 2440, 500),
+        { t: 1, l: [[6610, 2390], [7020, 2390], [7020, 2050], [6720, 2050]], w: 35 }, { t: 1, l: [[6870, 2390], [6870, 2050]], w: 25 }] },   // (a stowage rack on the back of the turret)
     },
     {
       id: 't90', name: 'T-90A', group: 'Modern (approx.)', year: 2004, from: 'Russia', aim: [1000, 1340],
@@ -490,10 +519,11 @@
       modules: [
         M('fuel', 'Fuel tanks (front)', 1400, 560, 2200, 1150), M('crew', 'Driver', 2250, 560, 2700, 1450),
         M('ammo', 'Autoloader carousel', 2900, 560, 4700, 800), M('ammo', 'Extra ammo (hull)', 4750, 560, 5100, 1500),
-        M('crew', 'Gunner', 2950, 1100, 3350, 2000), M('crew', 'Commander', 3400, 1150, 3850, 2150),
-        M('gun', 'Gun breech', 2850, 1920, 3900, 2080), M('engine', 'Engine', 5150, 560, 6300, 1600), M('trans', 'Transmission', 6300, 520, 6800, 1150),
+        M('crew', 'Gunner', 2950, 1100, 3350, 2000), M('crew', 'Commander', 3400, 1150, 3850, 2130),
+        M('gun', 'Gun breech', 2850, 1920, 3900, 2080), M('engine', 'Engine', 5150, 560, 6300, 1600), M('trans', 'Transmission', 6300, 560, 6580, 1100),
       ],
-      deco: { ...gear({ ends: [[150, 560, 280], [6650, 560, 280]], road: [800, 1800, 2800, 3800, 4800, 5800], r: 375, rollers: [1300, 3300, 5300], ry: 760, rr: 80, drive: 'rear' }), barrel: { x0: 2350, x1: -2770, y: 1990, d: 135, taper: 0.85, brake: false, evac: -1150 }, shapes: [...roofMG(3650, 2340), cupola(3400, 3850, 2210, 130)] },
+      deco: { ...gear({ ends: [[150, 560, 280], [6650, 560, 280]], road: [800, 1800, 2800, 3800, 4800, 5800], r: 375, rollers: [1300, 3300, 5300], ry: 760, rr: 80, drive: 'rear' }), barrel: { x0: 2350, x1: -2770, y: 1990, d: 135, taper: 0.85, brake: false, evac: -1150 },
+        shapes: [...roofMG(3650, 2340), cupola(3400, 3850, 2210, 130), ...lamp(2180, 2050, 2420, 2190, 1, '#b8322c'), drum(6865, 1495, 260)] },   // (a Shtora dazzler by the gun: it jams the guidance of incoming missiles)
     },
     {
       id: 'merkava', name: 'Merkava Mk 4', group: 'Modern (approx.)', year: 2004, from: 'Israel', aim: [950, 1300],
@@ -508,11 +538,12 @@
       ],
       modules: [
         M('trans', 'Transmission', 450, 640, 850, 920), M('engine', 'Engine (in front, shields the crew)', 900, 560, 1950, 1100),
-        M('fuel', 'Fuel tanks', 2000, 560, 2450, 950), M('crew', 'Driver', 2000, 1000, 2450, 1590),
-        M('crew', 'Gunner', 2950, 1150, 3350, 2450), M('crew', 'Commander', 3450, 1300, 3900, 2540), M('crew', 'Loader', 4000, 560, 4450, 2500),
+        M('fuel', 'Fuel tanks', 2000, 560, 2450, 950), M('crew', 'Driver', 2050, 1000, 2450, 1520),
+        M('crew', 'Gunner', 3250, 1150, 3650, 2400), M('crew', 'Commander', 3700, 1300, 4100, 2540), M('crew', 'Loader', 4150, 560, 4550, 2500),
         M('gun', 'Gun breech', 2600, 2150, 4100, 2350), M('ammo', 'Ammo (rear hull, fire-proof boxes)', 5200, 560, 6800, 1300),
       ],
-      deco: { ...gear({ ends: [[250, 650, 300], [7450, 650, 280]], road: [950, 2100, 3250, 4400, 5550, 6700], r: 380, rollers: [1525, 3825, 6125], ry: 880, rr: 80 }), barrel: { x0: 2300, x1: -1440, y: 2280, d: 140, taper: 0.85, brake: false }, shapes: [...roofMG(3700, 2740), cupola(3450, 3900, 2600, 140)] },
+      deco: { ...gear({ ends: [[250, 650, 300], [7450, 650, 280]], road: [950, 2100, 3250, 4400, 5550, 6700], r: 380, rollers: [1525, 3825, 6125], ry: 880, rr: 80 }), barrel: { x0: 2300, x1: -1440, y: 2280, d: 140, taper: 0.85, brake: false },
+        shapes: [...roofMG(3950, 2740), cupola(3700, 4150, 2600, 140), ...curtain([6320, 6355, 6390, 6425, 6460, 6495], x => 1720 + (x - 6250) * 1.72, 300, 1755)] },   // (chains with balls under the turret's back, to set off rockets early)
     },
     {
       id: 't14', name: 'T-14 Armata', group: 'Modern (approx.)', year: 2015, from: 'Russia', aim: [1000, 1426],
@@ -528,7 +559,7 @@
       ],
       modules: [
         M('fuel', 'Fuel tanks (front)', 900, 580, 1450, 1000), M('crew', 'Driver', 1500, 580, 1900, 1250, { capsule: true }),
-        M('crew', 'Gunner', 1950, 580, 2400, 1400, { capsule: true }), M('crew', 'Commander', 2450, 580, 2900, 1650, { capsule: true }),
+        M('crew', 'Gunner', 1950, 580, 2400, 1400, { capsule: true }), M('crew', 'Commander', 2450, 580, 2900, 1580, { capsule: true }),
         M('ammo', 'Autoloader carousel (under the turret)', 3100, 580, 5200, 900), M('gun', 'Gun breech', 3000, 2050, 4600, 2250),
         M('engine', 'Engine', 5400, 580, 7500, 1650), M('trans', 'Transmission', 7550, 580, 8250, 1200),
       ],
@@ -551,7 +582,7 @@
         M('fuel', 'Fuel tanks (front)', 1300, 580, 2200, 1050), M('crew', 'Driver', 2300, 580, 2750, 1500), M('ammo', 'Ready rack (hull)', 2800, 580, 3100, 1300),
         M('crew', 'Gunner', 3100, 1350, 3500, 2300), M('crew', 'Loader', 3600, 700, 4100, 2350), M('crew', 'Commander', 4150, 1500, 4600, 2450),
         M('gun', 'Gun breech', 2450, 2050, 3900, 2250), M('ammo', 'Bustle ammo (blow-out panels)', 4900, 1900, 5800, 2500, { vent: true }),
-        M('engine', 'Engine', 5150, 580, 6500, 1650), M('trans', 'Transmission', 6500, 560, 7050, 1200),
+        M('engine', 'Engine', 5150, 580, 6500, 1650), M('trans', 'Transmission', 6500, 560, 6880, 1200),
       ],
       deco: { ...gear({ ends: [[150, 600, 300], [7000, 620, 280]], road: [850, 1742, 2633, 3525, 4417, 5308, 6200], r: 320, rollers: [1700, 3525, 5350], ry: 820, rr: 80, drive: 'rear' }), barrel: { x0: 2250, x1: -2900, y: 2150, d: 150, taper: 0.85, brake: false } },
     },
@@ -589,10 +620,10 @@
   function geometry(veh) {
     const F = veh.parts.map(frameOf);
     return veh.parts.map((p, i) => {
-      const f = F[i];
+      const f = F[i], square = q => [q[0] + f.n[0] * f.T, q[1] + f.n[1] * f.T];
       const prev = veh.parts.findIndex((q, j) => j !== i && same(q.b, p.a)), next = veh.parts.findIndex((q, j) => j !== i && same(q.a, p.b));
-      const ia = prev >= 0 ? miter(f, F[prev], p.a) : [p.a[0] + f.n[0] * f.T, p.a[1] + f.n[1] * f.T];
-      const ib = next >= 0 ? miter(f, F[next], p.b) : [p.b[0] + f.n[0] * f.T, p.b[1] + f.n[1] * f.T];
+      let ia = prev >= 0 ? miter(f, F[prev], p.a) : square(p.a), ib = next >= 0 ? miter(f, F[next], p.b) : square(p.b);
+      if ((ib[0] - ia[0]) * f.t[0] + (ib[1] - ia[1]) * f.t[1] < 0) { ia = square(p.a); ib = square(p.b); }   // a short plate next to a much thicker one would fold over: plain square ends
       return { f, poly: [p.a.slice(), p.b.slice(), ib, ia] };
     });
   }
@@ -616,16 +647,35 @@
     if (d) {
       if (d.wheels) trackLoop(d).forEach(p => add(p[0], p[1]));
       if (d.barrel) { add(d.barrel.x1, d.barrel.y - d.barrel.d); add(d.barrel.x0, d.barrel.y + d.barrel.d); }
-      for (const sh of d.shapes || []) sh.p.forEach(p => add(p[0], p[1]));
+      for (const sh of d.shapes || []) (sh.c ? [[sh.c[0] - sh.c[2], sh.c[1] - sh.c[2]], [sh.c[0] + sh.c[2], sh.c[1] + sh.c[2]]] : sh.l || sh.p).forEach(p => add(p[0], p[1]));
     }
     if (!isFinite(x0)) return [0, 1000, 0, 1000];
     return [x0, x1, y0, y1];
+  }
+  // The inside, for drawing: each run of joined plates (hull and turret) filled in, and the gap between them over the turret ring
+  function outlines(veh) {
+    const runs = turret => {
+      const out = [];
+      for (const p of veh.parts) {
+        if ((p.g === 't') !== turret) continue;
+        const last = out[out.length - 1];
+        if (last && same(last[last.length - 1], p.a)) last.push(p.b); else out.push([p.a, p.b]);
+      }
+      return out;
+    };
+    const fill = rs => (rs.some(r => r.length > 2) ? rs.filter(r => r.length > 2) : rs.length ? [wrap(rs.flat())] : []);   // (only loose plates: the outline round them all)
+    const span = r => r.reduce((s, q, k) => (k ? s + Math.hypot(q[0] - r[k - 1][0], q[1] - r[k - 1][1]) : 0), 0), longest = rs => rs.reduce((a, r) => (span(r) > span(a) ? r : a), []);
+    const H = runs(false), T = runs(true), h = longest(H), t = longest(T), ends = h.length > 2 && !same(h[0], h[h.length - 1]) ? [h[0], h[h.length - 1]] : null;
+    return { hull: fill(H), turret: fill(T), ring: !ends || !T.length ? null : t.length > 2 ? [...t, ...ends] : wrap(T.flat().concat(ends)) };
   }
   // The track runs round the outside of all the wheels and rollers: their outline (convex hull), the track's thickness further out
   function trackLoop(d, thick = d.trackT || 60) {
     const pts = [];
     for (const [x, y, r] of d.wheels.concat(d.rollers || [])) for (let k = 0; k < 32; k++) { const a = k / 32 * 2 * Math.PI; pts.push([x + Math.cos(a) * (r + thick), y + Math.sin(a) * (r + thick)]); }
-    pts.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    return wrap(pts);
+  }
+  function wrap(pts) {   // the outline round a set of points (convex hull)
+    pts = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
     const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]), lo = [], up = [];
     for (const q of pts) { while (lo.length > 1 && cross(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
     for (let i = pts.length - 1; i >= 0; i--) { const q = pts[i]; while (up.length > 1 && cross(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop(); up.push(q); }
@@ -1191,5 +1241,5 @@
     });
   }
 
-  return { MODULES, MOD_KEYS, VEHICLES, geometry, layerBands, bbox, decoOf, trackLoop, shotAngle, frameFor, crossings, firstArmor, probe, entryPoint, buildVehicle, pickVehH, aimShot, zoneTick, ammoBlast, blast, states, fateOf, busy, settle, unsettle, AIR, launch, placeFlight, landFlight, flyLine, makeDebris, stepDebris, turretMove, isTurret, judge, sanitize, pack, unpack, toLink, fromLink, starter };
+  return { MODULES, MOD_KEYS, VEHICLES, geometry, layerBands, bbox, decoOf, trackLoop, outlines, shotAngle, frameFor, crossings, firstArmor, probe, entryPoint, buildVehicle, pickVehH, aimShot, zoneTick, ammoBlast, blast, states, fateOf, busy, settle, unsettle, AIR, launch, placeFlight, landFlight, flyLine, makeDebris, stepDebris, turretMove, isTurret, judge, sanitize, pack, unpack, toLink, fromLink, starter };
 });

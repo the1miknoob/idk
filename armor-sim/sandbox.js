@@ -435,12 +435,13 @@
     // tracks, wheels, the gun barrel and outside details like the commander's cupola (drawn only: they aren't armor)
     if (deco.wheels && deco.wheels.length > 1) drawRunningGear(c, deco);
     if (deco.barrel) drawBarrel(c, deco.barrel, p => moveBy(tt, p));
-    for (const sh of deco.shapes || []) { path(c, sh.p.map(p => (sh.t ? moveBy(tt, p) : p))); c.fillStyle = '#4a5560'; c.fill(); c.strokeStyle = 'rgba(0,0,0,.35)'; c.lineWidth = 1; c.stroke(); }
-    // the inside
-    const hullPts = veh.parts.filter(p => p.g !== 't').flatMap(p => [p.a, p.b]), turPts = veh.parts.filter(p => p.g === 't').flatMap(p => [p.a, p.b]);
+    for (const sh of deco.shapes || []) drawShape(c, sh, p => (sh.t ? moveBy(tt, p) : p));
+    // the inside: each run of joined plates, and the gap over the turret ring (while the turret is still on)
+    const ol = V.outlines(veh);
     c.fillStyle = '#151c23';
-    if (hullPts.length > 2) { path(c, hullPts); c.fill(); }
-    if (turPts.length > 2) { path(c, turPts.map(p => moveBy(tt, p))); c.fill(); }
+    for (const pts of ol.hull) { path(c, pts); c.fill(); }
+    for (const pts of ol.turret) { path(c, pts.map(p => moveBy(tt, p))); c.fill(); }
+    if (ol.ring && !tt) { path(c, ol.ring); c.fill(); }
     // what's inside: crew, ammo, fuel, engine…
     const fs = clamp(cam.s * 260, 9, 22);
     veh.modules.forEach((m, k) => drawModule(c, m, k, now, fs, tt && inTurret(veh, m) ? tt : null, tt && !inTurret(veh, m) ? ringY(veh) : null));
@@ -482,6 +483,17 @@
     const [front, back] = [d.wheels[0], d.wheels[d.wheels.length - 1]], rear = d.drive === 'rear';
     if (d.drive) { (rear ? sprocket : w => wheel(w, '#212932'))(back); (rear ? w => wheel(w, '#212932') : sprocket)(front); }
     else { wheel(front, '#212932'); wheel(back, '#212932'); }
+  }
+  function drawShape(c, sh, m) {   // an outside detail: a box or other outline, a circle (c: [x, y, r]) or a line (l: points, w thick)
+    c.fillStyle = sh.col || '#4a5560'; c.strokeStyle = 'rgba(0,0,0,.35)'; c.lineWidth = 1;
+    if (sh.c) {
+      const q = m(sh.c), X = toSX(q[0]), Y = toSY(q[1]), R = sh.c[2] * cam.s;
+      c.beginPath(); c.arc(X, Y, R, 0, Math.PI * 2); c.fill(); c.stroke();
+      c.strokeStyle = 'rgba(255,255,255,.07)'; c.beginPath(); c.arc(X, Y, R * 0.72, 0, Math.PI * 2); c.stroke();
+    } else if (sh.l) {
+      c.beginPath(); sh.l.map(m).forEach((q, k) => (k ? c.lineTo(toSX(q[0]), toSY(q[1])) : c.moveTo(toSX(q[0]), toSY(q[1]))));
+      c.strokeStyle = sh.col || '#4a5560'; c.lineWidth = Math.max(1, (sh.w || 30) * cam.s); c.lineJoin = c.lineCap = 'round'; c.stroke(); c.lineCap = 'butt';
+    } else { path(c, sh.p.map(m)); c.fill(); c.stroke(); }
   }
   function drawBarrel(c, b, m) {   // narrower at the muzzle, with a muzzle brake (one or two baffles) and a fume extractor
     const dir = Math.sign(b.x1 - b.x0) || -1, r0 = b.d / 2, r1 = r0 * (b.taper || 1), at = f => b.x1 - dir * f;   // f mm back from the muzzle
