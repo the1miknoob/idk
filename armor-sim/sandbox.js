@@ -492,7 +492,7 @@
       c.strokeStyle = 'rgba(255,255,255,.07)'; c.beginPath(); c.arc(X, Y, R * 0.72, 0, Math.PI * 2); c.stroke();
     } else if (sh.l) {
       c.beginPath(); sh.l.map(m).forEach((q, k) => (k ? c.lineTo(toSX(q[0]), toSY(q[1])) : c.moveTo(toSX(q[0]), toSY(q[1]))));
-      c.strokeStyle = sh.col || '#4a5560'; c.lineWidth = Math.max(1, (sh.w || 30) * cam.s); c.lineJoin = c.lineCap = 'round'; c.stroke(); c.lineCap = 'butt';
+      c.strokeStyle = sh.col || '#4a5560'; c.lineWidth = Math.max(1, (sh.w || 30) * cam.s); c.lineJoin = c.lineCap = 'round'; c.stroke(); c.lineJoin = 'miter'; c.lineCap = 'butt';
     } else { path(c, sh.p.map(m)); c.fill(); c.stroke(); }
   }
   function drawBarrel(c, b, m) {   // narrower at the muzzle, with a muzzle brake (one or two baffles) and a fume extractor
