@@ -1393,7 +1393,7 @@
       if (busyNow()) loop();
       if (linkMsg) { toast(linkMsg); linkMsg = null; }
     },
-    hide() { visible = false; if (physicsOn() || state === 'approach') { paused = state === 'approach' ? 'running' : state; state = 'paused'; } renderControlsState(); },
+    hide() { visible = false; if (physicsOn() || state === 'approach') { paused = state === 'approach' ? 'running' : state; state = 'paused'; skipping = false; } renderControlsState(); },
     get sim() { return sim; }, get state() { return state; }, get verdict() { return verdict; }, get vr() { return VR; }, get editor() { return ED; },
     get mine() { return mine; }, fire, rebuild, SB, startEdit, toast, aim(x, y) { SB.vaim = [x, y]; aimChanged(); },
   };
