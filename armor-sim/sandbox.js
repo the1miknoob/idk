@@ -61,6 +61,8 @@
   let FR = null;     // plain armor, ⚡ Formulas: the last answer (with t0, when it was worked out, for drawing it growing in)
   let ED = null;     // the vehicle builder
   let paused = null; // which phase a pause interrupted
+  let skipping = false;   // ⏩ Skip: the rest of the shot runs as fast as the computer can, with no slow motion or replay
+  const SKIP_MS = 90;     // how many ms of each frame skipping works for (the picture still updates in between)
   const IDENT = V.frameFor({ from: 'front', tilt: 0, at: [0, 0] });
   let fr = IDENT;    // turns the engine's frame (shot flying along +x) into the picture's frame
   const cam = { x: 0, y: 0, s: 1 };
@@ -77,7 +79,7 @@
     }
   }
   function rebuild(keepView) {
-    flashes = []; seenEvents = 0; verdict = null; paused = null; FR = null;
+    flashes = []; seenEvents = 0; verdict = null; paused = null; FR = null; skipping = false;
     const P = projDef();
     if (ED) { VR = { veh: ED.veh, run: null }; sim = null; fr = IDENT; state = 'edit'; }
     else if (SB.target === 'vehicle') {
@@ -104,6 +106,7 @@
 
   function fire() {
     if (ED || busyNow() || state === 'paused') return;
+    skipping = false;
     const P = { ...projDef(), v: speedOf() };
     if (VR) {
       if (!VR.run) rebuild(true);
@@ -131,7 +134,7 @@
     const v = verdict || sim.settleVerdict() || 'stop';
     verdict = v;
     sound(v === 'rico' ? 'rico' : v === 'pen' ? 'pen' : v === 'spall' ? 'boom' : 'stop');
-    state = 'done';
+    state = 'done'; skipping = false;
     renderResult(); renderControlsState();
     checkChallenges({ veh: null, P: projDef(), v, tally: sim.tally, preset: SB.preset, held: v === 'stop' || v === 'spall', thick: SB.plates.reduce((t, p) => t + E.plateThickness(p), 0) });
   }
@@ -189,7 +192,7 @@
     if (VR.deb) { VR.turret = turretT(); VR.deb = null; }
     VR.reveal = null;
     if (!VR.last) noteVerdict();
-    state = 'done';
+    state = 'done'; skipping = false;
     renderResult(); renderControlsState(); draw();
     const { states, fate } = V.fateOf(VR.run), f = fate.id;
     checkChallenges({ veh: VR.veh.id, modern: /^Modern/.test(VR.veh.group), from: SB.from, P: VR.last.P, v: VR.last.v, tally: VR.last.tally, fate: f, out: f === 'destroyed' || f === 'knocked',
@@ -213,12 +216,12 @@
     if (!visible) return;
     const dtReal = Math.min(0.05, (now - (lastNow || now)) / 1000); lastNow = now;
     if (glide) {
-      const k = Math.min(1, (now - glide.t0) / glide.dur), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      const k = skipping ? 1 : Math.min(1, (now - glide.t0) / glide.dur), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
       cam.x = glide.a.x + (glide.b.x - glide.a.x) * e; cam.y = glide.a.y + (glide.b.y - glide.a.y) * e; cam.s = glide.a.s * Math.pow(glide.b.s / glide.a.s, e);
       if (k >= 1) glide = null;
     }
-    if (sim && state === 'approach' && now - approachT0 > 450) { state = 'running'; runStart = now; }
-    const quota = SPEEDS[SB.speed][1];
+    if (sim && state === 'approach' && (skipping || now - approachT0 > 450)) { state = 'running'; runStart = now; }
+    const quota = skipping ? Infinity : SPEEDS[SB.speed][1], budget = skipping ? SKIP_MS : 11;
     let boom = -1;
     const zones = () => {   // vehicles: bits flying through crew, ammo, fuel and engines (and ammo that goes off)
       if (!VR || sim.steps % 4) return false;
@@ -228,22 +231,23 @@
       return false;
     };
     if (sim && state === 'running') {
-      const n = physics(quota * dtReal, 11, () => {
+      let over = false;   // (checked every 40 steps, so a shot ends on the same step at any speed, skipped or not)
+      const n = physics(quota * dtReal, budget, () => {
         if (zones()) return true;
         if (sim.steps % 40 === 0) {
           if (!verdict) { const v = sim.verdict(); if (v) { verdict = v; verdictAt = sim.time; } }
-          else if (sim.time - verdictAt > 90) return true;
+          else if (sim.time - verdictAt > 90) return (over = true);
         }
         return false;
       });
       stepsPerSec = stepsPerSec * 0.9 + (n / Math.max(dtReal, 0.001)) * 0.1;
       if (boom >= 0) { if (!VR.last) noteVerdict(); toBlast(boom); }
-      else if (verdict && sim.time - verdictAt > 90) { if (VR) toInside(); else finish(); }
+      else if (over) { if (VR) toInside(); else finish(); }
       else if (now - runStart > 120000) { if (VR) toInside(); else finish(); }   // safety: never run forever
       if (n) renderLive();
     } else if (state === 'inside') {   // the bits fly around inside: sped up, it's slow otherwise
       let done = false;
-      physics(quota * 12 * dtReal, 11, () => {
+      physics(quota * 12 * dtReal, budget, () => {
         if (zones()) return true;
         if (sim.steps % 40 === 0 && (sim.time - VR.t0 > V.AIR || V.busy(VR.run) === 0 || performance.now() - VR.phaseT0 > INSIDE_MAX[SB.speed])) { done = true; return true; }
         return false;
@@ -251,17 +255,19 @@
       if (boom >= 0) toBlast(boom); else if (done) toFlight();
       renderLive();
     } else if (state === 'flight') {
+      if (skipping) VR.flT0 = now - 1e7;   // straight to where everything lands
       const tp = (now - VR.flT0) / 1000;
       V.placeFlight(VR.run, VR.fl, p => tp * VR.vs);
       for (const b of VR.fl.bursts) if (!b.shown && tp >= b.at / VR.vs) { b.shown = true; VR.burst++; flashes.push({ type: 'flash', x: b.x, y: b.y, r: 420, at: now, big: true }); sound('stop'); }
       if (VR.flBooms.length && tp >= VR.flBooms[0].t) toBlast(VR.flBooms.shift().k);
       else if (tp >= VR.flEnd) finishVehicle();
     } else if (state === 'blast') {   // the explosion tears things loose (real physics, as fast as it goes)
-      physics(Infinity, 11, () => sim.time - VR.blastT0 > 200);
+      physics(Infinity, budget, () => sim.time - VR.blastT0 > 200);
       if (sim.time - VR.blastT0 > 200 || now - VR.phaseT0 > 3000) toDebris();
       renderLive();
     } else if (state === 'debris') {   // the pieces fly and fall with gravity, in real time
-      V.stepDebris(VR.run, VR.deb, dtReal);
+      if (skipping) { const t0 = performance.now(); while (!VR.deb.done && performance.now() - t0 < SKIP_MS) V.stepDebris(VR.run, VR.deb, 1 / 60); }   // (the same fall, just faster)
+      else V.stepDebris(VR.run, VR.deb, dtReal);
       if (VR.deb.done) finishVehicle();
     }
     if (sim) while (seenEvents < sim.events.length) { const ev = sim.events[seenEvents++], p = fr.toV([ev.x, ev.y]); flashes.push({ ...ev, x: p[0], y: p[1], at: now }); }
@@ -773,7 +779,7 @@
       return;
     }
     if (state !== 'done') {
-      const msg = state === 'ready' ? (SB.solver === 'formulas' ? 'Press <b>Fire</b> (or Space) for an instant answer from the formulas, plate by plate. Click the armor to aim somewhere else.' : 'Press <b>Fire</b> (or Space). Click the armor to aim somewhere else.') : 'Simulating… every particle is doing its own physics.';
+      const msg = state === 'ready' ? (SB.solver === 'formulas' ? 'Press <b>Fire</b> (or Space) for an instant answer from the formulas, plate by plate. Click the armor to aim somewhere else.' : 'Press <b>Fire</b> (or Space). Click the armor to aim somewhere else.') : skipping ? '⏩ Skipping to the result…' : 'Simulating… every particle is doing its own physics. Press <b>⏩ Skip</b> to jump to the result.';
       box.innerHTML = `<span class="badge idle">${state === 'ready' ? 'READY' : 'LIVE'}</span><div class="txt">${msg}</div>`;
       $('sb-live').textContent = state === 'ready' ? `${sim.n.toLocaleString()} particles · ${sim.nb.toLocaleString()} bonds · particle size ${sim.h.toFixed(sim.h < 1 ? 2 : 1)} mm` : liveLine();
       return;
@@ -817,7 +823,7 @@
       return;
     }
     if (state !== 'done') {
-      const msg = state === 'approach' || state === 'running' ? 'Simulating the hit… every particle is doing its own physics.' : state === 'inside' ? 'Bits are flying around inside…' : state === 'flight' ? 'Following the bits flying around inside…' : state === 'blast' ? '💥 The ammo exploded!' : state === 'debris' ? '💥 Pieces are flying off…' : 'Paused.';
+      const msg = skipping ? '⏩ Skipping to the result…' : state === 'approach' || state === 'running' ? 'Simulating the hit… every particle is doing its own physics.' : state === 'inside' ? 'Bits are flying around inside…' : state === 'flight' ? 'Following the bits flying around inside…' : state === 'blast' ? '💥 The ammo exploded!' : state === 'debris' ? '💥 Pieces are flying off…' : 'Paused.';
       box.innerHTML = `<span class="badge idle">LIVE</span><div class="txt">${VR.last ? esc(armorLine(VR.last)) + '<br>' : ''}${msg}</div>`;
       $('sb-live').textContent = liveLine(); return;
     }
@@ -978,6 +984,8 @@
     $('sb-fire').disabled = running || !!ED || state === 'paused';
     $('sb-pause').disabled = !(physicsOn() || state === 'approach' || state === 'paused');
     $('sb-pause').textContent = state === 'paused' ? '▶ Resume' : '⏸ Pause';
+    $('sb-skip').disabled = skipping || !(running || state === 'paused');
+    $('sb-skip').textContent = skipping ? '⏩ Skipping…' : '⏩ Skip';
     $('sb-step').disabled = state !== 'paused';
     $('sb-reset').disabled = !!ED || running;
     $('sb-reset').textContent = VR && VR.run ? '🔧 Repair' : '↺ Reset';
@@ -1068,9 +1076,15 @@
   $('sb-fire').addEventListener('click', fire);
   $('sb-reset').addEventListener('click', () => { if (!busyNow()) { rebuild(!!VR); if (VR && VR.run) toast('Good as new!'); } });
   $('sb-pause').addEventListener('click', () => {
-    if (physicsOn() || state === 'approach') { paused = state === 'approach' ? 'running' : state; state = 'paused'; }
+    if (physicsOn() || state === 'approach') { paused = state === 'approach' ? 'running' : state; state = 'paused'; skipping = false; }
     else if (state === 'paused') { state = paused || 'running'; paused = null; runStart = performance.now(); lastNow = 0; loop(); }
     renderControlsState();
+  });
+  $('sb-skip').addEventListener('click', () => {
+    if (skipping || !(busyNow() || state === 'paused')) return;
+    skipping = true;
+    if (state === 'paused') { state = paused || 'running'; paused = null; runStart = performance.now(); lastNow = 0; }
+    renderControlsState(); renderResult(); loop();
   });
   $('sb-step').addEventListener('click', () => {
     if (state !== 'paused') return;
@@ -1379,7 +1393,7 @@
       if (busyNow()) loop();
       if (linkMsg) { toast(linkMsg); linkMsg = null; }
     },
-    hide() { visible = false; if (physicsOn() || state === 'approach') { paused = state === 'approach' ? 'running' : state; state = 'paused'; } renderControlsState(); },
+    hide() { visible = false; if (physicsOn() || state === 'approach') { paused = state === 'approach' ? 'running' : state; state = 'paused'; skipping = false; } renderControlsState(); },
     get sim() { return sim; }, get state() { return state; }, get verdict() { return verdict; }, get vr() { return VR; }, get editor() { return ED; },
     get mine() { return mine; }, fire, rebuild, SB, startEdit, toast, aim(x, y) { SB.vaim = [x, y]; aimChanged(); },
   };
