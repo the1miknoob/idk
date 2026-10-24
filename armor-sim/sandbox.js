@@ -61,6 +61,7 @@
   let FR = null;     // plain armor, ⚡ Formulas: the last answer (with t0, when it was worked out, for drawing it growing in)
   let ED = null;     // the vehicle builder
   let paused = null; // which phase a pause interrupted
+  let zoomIn = false;     // a missile is so long the picture is zoomed right out while it flies in: look closer once it goes off
   let skipping = false;   // ⏩ Skip: the rest of the shot runs as fast as the computer can, with no slow motion or replay
   const SKIP_MS = 90;     // how many ms of each frame skipping works for (the picture still updates in between)
   const IDENT = V.frameFor({ from: 'front', tilt: 0, at: [0, 0] });
@@ -106,7 +107,7 @@
 
   function fire() {
     if (ED || busyNow() || state === 'paused') return;
-    skipping = false;
+    skipping = false; zoomIn = !VR && !!projDef().d.look;
     const P = { ...projDef(), v: speedOf() };
     if (VR) {
       if (!VR.run) rebuild(true);
@@ -119,6 +120,7 @@
       glideTo(impactView(), 450);
     } else {
       if (!sim || state !== 'ready') rebuild(true);
+      if (zoomIn) fit();   // (zoomed in on the last missile's hit: step back to see this one fly in)
       if (SB.solver === 'formulas') {   // no particles: the formulas work it out at once
         FR = formulasForPlates(); FR.t0 = performance.now(); verdict = FR.verdict; state = 'done';
         sound(FR.verdict === 'rico' ? 'rico' : FR.verdict === 'pen' ? 'pen' : FR.verdict === 'spall' ? 'boom' : 'stop');
@@ -244,6 +246,7 @@
       if (boom >= 0) { if (!VR.last) noteVerdict(); toBlast(boom); }
       else if (over) { if (VR) toInside(); else finish(); }
       else if (now - runStart > 120000) { if (VR) toInside(); else finish(); }   // safety: never run forever
+      if (zoomIn && sim.hitAt) { zoomIn = false; const [hx, hy] = sim.hitAt; glideTo(viewOf(hx - 700, hx + 1100, hy - 650, hy + 650, 1), 700); }
       if (n) renderLive();
     } else if (state === 'inside') {   // the bits fly around inside: sped up, it's slow otherwise
       let done = false;
@@ -490,6 +493,34 @@
     if (d.drive) { (rear ? sprocket : w => wheel(w, '#212932'))(back); (rear ? w => wheel(w, '#212932') : sprocket)(front); }
     else { wheel(front, '#212932'); wheel(back, '#212932'); }
   }
+  // A missile (air-to-air ones), nose at (x, y) pointing along a: L long and r wide in pixels. look: { nose: 'dome' or 'ogive', fins: [[where from the
+  // nose (0–1), how far out (body widths), how long (0–1)], …], grid: grid fins at the tail, bands: the US yellow (explosive) and brown (rocket) bands }
+  function drawMissile(c, x, y, a, L, r, look, now) {
+    c.save(); c.translate(x, y); c.rotate(a); c.lineWidth = 1; c.strokeStyle = 'rgba(0,0,0,.35)';
+    const nl = look.nose === 'dome' ? r : 3 * r;   // the nose's length
+    if (now) {   // the rocket's flame
+      const f = 1 + 0.25 * Math.sin(now / 37);
+      c.fillStyle = 'rgba(255,170,40,.85)'; c.beginPath(); c.moveTo(-L, -r * 0.7); c.lineTo(-L - r * 5 * f, 0); c.lineTo(-L, r * 0.7); c.closePath(); c.fill();
+      c.fillStyle = 'rgba(255,240,180,.9)'; c.beginPath(); c.moveTo(-L, -r * 0.35); c.lineTo(-L - r * 2.4 * f, 0); c.lineTo(-L, r * 0.35); c.closePath(); c.fill();
+    }
+    c.fillStyle = '#b9c0c7';   // fins (seen from the side: one above, one below)
+    for (const [at, span, chord] of look.fins || []) {
+      const xc = -at * L, ch = chord * L, h = span * r;
+      for (const g of [-1, 1]) { c.beginPath(); c.moveTo(xc + ch / 2, g * r); c.lineTo(xc - ch / 2 + ch * 0.35, g * (r + h)); c.lineTo(xc - ch / 2, g * (r + h)); c.lineTo(xc - ch / 2, g * r); c.closePath(); c.fill(); c.stroke(); }
+    }
+    if (look.grid) {   // grid fins: little lattices at the back
+      const x0 = -L + r * 0.2, w = r * 0.7;
+      c.strokeStyle = '#9aa3ab'; c.lineWidth = Math.max(1, r * 0.08);
+      for (const g of [-1, 1]) { c.strokeRect(x0, g > 0 ? r : -r * 2.6, w, r * 1.6); for (let k = 1; k < 4; k++) { const yy = g > 0 ? r + k * r * 0.4 : -r - k * r * 0.4; c.beginPath(); c.moveTo(x0, yy); c.lineTo(x0 + w, yy); c.stroke(); } }
+      c.lineWidth = 1; c.strokeStyle = 'rgba(0,0,0,.35)';
+    }
+    c.fillStyle = '#dfe3e7'; c.fillRect(-L, -r, L - nl, 2 * r); c.strokeRect(-L, -r, L - nl, 2 * r);   // the body
+    if (look.bands) { c.fillStyle = '#e8c331'; c.fillRect(-0.2 * L, -r, Math.max(1, 0.025 * L), 2 * r); c.fillStyle = '#8a5a2b'; c.fillRect(-0.36 * L, -r, Math.max(1, 0.025 * L), 2 * r); }
+    c.fillStyle = '#3c444c'; c.fillRect(-L - r * 0.15, -r * 0.6, r * 0.15, r * 1.2);   // the nozzle
+    if (look.nose === 'dome') { c.fillStyle = '#7f9fb6'; c.beginPath(); c.arc(-r, 0, r, -Math.PI / 2, Math.PI / 2); c.closePath(); c.fill(); c.stroke(); }   // a glass seeker dome
+    else { c.fillStyle = '#cdd2d6'; c.beginPath(); c.moveTo(-nl, -r); c.quadraticCurveTo(-nl * 0.25, -r, 0, 0); c.quadraticCurveTo(-nl * 0.25, r, -nl, r); c.closePath(); c.fill(); c.stroke(); }   // a radar nose cone
+    c.restore();
+  }
   function drawShape(c, sh, m) {   // an outside detail: a box or other outline, a circle (c: [x, y, r]) or a line (l: points, w thick)
     c.fillStyle = sh.col || '#4a5560'; c.strokeStyle = 'rgba(0,0,0,.35)'; c.lineWidth = 1;
     if (sh.c) {
@@ -550,8 +581,9 @@
       c.save(); c.globalAlpha = state === 'ready' ? 0.9 : 1;
       for (const R of sim.rounds) {
         if (R.hitAt) continue;
-        const p = fr.toV([R.noseX + off + fly, R.aimY]);
-        drawShell(c, kind, toSX(p[0]), toSY(p[1]), Math.atan2(-fr.s, fr.c), sc, 1);
+        const p = fr.toV([R.noseX + off + fly, R.aimY]), d = sim.design;
+        if (d.look) drawMissile(c, toSX(p[0]), toSY(p[1]), Math.atan2(-fr.s, fr.c), len, d.cal / 2 * cam.s, d.look, state !== 'ready' && now);
+        else drawShell(c, kind, toSX(p[0]), toSY(p[1]), Math.atan2(-fr.s, fr.c), sc, 1);
       }
       c.restore();
     }
@@ -745,6 +777,7 @@
   function formulaEstimate(P, v) {   // the classic formulas from the Calculator, for comparison
     const d = P.d, g = P.group;
     if (P.kind === 'heat') return Math.round(d.q * d.cal);   // a shaped charge goes about its design depth
+    if (d.breach) return d.breach;                            // a missile's warhead (its body is mostly rocket motor)
     if (g === 'Strange darts (made up)') return null;          // the formula only knows tungsten and uranium
     let s = null;
     if (P.kind === 'hesh') s = { type: 'hesh', cal: d.cal };
@@ -852,7 +885,7 @@
   // ✏️ Goals to try. Each test gets what just happened: veh (vehicle id, or null for plain armor), P (the round), v (how it went at the armor),
   // tally (several shots at once), and for vehicles from, fate, out (destroyed or knocked out), turret (thrown off), shots (since the last repair),
   // missed, saved (crew a capsule kept alive) and fuelFire; for plain armor held, thick and preset.
-  const gunSize = P => (P.group === 'Rockets & missiles' || P.group === 'Just for fun' ? Infinity : P.bore || (P.d.shape === 'rod' ? Infinity : P.d.cal));
+  const gunSize = P => (P.group === 'Rockets & missiles' || P.group === 'Just for fun' || /^Air-to-air/.test(P.group) ? Infinity : P.bore || (P.d.shape === 'rod' ? Infinity : P.d.cal));
   const CHALLENGES = [
     { id: 'bounce', text: 'Bounce a shell off a vehicle', test: c => c.veh && (c.v === 'rico' || !!(c.tally && c.tally.rico)) },
     { id: 'tiger76', text: 'Knock out a Tiger I from the front with a gun smaller than 80 mm', test: c => c.veh === 'tiger' && c.from === 'front' && gunSize(c.P) < 80 && c.out },
@@ -905,7 +938,7 @@
     $('sb-aim').value = SB.aim; $('sb-aim-out').textContent = (SB.aim > 0 ? '+' : '') + SB.aim + ' mm';
     $('sb-proj-art').innerHTML = projSVG(P);
     const d = P.d, size = d.shape === 'rod' ? `${d.dia} mm × ${d.len} mm rod` : `${P.bore ? P.bore + ' mm gun, ' + d.cal + ' mm penetrator' : d.cal + ' mm'}${d.len ? ' · ' + d.len + ' mm long' : ''}`;
-    $('sb-proj-info').textContent = size + (d.core ? ` · ${E.MATERIALS[d.core.mat].name.toLowerCase()} core` : '') + ` · ${E.MATERIALS[d.mat || (P.kind === 'heat' ? 'cu' : 'shot')].name.toLowerCase()}`;
+    $('sb-proj-info').textContent = size + (d.warhead ? ` · ${d.warhead} kg warhead (${d.rods ? 'steel rods' : 'fragments'})` : (d.core ? ` · ${E.MATERIALS[d.core.mat].name.toLowerCase()} core` : '') + ` · ${E.MATERIALS[d.mat || (P.kind === 'heat' ? 'cu' : 'shot')].name.toLowerCase()}`);
     renderVolley();
   }
   function renderVolley() {
@@ -916,6 +949,11 @@
     $('sb-gap-label').textContent = SB.pattern === 'row' ? 'Space between one and the next' : 'Space between them';
   }
   function projSVG(P) {   // a little side view of the projectile, drawn from its real shape
+    if (P.d.look) {   // a missile: the same picture as when it flies in
+      const art = document.createElement('canvas'); art.width = 400; art.height = 100;
+      drawMissile(art.getContext('2d'), 392, 50, 0, 370, 370 * P.d.cal / P.d.len / 2, P.d.look, 0);
+      return `<img src="${art.toDataURL()}" alt="">`;
+    }
     const sh = E.makeShape(P.d), len = sh.x1 - sh.x0, r = sh.r, W = 200, Hh = 50, sc = Math.min((W - 10) / len, (Hh - 8) / (2 * r));
     let rects = '';
     const step = Math.max(len, 2 * r) / 70;

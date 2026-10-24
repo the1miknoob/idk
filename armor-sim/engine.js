@@ -124,6 +124,27 @@
     { id: 'he75', group: 'High explosive (HE)', name: '75 mm HE', kind: 'he', v: 550, d: { shape: 'shell', cal: 75, len: 280, nose: 2, mat: 'shot', fill: 0.62 } },
     { id: 'he122', group: 'High explosive (HE)', name: '122 mm HE', kind: 'he', v: 680, d: { shape: 'shell', cal: 122, len: 460, nose: 2, mat: 'shot', fill: 0.62 } },
     { id: 'he152', group: 'High explosive (HE)', name: '152 mm HE', kind: 'he', v: 650, d: { shape: 'shell', cal: 152, len: 600, nose: 2, mat: 'shot', fill: 0.62 } },
+    // Real missiles (rough public numbers) made to shoot down aircraft, not tanks: a proximity fuze sets the warhead off next to the plane, and it sprays
+    // fragments (or an expanding ring of steel rods) into the thin skin. Here they hit the armor head-on. blast: how hard the blast pushes (1 = an HE shell);
+    // frags, fragV (km/s), fragM: the fragments; rods: they fly out sideways in a ring; warhead: kg; breach: mm of steel the blast breaks through here (for the formulas). look: how it's drawn.
+    { id: 'aim9', group: 'Air-to-air missiles (for fun)', name: 'AIM-9 Sidewinder (heat-seeking, USA)', kind: 'he', v: 850,
+      note: 'Made to shoot down planes, not tanks. It homes in on the heat of a jet engine and goes off just before it hits, spraying fragments into the thin skin. Here it hits the armor head-on.',
+      d: { shape: 'shell', warhead: 9.4, breach: 30, cal: 127, len: 2850, nose: 0.5, mat: 'alu', blast: 1, frags: 64, fragV: 1.6, fragM: 0.8, look: { nose: 'dome', fins: [[0.09, 1.6, 0.06], [0.93, 2.1, 0.07]], bands: true } } },
+    { id: 'aim120', group: 'Air-to-air missiles (for fun)', name: 'AIM-120 AMRAAM (radar-guided, USA)', kind: 'he', v: 1360,
+      note: 'A radar-guided missile that can hit a plane over 100 km away, at four times the speed of sound. Its warhead is made for aircraft, not tanks.',
+      d: { shape: 'shell', warhead: 18, breach: 65, cal: 178, len: 3660, nose: 2.5, mat: 'alu', blast: 1.4, frags: 80, fragV: 1.7, fragM: 0.8, look: { nose: 'ogive', fins: [[0.45, 1.3, 0.08], [0.95, 1.5, 0.05]], bands: true } } },
+    { id: 'aim7', group: 'Air-to-air missiles (for fun)', name: 'AIM-7 Sparrow (continuous rod, USA)', kind: 'he', v: 1100,
+      note: 'Its warhead is a bundle of steel rods welded end to end. It bursts into a spinning hoop that slices through an aircraft. Against a tank, the hoop flies off sideways.',
+      d: { shape: 'shell', warhead: 39, breach: 45, cal: 203, len: 3660, nose: 2.5, mat: 'alu', blast: 1.5, frags: 24, fragV: 1.5, fragM: 3, rods: true, look: { nose: 'ogive', fins: [[0.4, 2.5, 0.09], [0.94, 2.1, 0.06]], bands: true } } },
+    { id: 'aim54', group: 'Air-to-air missiles (for fun)', name: 'AIM-54 Phoenix (long range, USA)', kind: 'he', v: 1700,
+      note: 'The F-14 Tomcat\'s giant missile: 450 kg, five times the speed of sound, and a 60 kg warhead. Even that big blast can\'t do much to thick armor.',
+      d: { shape: 'shell', warhead: 61, breach: 55, cal: 380, len: 3960, nose: 2, mat: 'alu', blast: 1.4, frags: 96, fragV: 1.8, fragM: 1, look: { nose: 'ogive', fins: [[0.92, 1.1, 0.1]], bands: true } } },
+    { id: 'r73', group: 'Air-to-air missiles (for fun)', name: 'R-73 (heat-seeking, Soviet)', kind: 'he', v: 850,
+      note: 'A very nimble Soviet heat-seeker: little fins at the front and a nozzle that steers the rocket. Its warhead throws out a ring of steel rods.',
+      d: { shape: 'shell', warhead: 7.4, breach: 30, cal: 170, len: 2900, nose: 0.5, mat: 'alu', blast: 1.3, frags: 20, fragV: 1.4, fragM: 2.5, rods: true, look: { nose: 'dome', fins: [[0.08, 1.4, 0.05], [0.13, 1.4, 0.05], [0.93, 1.9, 0.07]] } } },
+    { id: 'r77', group: 'Air-to-air missiles (for fun)', name: 'R-77 (radar-guided, Russia)', kind: 'he', v: 1360,
+      note: 'A Russian radar-guided missile, famous for the grid fins at its back (they look like a waffle). Its warhead throws out a ring of steel rods.',
+      d: { shape: 'shell', warhead: 22.5, breach: 45, cal: 200, len: 3600, nose: 2.5, mat: 'alu', blast: 1.5, frags: 28, fragV: 1.6, fragM: 2.5, rods: true, look: { nose: 'ogive', fins: [[0.5, 1.6, 0.06]], grid: true } } },
     // the same dart as the 550 mm tungsten one, made of other things (density helps, but so do strength and a high melting point)
     { id: 'fspu', bore: 120, group: 'Strange darts (made up)', name: 'Plutonium dart ☢️ (never do this)', kind: 'ke', v: 1650,
       note: 'Made up: never do this. It won\'t go nuclear (that takes plutonium squeezed together in a very precise way, and a dart just smashes apart), but the bits are hot, poisonous and radioactive, and plutonium catches fire in air.', d: { shape: 'rod', dia: 26, len: 550, mat: 'pu' } },
@@ -165,6 +186,7 @@
     { id: 'liner', name: 'Steel plate with a spall liner', plates: [{ x: 0, ang: 0, len: 'auto', layers: [{ mat: 'rha', t: 60 }, { mat: 'aramid', t: 20 }] }] },
     { id: 'heavyera', name: 'Heavy reactive armor on a sloped plate', plates: [{ x: 0, ang: 65, len: 'auto', layers: [{ mat: 'rha', t: 15 }, { mat: 'era', t: 15 }, { mat: 'rha', t: 15 }] }, { x: 200, ang: 65, len: 'auto', layers: [{ mat: 'rha', t: 80 }] }] },
     { id: 'cardoor', name: 'Car door (two thin steel skins)', plates: [{ x: 0, ang: 0, len: 500, layers: [{ mat: 'mild', t: 2 }] }, { x: 60, ang: 0, len: 500, layers: [{ mat: 'mild', t: 2 }] }] },   // tall, so the particles aren't tiny
+    { id: 'jet', name: 'Fighter jet skin (3 mm aluminium)', plates: [{ x: 0, ang: 0, len: 2000, layers: [{ mat: 'alu', t: 3 }] }] },   // what air-to-air missiles are made for
     { id: 'shield', name: 'Police shield (polyethylene)', plates: [{ x: 0, ang: 0, len: 'auto', layers: [{ mat: 'uhmwpe', t: 14 }] }] },
     { id: 'engine', name: 'Engine block (metal walls with gaps)', plates: [0, 70, 140].map(x => ({ x, ang: 0, len: 'auto', layers: [{ mat: 'cast', t: 18 }] })) },
     { id: 'ship', name: 'Wooden warship side (600 mm of oak)', plates: [{ x: 0, ang: 0, len: 'auto', layers: [{ mat: 'oak', t: 600 }] }] },
@@ -1045,20 +1067,22 @@
         }
         this.events.push({ type: 'flash', x: cx, y: cy, r: d.cal * 1.8, t: this.time });
       } else if (this.kind === 'he') {
-        // a blast pushes the plate, and the steel case breaks into fast fragments
-        const R = d.cal * 1.1;
+        // a blast pushes the plate, and the steel case breaks into fast fragments (a missile's warhead can be stronger, or throw out a ring of rods)
+        const R = d.cal * 1.1, push = K.HE_PUSH * (d.blast || 1);
         for (const p of this.plates) for (let i = p.i0; i < p.i1; i++) {
           if (!this.alive[i] || this.fixed[i]) continue;
           const dx = this.px[i] - cx, dy = this.py[i] - cy, r2 = dx * dx + dy * dy;
           if (r2 > 4 * R * R) continue;
-          const g = Math.exp(-r2 / (R * R)) * K.HE_PUSH, r = Math.sqrt(r2) || 1;
+          const g = Math.exp(-r2 / (R * R)) * push, r = Math.sqrt(r2) || 1;
           kick(i); this.vx[i] += (dx / r) * g * 0.5 + n[0] * g * 0.5; this.vy[i] += (dy / r) * g * 0.5 + n[1] * g * 0.5; this.T[i] += 400 * g / K.HE_PUSH;
         }
-        const nf = 48, cr = d.cal / 2;   // the steel case bursts into fragments spraying out from the shell's side
+        const nf = d.frags || 48, cr = d.cal / 2, v0 = d.fragV || 1.1, fm = d.fragM || 1.5;   // the steel case bursts into fragments spraying out from the shell's side
         for (let k = 0; k < nf; k++) {
           const a = (k / nf) * Math.PI * 2, sx = cx - n[0] * cr - Math.cos(a) * cr * 0.6, sy = cy - n[1] * cr - Math.sin(a) * cr * 0.6;
-          const sp = 1.1 + 0.4 * frac(Math.sin(k * 91.3) * 437.5), dir = Math.atan2(sy - (cy - n[1] * cr * 1.6), sx - (cx - n[0] * cr * 1.6));
-          this.addParticle(sx, sy, Math.cos(dir) * sp, Math.sin(dir) * sp, 'shot', 0, 1.5);
+          const sp = v0 + 0.4 * frac(Math.sin(k * 91.3) * 437.5);
+          const dir = d.rods ? (k % 2 ? 1 : -1) * (Math.PI / 2 - 0.3 * frac(Math.sin(k * 17.9) * 731.3))   // rods: out sideways (square to the missile), a little forward
+            : Math.atan2(sy - (cy - n[1] * cr * 1.6), sx - (cx - n[0] * cr * 1.6));
+          this.addParticle(sx, sy, Math.cos(dir) * sp, Math.sin(dir) * sp, 'shot', 0, fm);
         }
         shell.parts.push([a0, this.n]);
         this.events.push({ type: 'flash', x: cx, y: cy, r: d.cal * 2.6, t: this.time });
