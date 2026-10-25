@@ -61,6 +61,7 @@
     water:    { name: 'Water', group: 'Building & nature', rho: 1.0, E: 2.2, Y: 1, ef: 0.5, ec: 0.95, cp: 4.18, melt: 600, duct: 250, color: '#3f86c4' },
     era:      { name: 'Reactive explosive', group: 'Explosives', rho: 1.7, E: 8, Y: 30, ef: 0.08, ec: 0.25, cp: 1, melt: 600, duct: 0, color: '#d8a21c', explosive: true },
     fill:     { name: 'Shell explosive', group: 'Explosives', rho: 1.7, E: 8, Y: 30, ef: 0.1, ec: 0.3, cp: 1, melt: 600, duct: 0, color: '#dfc25c' },
+    motor:    { name: 'Missile body (rocket fuel in a thin metal tube)', group: 'Explosives', rho: 1.8, E: 10, Y: 60, ef: 0.12, ec: 0.5, cp: 1.3, melt: 700, duct: 10, color: '#d3d8dd', hidden: true },   // (not for building armor)
   };
   const MAT_KEYS = Object.keys(MATERIALS);
   const MAT_INDEX = Object.fromEntries(MAT_KEYS.map((k, i) => [k, i]));
@@ -126,25 +127,25 @@
     { id: 'he152', group: 'High explosive (HE)', name: '152 mm HE', kind: 'he', v: 650, d: { shape: 'shell', cal: 152, len: 600, nose: 2, mat: 'shot', fill: 0.62 } },
     // Real missiles (rough public numbers) made to shoot down aircraft, not tanks: a proximity fuze sets the warhead off next to the plane, and it sprays
     // fragments (or an expanding ring of steel rods) into the thin skin. Here they hit the armor head-on. blast: how hard the blast pushes (1 = an HE shell);
-    // frags, fragV (km/s), fragM: the fragments; rods: they fly out sideways in a ring; warhead: kg; breach: mm of steel the blast breaks through here (for the formulas). look: how it's drawn.
+    // frags, fragV (km/s), fragM: the fragments; rods: they fly out sideways in a ring; warhead: kg; body: the rest of it crashes in behind (bodyRho: how heavy it is for its size, g/cm³); breach: mm of steel the blast breaks through here (for the formulas). look: how it's drawn.
     { id: 'aim9', group: 'Air-to-air missiles (for fun)', name: 'AIM-9 Sidewinder (heat-seeking, USA)', kind: 'he', v: 850,
-      note: 'Made to shoot down planes, not tanks. It homes in on the heat of a jet engine and goes off just before it hits, spraying fragments into the thin skin. Here it hits the armor head-on.',
-      d: { shape: 'shell', warhead: 9.4, breach: 30, cal: 127, len: 2850, nose: 0.5, mat: 'alu', blast: 1, frags: 64, fragV: 1.6, fragM: 0.8, look: { nose: 'dome', fins: [[0.09, 1.6, 0.06], [0.93, 2.1, 0.07]], bands: true } } },
+      note: 'Made to shoot down planes, not tanks. It homes in on the heat of a jet engine and goes off just before it hits, spraying fragments into the thin skin. Here it hits head-on: the warhead goes off, then the rest of the 85 kg missile slams in behind it.',
+      d: { shape: 'shell', body: true, bodyRho: 2, warhead: 9.4, breach: 85, cal: 127, len: 2850, nose: 0.5, mat: 'alu', blast: 1, frags: 64, fragV: 1.6, fragM: 0.8, look: { nose: 'dome', fins: [[0.09, 1.6, 0.06], [0.93, 2.1, 0.07]], bands: true } } },
     { id: 'aim120', group: 'Air-to-air missiles (for fun)', name: 'AIM-120 AMRAAM (radar-guided, USA)', kind: 'he', v: 1360,
-      note: 'A radar-guided missile that can hit a plane over 100 km away, at four times the speed of sound. Its warhead is made for aircraft, not tanks.',
-      d: { shape: 'shell', warhead: 18, breach: 65, cal: 178, len: 3660, nose: 2.5, mat: 'alu', blast: 1.4, frags: 80, fragV: 1.7, fragM: 0.8, look: { nose: 'ogive', fins: [[0.45, 1.3, 0.08], [0.95, 1.5, 0.05]], bands: true } } },
+      note: 'A radar-guided missile that can hit a plane over 100 km away. Its warhead is made for aircraft, not tanks, but 150 kg of missile arriving at four times the speed of sound still hits very hard.',
+      d: { shape: 'shell', body: true, bodyRho: 1.8, warhead: 18, breach: 135, cal: 178, len: 3660, nose: 2.5, mat: 'alu', blast: 1.4, frags: 80, fragV: 1.7, fragM: 0.8, look: { nose: 'ogive', fins: [[0.45, 1.3, 0.08], [0.95, 1.5, 0.05]], bands: true } } },
     { id: 'aim7', group: 'Air-to-air missiles (for fun)', name: 'AIM-7 Sparrow (continuous rod, USA)', kind: 'he', v: 1100,
       note: 'Its warhead is a bundle of steel rods welded end to end. It bursts into a spinning hoop that slices through an aircraft. Against a tank, the hoop flies off sideways.',
-      d: { shape: 'shell', warhead: 39, breach: 45, cal: 203, len: 3660, nose: 2.5, mat: 'alu', blast: 1.5, frags: 24, fragV: 1.5, fragM: 3, rods: true, look: { nose: 'ogive', fins: [[0.4, 2.5, 0.09], [0.94, 2.1, 0.06]], bands: true } } },
+      d: { shape: 'shell', body: true, bodyRho: 2.2, warhead: 39, breach: 135, cal: 203, len: 3660, nose: 2.5, mat: 'alu', blast: 1.5, frags: 24, fragV: 1.5, fragM: 3, rods: true, look: { nose: 'ogive', fins: [[0.4, 2.5, 0.09], [0.94, 2.1, 0.06]], bands: true } } },
     { id: 'aim54', group: 'Air-to-air missiles (for fun)', name: 'AIM-54 Phoenix (long range, USA)', kind: 'he', v: 1700,
-      note: 'The F-14 Tomcat\'s giant missile: 450 kg, five times the speed of sound, and a 60 kg warhead. Even that big blast can\'t do much to thick armor.',
-      d: { shape: 'shell', warhead: 61, breach: 55, cal: 380, len: 3960, nose: 2, mat: 'alu', blast: 1.4, frags: 96, fragV: 1.8, fragM: 1, look: { nose: 'ogive', fins: [[0.92, 1.1, 0.1]], bands: true } } },
+      note: 'The F-14 Tomcat\'s giant missile: 450 kg at five times the speed of sound, with a 60 kg warhead. The blast can\'t do much to thick armor, but the missile slamming in right after it can.',
+      d: { shape: 'shell', body: true, bodyRho: 1.1, warhead: 61, breach: 175, cal: 380, len: 3960, nose: 2, mat: 'alu', blast: 1.4, frags: 96, fragV: 1.8, fragM: 1, look: { nose: 'ogive', fins: [[0.92, 1.1, 0.1]], bands: true } } },
     { id: 'r73', group: 'Air-to-air missiles (for fun)', name: 'R-73 (heat-seeking, Soviet)', kind: 'he', v: 850,
       note: 'A very nimble Soviet heat-seeker: little fins at the front and a nozzle that steers the rocket. Its warhead throws out a ring of steel rods.',
-      d: { shape: 'shell', warhead: 7.4, breach: 30, cal: 170, len: 2900, nose: 0.5, mat: 'alu', blast: 1.3, frags: 20, fragV: 1.4, fragM: 2.5, rods: true, look: { nose: 'dome', fins: [[0.08, 1.4, 0.05], [0.13, 1.4, 0.05], [0.93, 1.9, 0.07]] } } },
+      d: { shape: 'shell', body: true, bodyRho: 1.75, warhead: 7.4, breach: 90, cal: 170, len: 2900, nose: 0.5, mat: 'alu', blast: 1.3, frags: 20, fragV: 1.4, fragM: 2.5, rods: true, look: { nose: 'dome', fins: [[0.08, 1.4, 0.05], [0.13, 1.4, 0.05], [0.93, 1.9, 0.07]] } } },
     { id: 'r77', group: 'Air-to-air missiles (for fun)', name: 'R-77 (radar-guided, Russia)', kind: 'he', v: 1360,
       note: 'A Russian radar-guided missile, famous for the grid fins at its back (they look like a waffle). Its warhead throws out a ring of steel rods.',
-      d: { shape: 'shell', warhead: 22.5, breach: 45, cal: 200, len: 3600, nose: 2.5, mat: 'alu', blast: 1.5, frags: 28, fragV: 1.6, fragM: 2.5, rods: true, look: { nose: 'ogive', fins: [[0.5, 1.6, 0.06]], grid: true } } },
+      d: { shape: 'shell', body: true, bodyRho: 1.6, warhead: 22.5, breach: 135, cal: 200, len: 3600, nose: 2.5, mat: 'alu', blast: 1.5, frags: 28, fragV: 1.6, fragM: 2.5, rods: true, look: { nose: 'ogive', fins: [[0.5, 1.6, 0.06]], grid: true } } },
     // the same dart as the 550 mm tungsten one, made of other things (density helps, but so do strength and a high melting point)
     { id: 'fspu', bore: 120, group: 'Strange darts (made up)', name: 'Plutonium dart ☢️ (never do this)', kind: 'ke', v: 1650,
       note: 'Made up: never do this. It won\'t go nuclear (that takes plutonium squeezed together in a very precise way, and a dart just smashes apart), but the bits are hot, poisonous and radioactive, and plutonium catches fire in air.', d: { shape: 'rod', dia: 26, len: 550, mat: 'pu' } },
@@ -285,6 +286,14 @@
     return Math.max(6 * cal, 0.45 * t, 120) / Math.max(0.35, Math.cos(p.ang * DEG));
   }
   const projCal = P => P.d.shape === 'rod' ? P.d.dia : P.d.cal;
+  // A missile (d.body) isn't over when its warhead goes off: the rest of it, rocket motor and all, slams in right behind the blast.
+  // Only the part that can arrive while the hit is watched is made of particles (the page draws the rest sliding in after it).
+  const BODY_WAIT = 320;   // µs an exploded missile is watched before it's judged, so its body gets there
+  function missileBody(P) {
+    const d = P && P.d; if (!d || !d.body || P.kind === 'ke') return null;
+    const gap = 0.6 * d.cal, len = Math.min(d.len - gap, P.v / 1000 * (BODY_WAIT + 100) - gap);   // (the front of it went up with the warhead)
+    return len > 0 ? { x0: -gap - len, x1: -gap, r: d.cal / 2 * 0.95 } : null;
+  }
   // Several shells at once. 'spread' puts them side by side (gap = mm between their sides), all arriving together;
   // 'row' lines them up one behind another (gap = mm from one's tail to the next one's nose), like a burst from a machine gun.
   // Returns [{ dy, back }] (sideways offset from the aim line, distance behind the first), the middle one first; null for one shell.
@@ -303,6 +312,7 @@
     let a = 0;
     for (const p of scene.plates) a += plateThickness(p) * plateLen(p, scene.proj, scene.volley);
     if (scene.proj.kind === 'ke') { const sh = makeShape(scene.proj.d); a += (sh.x1 - sh.x0) * sh.r * 1.7 * (volleyRounds(scene.proj, scene.volley) || [0]).length; }
+    const mb = missileBody(scene.proj); if (mb) a += (mb.x1 - mb.x0) * 2 * mb.r * (volleyRounds(scene.proj, scene.volley) || [0]).length;
     return a;
   }
   // Particle size: fit the budget, but keep at least ~7 particles across the projectile (allowing up to 2.5× the budget for that)
@@ -492,10 +502,20 @@
             if (m) this.addRaw(noseX + x, aimY + y, MAT_INDEX[m], 0, v0, 0, 0, 0, false);
           }
         }
+        const mb = missileBody(proj);
+        let bodyNose = null;
+        if (mb) {   // the rest of a missile follows its warhead in (moved back if a sloped plate is in the way)
+          const rowsB = Math.floor(mb.r / dyl);
+          bodyNose = noseX;
+          for (let k = -rowsB; k <= rowsB; k++) bodyNose = Math.min(bodyNose, surfaceX(aimY + k * dyl) - mb.x1);
+          const b0 = this.n, heavier = (proj.d.bodyRho || MATERIALS.motor.rho) / MATERIALS.motor.rho;   // (each missile's own weight for its size)
+          for (let k = -rowsB; k <= rowsB; k++) for (let x = mb.x1 - (Math.abs(k) % 2) * h / 2; x >= mb.x0; x -= h) this.addRaw(bodyNose + x, aimY + k * dyl, MAT_INDEX.motor, 0, v0, 0, 0, 0, false);
+          for (let i = b0; i < this.n; i++) { this.m[i] *= heavier; this.im[i] = 1 / this.m[i]; }
+        }
         this.link(a, this.n);
         for (let i = a; i < this.n; i++) this.nbond[i] = this.nadj[i];
         let m0 = 0; for (let i = a; i < this.n; i++) m0 += this.m[i];
-        return { aimY, hitX, noseX, targets: tp, parts: [[a, this.n]], mass0: m0 || 1, delay: (rd.back || 0) / v0,
+        return { aimY, hitX, noseX, bodyNose, targets: tp, parts: [[a, this.n]], mass0: m0 || 1, delay: (rd.back || 0) / v0,
           lastPlate: tp.reduce((p, q) => (q.f.o[0] + q.T * q.f.n[0] > p.f.o[0] + p.T * p.f.n[0] ? q : p)), firstPlate: tp.reduce((p, q) => (q.f.o[0] < p.f.o[0] ? q : p)),
           hitAt: null, everBehind: false, penAt: 0, residual: 0, res: null, v: null, jetWait: false };
       });
@@ -1231,8 +1251,9 @@
         return this.time - this.penAt > 60 || tooLong ? 'pen' : null;
       }
       if (this.kind === 'hesh' || this.kind === 'he') {
-        const wait = this.kind === 'hesh' ? this.lastPlate.T / 5.2 + 120 : 160;
-        if (t > wait) return r.spall > 2 ? (this.kind === 'hesh' ? 'spall' : 'pen') : 'stop';
+        const wait = this.kind === 'hesh' ? this.lastPlate.T / 5.2 + 120 : this.design.body ? BODY_WAIT : 160;
+        if (t > wait) return this.design.body ? (r.behind >= 2 ? 'pen' : r.spall > 2 ? 'spall' : 'stop')   // a missile: did any of it get through, or only bits off the inside?
+          : r.spall > 2 ? (this.kind === 'hesh' ? 'spall' : 'pen') : 'stop';
         return null;
       }
       if (this.kind === 'ke' && this.hitAt && vIn < -0.05) return vSide > -vIn ? 'rico' : (r.spall > 2 ? 'spall' : 'stop');   // heading back out
@@ -1292,8 +1313,8 @@
       if (r.everBehind) { if (!R.penAt) R.penAt = this.time; return this.time - R.penAt > 60 || tooLong ? 'pen' : null; }
       if (this.kind === 'hesh' || this.kind === 'he') {
         if (!R.hitAt) return null;
-        const wait = this.kind === 'hesh' ? R.lastPlate.T / 5.2 + 120 : 160;
-        return this.time - R.hitAt[2] > wait ? (r.spall > 2 ? (this.kind === 'hesh' ? 'spall' : 'pen') : 'stop') : null;
+        const wait = this.kind === 'hesh' ? R.lastPlate.T / 5.2 + 120 : this.design.body ? BODY_WAIT : 160;
+        return this.time - R.hitAt[2] > wait ? (this.design.body ? (r.behind >= 2 ? 'pen' : r.spall > 2 ? 'spall' : 'stop') : r.spall > 2 ? (this.kind === 'hesh' ? 'spall' : 'pen') : 'stop') : null;
       }
       if (this.kind === 'ke' && R.hitAt && vIn < -0.05) return vSide > -vIn ? 'rico' : (r.spall > 2 ? 'spall' : 'stop');
       if (this.kind === 'ke' && R.hitAt && speed < 0.04) return r.spall > 2 ? 'spall' : 'stop';
@@ -1318,5 +1339,5 @@
   const K = { STRENGTH: 1, STRETCH: 1, COMP: 1, CRUSH: 1, DUCT: 1, GRIP: 0.8, PSTR: 1, PCRUSH: 1, PIN: 0, DAMP: 0.02, CDAMP: 0.05, JET_SCALE: 1, JET_MASS: 1.25, HESH_PUSH: 0.3, HESH_CAP: 1, HE_PUSH: 0.35, ERA_FLY: 0.8, SLOPE: 3, SLOPE0: 1.15 };
   function tune(o) { Object.assign(K, o); }
 
-  return { MATERIALS, MAT_KEYS, MAT_INDEX, PROJECTILES, ARMORS, Sim, makeShape, plateThickness, autoLen, pickH, sceneArea, projCal, tune, inPoly, volleyRounds };
+  return { MATERIALS, MAT_KEYS, MAT_INDEX, PROJECTILES, ARMORS, Sim, makeShape, plateThickness, autoLen, pickH, sceneArea, projCal, tune, inPoly, volleyRounds, missileBody };
 });

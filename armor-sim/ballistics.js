@@ -250,7 +250,7 @@
       return { verdict: ok ? 'spall' : 'stop', rows: [{ ...row, result: ok ? 'spall' : 'stop', note: `a ${d.cal} mm squash head can scab plates up to about ${Math.round(cap)} mm` }], depth: 0, notes: [], blast: true, frags: ok ? { n: 60, size: 12 } : null };
     }
     const pen = d.breach || 0.2 * (d.cal / 10) ** 2, ok = pen >= row.los;   // (a missile's body is mostly rocket motor, so its own figure)
-    return { verdict: ok ? 'pen' : 'stop', rows: [{ ...row, result: ok ? 'through' : 'stop', note: `the blast breaks through about ${Math.round(pen)} mm` }], depth: ok ? row.los : Math.round(pen), notes: [], blast: true, frags: ok ? { n: 120, size: 8 } : null };
+    return { verdict: ok ? 'pen' : 'stop', rows: [{ ...row, result: ok ? 'through' : 'stop', note: d.body ? `the blast and then the missile itself break through about ${Math.round(pen)} mm` : `the blast breaks through about ${Math.round(pen)} mm` }], depth: ok ? row.los : Math.round(pen), notes: [], blast: true, frags: ok ? { n: 120, size: 8 } : null };
   }
 
   function solve(P, stations) {
