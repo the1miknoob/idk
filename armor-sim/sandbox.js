@@ -495,8 +495,10 @@
   }
   // A missile (air-to-air ones), nose at (x, y) pointing along a: L long and r wide in pixels. look: { nose: 'dome' or 'ogive', fins: [[where from the
   // nose (0–1), how far out (body widths), how long (0–1)], …], grid: grid fins at the tail, bands: the US yellow (explosive) and brown (rocket) bands }
-  function drawMissile(c, x, y, a, L, r, look, now) {
+  function drawMissile(c, x, y, a, L, r, look, now, cut) {   // cut: only the part further back than this (px from the nose) is left
     c.save(); c.translate(x, y); c.rotate(a); c.lineWidth = 1; c.strokeStyle = 'rgba(0,0,0,.35)';
+    const torn = cut == null ? null : Array.from({ length: 7 }, (_, k) => [cut - (k % 2 ? 0.35 * r : 0), -r + k * r / 3]);   // a ragged edge where the front has gone
+    if (torn) { c.beginPath(); c.moveTo(-L - 20 * r, -20 * r); c.lineTo(cut, -20 * r); torn.forEach(q => c.lineTo(q[0], q[1])); c.lineTo(cut, 20 * r); c.lineTo(-L - 20 * r, 20 * r); c.closePath(); c.clip(); }
     const nl = look.nose === 'dome' ? r : 3 * r;   // the nose's length
     if (now) {   // the rocket's flame
       const f = 1 + 0.25 * Math.sin(now / 37);
@@ -515,10 +517,11 @@
       c.lineWidth = 1; c.strokeStyle = 'rgba(0,0,0,.35)';
     }
     c.fillStyle = '#dfe3e7'; c.fillRect(-L, -r, L - nl, 2 * r); c.strokeRect(-L, -r, L - nl, 2 * r);   // the body
-    if (look.bands) { c.fillStyle = '#e8c331'; c.fillRect(-0.2 * L, -r, Math.max(1, 0.025 * L), 2 * r); c.fillStyle = '#8a5a2b'; c.fillRect(-0.36 * L, -r, Math.max(1, 0.025 * L), 2 * r); }
+    if (look.bands) { if (!torn) { c.fillStyle = '#e8c331'; c.fillRect(-0.2 * L, -r, Math.max(1, 0.025 * L), 2 * r); } c.fillStyle = '#8a5a2b'; c.fillRect(-0.36 * L, -r, Math.max(1, 0.025 * L), 2 * r); }   // (the warhead's yellow band goes with it)
     c.fillStyle = '#3c444c'; c.fillRect(-L - r * 0.15, -r * 0.6, r * 0.15, r * 1.2);   // the nozzle
     if (look.nose === 'dome') { c.fillStyle = '#7f9fb6'; c.beginPath(); c.arc(-r, 0, r, -Math.PI / 2, Math.PI / 2); c.closePath(); c.fill(); c.stroke(); }   // a glass seeker dome
     else { c.fillStyle = '#cdd2d6'; c.beginPath(); c.moveTo(-nl, -r); c.quadraticCurveTo(-nl * 0.25, -r, 0, 0); c.quadraticCurveTo(-nl * 0.25, r, -nl, r); c.closePath(); c.fill(); c.stroke(); }   // a radar nose cone
+    if (torn) { c.strokeStyle = '#6d757d'; c.lineWidth = Math.max(1.5, r * 0.18); c.beginPath(); torn.forEach((q, k) => (k ? c.lineTo(q[0], q[1]) : c.moveTo(q[0], q[1]))); c.stroke(); }
     c.restore();
   }
   function drawShape(c, sh, m) {   // an outside detail: a box or other outline, a circle (c: [x, y, r]) or a line (l: points, w thick)
@@ -574,16 +577,20 @@
   function overlays(c, now) {
     const sh = sim && sim.shape;
     // chemical rounds are drawn as a picture while they fly in (each one until it goes off)
-    if (sim && sh && sim.kind !== 'ke' && (state === 'ready' && !VR || state === 'approach' || state === 'running')) {
+    // (a missile's body slams in after its warhead goes off: its front part is particles, and the rest is drawn sliding into the wreck behind)
+    const body = sim && sim.design && sim.design.body ? E.missileBody({ kind: sim.kind, v: sim.v0 * 1000, d: sim.design }) : null;
+    if (sim && sh && sim.kind !== 'ke' && ((state === 'ready' && !VR) || state === 'approach' || state === 'running' || (body && (state === 'inside' || (state === 'done' && !VR))))) {
       const len = (sh.x1 - sh.x0) * cam.s, sc = Math.max(0.2, len / 60), kind = sim.kind === 'heat' ? 'heat' : sim.kind === 'hesh' ? 'hesh' : 'he';
       let off = 0; if (state === 'approach') { const f = Math.min(1, (now - approachT0) / 450); off = -(1 - (1 - Math.pow(1 - f, 2))) * Math.max(W / cam.s, 400); }
-      const fly = state === 'running' ? sim.v0 * (sim.time - sim.shotT0) : 0;
+      const fly = state === 'ready' || state === 'approach' ? 0 : sim.v0 * (sim.time - sim.shotT0), d = sim.design, a = Math.atan2(-fr.s, fr.c);
       c.save(); c.globalAlpha = state === 'ready' ? 0.9 : 1;
       for (const R of sim.rounds) {
-        if (R.hitAt) continue;
-        const p = fr.toV([R.noseX + off + fly, R.aimY]), d = sim.design;
-        if (d.look) drawMissile(c, toSX(p[0]), toSY(p[1]), Math.atan2(-fr.s, fr.c), len, d.cal / 2 * cam.s, d.look, state !== 'ready' && now);
-        else drawShell(c, kind, toSX(p[0]), toSY(p[1]), Math.atan2(-fr.s, fr.c), sc, 1);
+        if (R.hitAt && !(body && R.bodyNose != null)) continue;
+        const nose = (R.hitAt ? R.bodyNose : R.noseX) + off + fly, p = fr.toV([nose, R.aimY]);
+        const cut = R.hitAt ? Math.min(body.x0, R.hitX - nose) : null;   // what's left behind the crashing part, up to the armor
+        if (cut != null && cut <= sh.x0) continue;   // all of it has gone in
+        if (d.look) drawMissile(c, toSX(p[0]), toSY(p[1]), a, len, d.cal / 2 * cam.s, d.look, state !== 'ready' && state !== 'done' && now, cut != null ? cut * cam.s : null);
+        else drawShell(c, kind, toSX(p[0]), toSY(p[1]), a, sc, 1);
       }
       c.restore();
     }
@@ -821,10 +828,10 @@
     const kind = P.kind;
     let text;
     if (t) text = `${t.n} shots at once: ${tallyWords(t, kind)}.${t.pen && kind !== 'he' && r.residual ? ` The fastest came out at ${Math.round(r.residual * 1000).toLocaleString()} m/s.` : ''}${!t.pen && (kind === 'ke' || kind === 'heat') ? ` The deepest got ${Math.round(r.depth)} mm in.` : ''}`;
-    else if (v === 'pen') text = kind === 'heat' ? `The jet cut all the way through${r.residual ? ` and came out at ${Math.round(r.residual * 1000).toLocaleString()} m/s` : ''}.` : kind === 'he' ? 'The blast tore through and sent fragments out the back.' : r.residual < 0.05 ? 'It only just got through, with almost no speed left.' : `It punched all the way through and came out at ${Math.round(r.residual * 1000).toLocaleString()} m/s.`;
+    else if (v === 'pen') text = kind === 'heat' ? `The jet cut all the way through${r.residual ? ` and came out at ${Math.round(r.residual * 1000).toLocaleString()} m/s` : ''}.` : kind === 'he' ? (P.d.body ? 'The blast tore in, then the rest of the missile smashed through behind it.' : 'The blast tore through and sent fragments out the back.') : r.residual < 0.05 ? 'It only just got through, with almost no speed left.' : `It punched all the way through and came out at ${Math.round(r.residual * 1000).toLocaleString()} m/s.`;
     else if (v === 'rico') text = 'The shell glanced off the armor.';
     else if (v === 'spall') text = kind === 'hesh' ? 'The shock wave knocked a scab of metal off the inside of the armor.' : `It didn't get through, but pieces broke off the inside (spall). Deepest point: ${Math.round(r.depth)} mm.`;
-    else text = kind === 'hesh' ? 'The shock wave wasn\'t strong enough to knock anything off the inside.' : kind === 'he' ? 'The blast didn\'t get through.' : `The armor held. The deepest the ${kind === 'heat' ? 'jet' : 'shell'} got was ${Math.round(r.depth)} mm.`;
+    else text = kind === 'hesh' ? 'The shock wave wasn\'t strong enough to knock anything off the inside.' : kind === 'he' ? (P.d.body ? 'The blast went off, then the rest of the missile slammed in and smashed itself to bits on the armor, but nothing got through.' : 'The blast didn\'t get through.') : `The armor held. The deepest the ${kind === 'heat' ? 'jet' : 'shell'} got was ${Math.round(r.depth)} mm.`;
     const stats = [
       t ? ['Got through', `${t.pen} of ${t.n}`] : null,
       v === 'pen' && kind !== 'he' ? ['Exit speed', `${Math.round(r.residual * 1000).toLocaleString()} m/s`] : ['Deepest point', `${Math.round(r.depth)} mm`],
@@ -843,10 +850,10 @@
     const g = L.group, kind = L.P.kind, what = g.map(h => h.part.n.toLowerCase()).join(' and the '), los = g.reduce((s, h) => s + h.T / Math.max(0.05, h.cos), 0);
     const ang = Math.round(Math.acos(Math.min(1, g[0].cos)) / DEG), armor = `the ${what} (${g.map(h => `${h.T} mm`).join(' + ')} at ${ang}° = ${Math.round(los)} mm in the way)`;
     if (L.tally) return `${L.tally.n} shots at ${armor}: ${tallyWords(L.tally, kind)}.${L.missed ? ` (${L.missed} more missed the armor.)` : ''}`;
-    if (L.v === 'pen') return kind === 'heat' ? `✓ The jet cut through ${armor}.` : kind === 'he' ? `✓ The blast broke through ${armor}.` : L.resid < 0.05 ? `✓ It only just got through ${armor}, with almost no speed left.` : `✓ It punched through ${armor} and flew on at ${Math.round(L.resid * 1000).toLocaleString()} m/s.`;
+    if (L.v === 'pen') return kind === 'heat' ? `✓ The jet cut through ${armor}.` : kind === 'he' ? (L.P.d.body ? `✓ The blast and then the missile itself smashed through ${armor}.` : `✓ The blast broke through ${armor}.`) : L.resid < 0.05 ? `✓ It only just got through ${armor}, with almost no speed left.` : `✓ It punched through ${armor} and flew on at ${Math.round(L.resid * 1000).toLocaleString()} m/s.`;
     if (L.v === 'rico') return `↗ It bounced off ${armor}.`;
     if (L.v === 'spall') return `💥 It didn't get through ${armor}, but bits broke off the inside.`;
-    return `✗ ${armor.charAt(0).toUpperCase() + armor.slice(1)} stopped it.`;
+    return `✗ ${armor.charAt(0).toUpperCase() + armor.slice(1)} stopped it${L.P.d.body ? ': the missile smashed itself to bits on it' : ''}.`;
   }
   function renderVehResult() {
     const box = $('sb-result'), veh = VR.veh, run = VR.run;
