@@ -62,13 +62,14 @@
   let ED = null;     // the vehicle builder
   let paused = null; // which phase a pause interrupted
   let zoomIn = false;     // a missile is so long the picture is zoomed right out while it flies in: look closer once it goes off
+  let TL = null;          // the rest of the round crashing in after its warhead: what sim.bringTails() said, plus end (sim µs), rate, phaseT0, res (the hit before it)
   let skipping = false;   // ⏩ Skip: the rest of the shot runs as fast as the computer can, with no slow motion or replay
   const SKIP_MS = 90;     // how many ms of each frame skipping works for (the picture still updates in between)
   const IDENT = V.frameFor({ from: 'front', tilt: 0, at: [0, 0] });
   let fr = IDENT;    // turns the engine's frame (shot flying along +x) into the picture's frame
   const cam = { x: 0, y: 0, s: 1 };
   let glide = null;  // smooth camera moves
-  const physicsOn = () => state === 'running' || state === 'inside' || state === 'blast';
+  const physicsOn = () => state === 'running' || state === 'inside' || state === 'tails' || state === 'blast';
   const busyNow = () => state === 'approach' || physicsOn() || state === 'flight' || state === 'debris';
 
   // Plates mustn't start inside each other along the shot line
@@ -80,7 +81,7 @@
     }
   }
   function rebuild(keepView) {
-    flashes = []; seenEvents = 0; verdict = null; paused = null; FR = null; skipping = false;
+    flashes = []; seenEvents = 0; verdict = null; paused = null; FR = null; skipping = false; TL = null;
     const P = projDef();
     if (ED) { VR = { veh: ED.veh, run: null }; sim = null; fr = IDENT; state = 'edit'; }
     else if (SB.target === 'vehicle') {
@@ -107,7 +108,7 @@
 
   function fire() {
     if (ED || busyNow() || state === 'paused') return;
-    skipping = false; zoomIn = !VR && !!projDef().d.look;
+    skipping = false; zoomIn = !VR && !!projDef().d.look; TL = null;
     const P = { ...projDef(), v: speedOf() };
     if (VR) {
       if (!VR.run) rebuild(true);
@@ -140,6 +141,29 @@
     renderResult(); renderControlsState();
     checkChallenges({ veh: null, P: projDef(), v, tally: sim.tally, preset: SB.preset, held: v === 'stop' || v === 'spall', thick: SB.plates.reduce((t, p) => t + E.plateThickness(p), 0) });
   }
+
+  // The rest of the round (a rocket's motor, a HEAT shell's tail fins, a shell's heavy base) slams in after the jet or blast. It's often far
+  // behind (a slow rocket's motor gets there milliseconds later), so time jumps ahead to it, then it's watched crashing in (sped up when it's slow).
+  function toTails() {
+    const res = VR ? null : sim.measure(), t = sim.bringTails();   // (plain armor: how the hit went, before this)
+    if (!t) return false;
+    TL = { ...t, res, end: sim.time + t.W, rate: Math.max(1, t.W / 250), phaseT0: performance.now() };
+    state = 'tails';
+    renderResult(); renderControlsState();
+    return true;
+  }
+  const skipText = us => (us >= 1000 ? `${(us / 1000).toFixed(1)} ms` : `${Math.round(us)} µs`);
+  function tailName(P) {
+    const t = P.d.tail;
+    return t.tube ? (/missile/i.test(P.name) ? 'the rest of the missile' : 'the rocket motor') : t.mat === 'wood' ? 'its wooden tail' : P.kind === 'heat' && t.len > 2 * t.r ? 'its tail fins' : t.mat === 'shot' ? 'its heavy steel base' : 'its back end';
+  }
+  function tailLine(P, v) {   // what the rest of the round did once it got there, in words
+    if (!TL || !TL.rounds.length || state !== 'done' || !P.d.tail) return '';
+    const through = sim.tailThrough(), what = tailName(P);
+    const did = through ? (v === 'pen' ? 'followed it through the hole' : 'smashed its way through') : P.d.tail.tube ? 'slammed into the armor and crumpled up' : 'slammed into the armor';
+    return TL.skip >= 20 ? ` ⏩ ${cap(what)} got there ${tailLate()} after the warhead went off (the sim skipped ahead to it) and ${did}.` : ` Then ${what} ${did}.`;
+  }
+  const tailLate = () => skipText(TL.t0 - (sim.hitAt ? sim.hitAt[2] : sim.shotT0));   // how long after the hit the rest of it got there
 
   // ---------- vehicle phases ----------
   function noteVerdict() {   // remember how this shot went at the armor (later phases keep moving things)
@@ -244,7 +268,7 @@
       });
       stepsPerSec = stepsPerSec * 0.9 + (n / Math.max(dtReal, 0.001)) * 0.1;
       if (boom >= 0) { if (!VR.last) noteVerdict(); toBlast(boom); }
-      else if (over) { if (VR) toInside(); else finish(); }
+      else if (over) { if (VR) toInside(); else if (!toTails()) finish(); }
       else if (now - runStart > 120000) { if (VR) toInside(); else finish(); }   // safety: never run forever
       if (zoomIn && sim.hitAt) { zoomIn = false; const [hx, hy] = sim.hitAt; glideTo(viewOf(hx - 700, hx + 1100, hy - 650, hy + 650, 1), 700); }
       if (n) renderLive();
@@ -255,7 +279,16 @@
         if (sim.steps % 40 === 0 && (sim.time - VR.t0 > V.AIR || V.busy(VR.run) === 0 || performance.now() - VR.phaseT0 > INSIDE_MAX[SB.speed])) { done = true; return true; }
         return false;
       });
-      if (boom >= 0) toBlast(boom); else if (done) toFlight();
+      if (boom >= 0) toBlast(boom); else if (done && !toTails()) toFlight();
+      renderLive();
+    } else if (state === 'tails') {   // the rest of the round crashing in
+      let done = false;
+      physics(quota * TL.rate * dtReal, budget, () => {
+        if (zones()) return true;
+        if (sim.steps % 40 === 0 && (sim.time >= TL.end || performance.now() - TL.phaseT0 > INSIDE_MAX[SB.speed])) { done = true; return true; }
+        return false;
+      });
+      if (boom >= 0) toBlast(boom); else if (done) { if (VR) toFlight(); else finish(); }
       renderLive();
     } else if (state === 'flight') {
       if (skipping) VR.flT0 = now - 1e7;   // straight to where everything lands
@@ -524,6 +557,24 @@
     if (torn) { c.strokeStyle = '#6d757d'; c.lineWidth = Math.max(1.5, r * 0.18); c.beginPath(); torn.forEach((q, k) => (k ? c.lineTo(q[0], q[1]) : c.moveTo(q[0], q[1]))); c.stroke(); }
     c.restore();
   }
+  // The rest of a round (see E.projTail), front at (x, y) pointing along a, L long and r wide in pixels. look: 'tube' (a rocket motor, cut open like
+  // the slice, with its fins and nozzle), 'stick' (a wooden tail with tin fins), 'boom' (a HEAT shell's tail fins) or 'base' (a shell's heavy steel base)
+  const tailInside = t => t.at + t.len <= sim.design.len * 1.1;   // (a shell's tail or base is drawn as part of the shell, until it goes off)
+  const tailLook = t => (t.tube ? 'tube' : t.mat === 'wood' ? 'stick' : sim.kind === 'heat' && t.len > 2 * t.r ? 'boom' : 'base');
+  function drawTail(c, x, y, a, L, r, look) {
+    c.save(); c.translate(x, y); c.rotate(a); c.lineWidth = 1; c.strokeStyle = 'rgba(0,0,0,.35)';
+    const col = E.MATERIALS[sim.design.tail.mat].color, fins = look === 'tube' || look === 'stick' || look === 'boom';
+    if (fins) {   // fins (seen from the side: one above, one below), at the back
+      const ch = Math.min(L * 0.5, r * (look === 'boom' ? 3 : 2.4)), span = r * (look === 'boom' ? 2.2 : 1.5);
+      c.fillStyle = look === 'stick' ? '#7d868f' : '#9aa3ab';
+      for (const g of [-1, 1]) { c.beginPath(); c.moveTo(-L + ch, g * r); c.lineTo(-L + ch * 0.3, g * (r + span)); c.lineTo(-L, g * (r + span)); c.lineTo(-L, g * r); c.closePath(); c.fill(); c.stroke(); }
+    }
+    c.fillStyle = col; c.fillRect(-L, -r, L, 2 * r); c.strokeRect(-L, -r, L, 2 * r);
+    if (look === 'tube') { const w = Math.min(r * 0.4, Math.max(1, sim.h * Math.sqrt(3) * cam.s)); c.fillStyle = '#20272e'; c.fillRect(-L, -r + w, L, 2 * (r - w)); }   // (hollow: by now its fuel has burnt)
+    if (look === 'tube') { c.fillStyle = '#3c444c'; c.fillRect(-L - r * 0.25, -r * 0.7, r * 0.25, r * 1.4); }   // the nozzle
+    if (look === 'base') { c.fillStyle = '#c47a3a'; c.fillRect(-L * 0.45, -r * 1.04, Math.max(1, L * 0.25), 2.08 * r); }   // the driving band
+    c.restore();
+  }
   function drawShape(c, sh, m) {   // an outside detail: a box or other outline, a circle (c: [x, y, r]) or a line (l: points, w thick)
     c.fillStyle = sh.col || '#4a5560'; c.strokeStyle = 'rgba(0,0,0,.35)'; c.lineWidth = 1;
     if (sh.c) {
@@ -578,13 +629,19 @@
     const sh = sim && sim.shape;
     // chemical rounds are drawn as a picture while they fly in (each one until it goes off)
     // (a missile's body slams in after its warhead goes off: its front part is particles, and the rest is drawn sliding into the wreck behind)
+    // (the rest of any other one, d.tail, is drawn flying in behind it until it's made of particles)
     const body = sim && sim.design && sim.design.body ? E.missileBody({ kind: sim.kind, v: sim.v0 * 1000, d: sim.design }) : null;
-    if (sim && sh && sim.kind !== 'ke' && ((state === 'ready' && !VR) || state === 'approach' || state === 'running' || (body && (state === 'inside' || (state === 'done' && !VR))))) {
+    const tail = sim && sim.design && E.projTail({ kind: sim.kind, v: sim.v0 * 1000, d: sim.design });
+    if (sim && sh && sim.kind !== 'ke' && ((state === 'ready' && !VR) || state === 'approach' || state === 'running' || ((body || tail) && (state === 'inside' || state === 'tails' || (state === 'done' && !VR))))) {
       const len = (sh.x1 - sh.x0) * cam.s, sc = Math.max(0.2, len / 60), kind = sim.kind === 'heat' ? 'heat' : sim.kind === 'hesh' ? 'hesh' : 'he';
       let off = 0; if (state === 'approach') { const f = Math.min(1, (now - approachT0) / 450); off = -(1 - (1 - Math.pow(1 - f, 2))) * Math.max(W / cam.s, 400); }
       const fly = state === 'ready' || state === 'approach' ? 0 : sim.v0 * (sim.time - sim.shotT0), d = sim.design, a = Math.atan2(-fr.s, fr.c);
       c.save(); c.globalAlpha = state === 'ready' ? 0.9 : 1;
       for (const R of sim.rounds) {
+        if (tail && !(R.tail && TL) && (R.hitAt || !tailInside(tail))) {
+          const p = fr.toV([Math.min(R.noseX - tail.at + off + fly, R.hitX - 2 * sim.h), R.aimY]);   // its front (it waits at the armor while time hasn't jumped ahead yet)
+          drawTail(c, toSX(p[0]), toSY(p[1]), a, tail.len * cam.s, tail.r * cam.s, tailLook(tail));
+        }
         if (R.hitAt && !(body && R.bodyNose != null)) continue;
         const nose = (R.hitAt ? R.bodyNose : R.noseX) + off + fly, p = fr.toV([nose, R.aimY]);
         const cut = R.hitAt ? Math.min(body.x0, R.hitX - nose) : null;   // what's left behind the crashing part, up to the armor
@@ -800,7 +857,7 @@
     let awake = '';
     if (VR && VR.run) { let a = 0; for (let q = 0; q < sim.an; q++) a += sim.awake[sim.alist[q]]; awake = ` · ${a.toLocaleString()} awake`; }
     const many = sim.rounds && sim.rounds.length > 1 && (state === 'running' || state === 'approach') ? `🎯 ${sim.rounds.filter(R => R.hitAt).length} of ${sim.rounds.length} shots in · ` : '';
-    return `${VR && VR.run ? `Shot ${VR.shots} · ` : ''}${many}⏱ ${(sim.time - (VR && VR.run ? sim.shotT0 || 0 : 0)).toFixed(0)} µs · ${sim.n.toLocaleString()} particles${awake} · ${sim.broken.toLocaleString()} bonds snapped · 🔥 hottest ${Math.round((sim.maxT || 293) - 273).toLocaleString()} °C${r && r.depth ? ` · deepest ${Math.round(r.depth)} mm` : ''}`;
+    return `${VR && VR.run ? `Shot ${VR.shots} · ` : ''}${many}⏱ ${(sim.time - (VR && VR.run ? sim.shotT0 || 0 : 0)).toFixed(0)} µs · ${sim.n.toLocaleString()} particles${awake} · ${sim.broken.toLocaleString()} bonds snapped · 🔥 hottest ${Math.round((sim.maxT || 293) - 273).toLocaleString()} °C${r && r.depth ? ` · deepest ${Math.round(r.depth)} mm` : ''}${TL && TL.skip >= 20 ? ` · ⏩ ${skipText(TL.skip)} skipped` : ''}`;
   }
   function renderLive() { $('sb-live').textContent = sim ? liveLine() : ''; }
   const estHTML = (P, est) => est ? `<p class="sb-est">📏 Classic formula: this ${esc(P.name)} beats about <b>${est.toLocaleString()} mm</b> of flat armor steel${P.kind === 'ke' ? ` at ${speedOf().toLocaleString()} m/s` : ''}. The sim is a 2D slice, so it won't match exactly.</p>` : '';
@@ -819,12 +876,12 @@
       return;
     }
     if (state !== 'done') {
-      const msg = state === 'ready' ? (SB.solver === 'formulas' ? 'Press <b>Fire</b> (or Space) for an instant answer from the formulas, plate by plate. Click the armor to aim somewhere else.' : 'Press <b>Fire</b> (or Space). Click the armor to aim somewhere else.') : skipping ? '⏩ Skipping to the result…' : 'Simulating… every particle is doing its own physics. Press <b>⏩ Skip</b> to jump to the result.';
+      const msg = state === 'ready' ? (SB.solver === 'formulas' ? 'Press <b>Fire</b> (or Space) for an instant answer from the formulas, plate by plate. Click the armor to aim somewhere else.' : 'Press <b>Fire</b> (or Space). Click the armor to aim somewhere else.') : skipping ? '⏩ Skipping to the result…' : state === 'tails' ? `⏩ ${esc(cap(tailName(P)))} ${TL.skip >= 20 ? `got there ${tailLate()} after the warhead went off (the sim skipped ahead to it) and ` : ''}is crashing in…` : 'Simulating… every particle is doing its own physics. Press <b>⏩ Skip</b> to jump to the result.';
       box.innerHTML = `<span class="badge idle">${state === 'ready' ? 'READY' : 'LIVE'}</span><div class="txt">${msg}</div>`;
       $('sb-live').textContent = state === 'ready' ? `${sim.n.toLocaleString()} particles · ${sim.nb.toLocaleString()} bonds · particle size ${sim.h.toFixed(sim.h < 1 ? 2 : 1)} mm` : liveLine();
       return;
     }
-    const r = sim.measure(), v = verdict, t = sim.tally, [st, badge0] = SB_WORDS[v] || SB_WORDS.stop, badge = t ? tallyBadge(v, t) : badge0, est = formulaEstimate(P, speedOf());
+    const r = (TL && TL.res) || sim.measure(), v = verdict, t = sim.tally, [st, badge0] = SB_WORDS[v] || SB_WORDS.stop, badge = t ? tallyBadge(v, t) : badge0, est = formulaEstimate(P, speedOf());
     const kind = P.kind;
     let text;
     if (t) text = `${t.n} shots at once: ${tallyWords(t, kind)}.${t.pen && kind !== 'he' && r.residual ? ` The fastest came out at ${Math.round(r.residual * 1000).toLocaleString()} m/s.` : ''}${!t.pen && (kind === 'ke' || kind === 'heat') ? ` The deepest got ${Math.round(r.depth)} mm in.` : ''}`;
@@ -839,9 +896,9 @@
       ['Hottest', `${Math.round(r.maxT - 273).toLocaleString()} °C`],
       ['Bits behind armor', (r.spall + (v === 'pen' ? r.behind : 0)).toLocaleString()],
       ['Bonds snapped', sim.broken.toLocaleString()],
-      ['Simulated time', `${Math.round(sim.time)} µs`],
+      ['Simulated time', `${Math.round(sim.time - (TL ? TL.skip : 0))} µs`],
     ].filter(Boolean);
-    box.innerHTML = `<span class="badge ${st}">${badge}</span><div class="txt">${esc(text)}
+    box.innerHTML = `<span class="badge ${st}">${badge}</span><div class="txt">${esc(text + tailLine(P, v))}
       <div class="sb-stats">${stats.map(([k, val]) => `<div><small>${k}</small><b>${val}</b></div>`).join('')}</div>
       ${estHTML(P, est)}${fxDetails(formulasForPlates(), P)}</div>`;
     $('sb-live').textContent = liveLine();
@@ -863,12 +920,12 @@
       return;
     }
     if (state !== 'done') {
-      const msg = skipping ? '⏩ Skipping to the result…' : state === 'approach' || state === 'running' ? 'Simulating the hit… every particle is doing its own physics.' : state === 'inside' ? 'Bits are flying around inside…' : state === 'flight' ? 'Following the bits flying around inside…' : state === 'blast' ? '💥 The ammo exploded!' : state === 'debris' ? '💥 Pieces are flying off…' : 'Paused.';
+      const msg = skipping ? '⏩ Skipping to the result…' : state === 'approach' || state === 'running' ? 'Simulating the hit… every particle is doing its own physics.' : state === 'inside' ? 'Bits are flying around inside…' : state === 'tails' ? `⏩ ${esc(cap(tailName(VR.last ? VR.last.P : projDef())))} is crashing in…` : state === 'flight' ? 'Following the bits flying around inside…' : state === 'blast' ? '💥 The ammo exploded!' : state === 'debris' ? '💥 Pieces are flying off…' : 'Paused.';
       box.innerHTML = `<span class="badge idle">LIVE</span><div class="txt">${VR.last ? esc(armorLine(VR.last)) + '<br>' : ''}${msg}</div>`;
       $('sb-live').textContent = liveLine(); return;
     }
     const { states, fate } = V.fateOf(run), L = VR.last, P = L ? L.P : projDef();
-    let line = L ? armorLine(L) : '';
+    let line = L ? armorLine(L) + tailLine(P, L.v) : '';
     if (VR.burst) line += L && L.tally ? ` Then ${VR.burst === 1 ? 'one of them' : VR.burst} burst inside!` : ' Then its explosive filling went off inside!';
     const order = V.MOD_KEYS, mods = veh.modules.map((m, k) => ({ m, k, s: states[k] })).sort((a, b) => order.indexOf(a.m.type) - order.indexOf(b.m.type));
     const chips = mods.map(({ m, s }) => `<span class="mchip s${s}">${V.MODULES[m.type].icon} ${esc(m.n)} <b>${s === 2 ? '✖ ' : s === 1 ? '⚠ ' : '✓ '}${V.MODULES[m.type].words[s]}</b></span>`).join('');

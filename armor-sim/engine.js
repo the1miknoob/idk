@@ -72,6 +72,8 @@
 
   // ✏️ Projectiles: made-up, generic designs. Lengths in mm, speed in m/s.
   // shape 'shell' = pointed (ogive) nose; 'rod' = long dart; 'heat' = shaped charge; 'hesh' = squash head; 'ball' = sphere
+  // tail: the rest of an exploding round, which crashes in after it (a rocket's motor, a HEAT shell's tail fins, a shell's heavy steel base):
+  // at = mm from the nose to its front, len, r (half its width), rho = how heavy it is for its size (g/cm³), mat, tube: hollow (just its two walls in the slice)
   const PROJECTILES = [
     { id: 'p9', group: 'Bullets', name: '9 mm pistol bullet', kind: 'ke', v: 360, d: { shape: 'shell', cal: 9, len: 15, nose: 0.9, mat: 'lead', jacket: { t: 0.5, mat: 'cu' } } },
     { id: 'slug12', group: 'Bullets', name: '12-gauge shotgun slug (lead)', kind: 'ke', v: 450, d: { shape: 'shell', cal: 18.5, len: 22, nose: 0.5, mat: 'lead' } },
@@ -107,24 +109,24 @@
     { id: 'fs3', bore: 120, group: 'Long-rod darts (APFSDS)', name: 'Long dart · 700 mm tungsten rod', kind: 'ke', v: 1700, d: { shape: 'rod', dia: 25, len: 700, mat: 'wha' } },
     { id: 'fs105du', bore: 105, group: 'Long-rod darts (APFSDS)', name: '105 mm dart · 450 mm uranium rod', kind: 'ke', v: 1490, d: { shape: 'rod', dia: 24, len: 450, mat: 'du' } },
     { id: 'fs120du', bore: 120, group: 'Long-rod darts (APFSDS)', name: '120 mm dart · 780 mm uranium rod', kind: 'ke', v: 1670, d: { shape: 'rod', dia: 25, len: 780, mat: 'du' } },
-    { id: 'grenade40', group: 'Shaped charges (HEAT)', name: '40 mm grenade (shaped charge)', kind: 'heat', v: 76, d: { shape: 'heat', cal: 40, len: 100, probe: 10, q: 1.6, vTip: 6 } },
-    { id: 'heat75', group: 'Shaped charges (HEAT)', name: '75 mm HEAT (early)', kind: 'heat', v: 450, d: { shape: 'heat', cal: 75, len: 250, probe: 20, q: 3.2, vTip: 6.5 } },
-    { id: 'heat105', group: 'Shaped charges (HEAT)', name: '105 mm HEAT', kind: 'heat', v: 1170, d: { shape: 'heat', cal: 105, len: 420, probe: 110, q: 4.6, vTip: 7.5 } },
-    { id: 'heat120', group: 'Shaped charges (HEAT)', name: '120 mm HEAT (modern)', kind: 'heat', v: 1140, d: { shape: 'heat', cal: 120, len: 480, probe: 170, q: 6, vTip: 8.5 } },
-    { id: 'bazooka', group: 'Rockets & missiles', name: 'Bazooka rocket (60 mm HEAT, 1943)', kind: 'heat', v: 82, d: { shape: 'heat', cal: 60, len: 280, probe: 40, q: 1.7, vTip: 6 } },
-    { id: 'pzf', group: 'Rockets & missiles', name: 'Panzerfaust (150 mm HEAT, 1944)', kind: 'heat', v: 60, d: { shape: 'heat', cal: 149, len: 330, probe: 0, q: 1.4, vTip: 5.5 } },
-    { id: 'rpg7', group: 'Rockets & missiles', name: 'RPG-7 rocket (85 mm HEAT)', kind: 'heat', v: 115, d: { shape: 'heat', cal: 85, len: 330, probe: 120, q: 3.6, vTip: 7.2 } },
-    { id: 'law66', group: 'Rockets & missiles', name: 'LAW rocket (66 mm HEAT)', kind: 'heat', v: 145, d: { shape: 'heat', cal: 66, len: 260, probe: 30, q: 3.8, vTip: 7 } },
-    { id: 'atgm', group: 'Rockets & missiles', name: 'Wire-guided missile (120 mm HEAT)', kind: 'heat', v: 190, d: { shape: 'heat', cal: 120, len: 500, probe: 160, q: 4.3, vTip: 7.8 } },
-    { id: 'tandem', group: 'Rockets & missiles', name: 'Tandem missile (beats reactive armor)', kind: 'heat', v: 300, d: { shape: 'heat', cal: 152, len: 620, probe: 260, q: 6.2, vTip: 9, tandem: { cal: 40, q: 2, delay: 70 } } },
-    { id: 'topjav', group: 'Rockets & missiles', name: 'Top-attack tandem missile (127 mm)', kind: 'heat', v: 190, d: { shape: 'heat', cal: 127, len: 560, probe: 200, q: 6.2, vTip: 9, tandem: { cal: 35, q: 2, delay: 70 } } },
+    { id: 'grenade40', group: 'Shaped charges (HEAT)', name: '40 mm grenade (shaped charge)', kind: 'heat', v: 76, d: { shape: 'heat', cal: 40, len: 100, probe: 10, q: 1.6, vTip: 6, tail: { at: 75, len: 25, r: 18, rho: 2.7, mat: 'alu' } } },
+    { id: 'heat75', group: 'Shaped charges (HEAT)', name: '75 mm HEAT (early)', kind: 'heat', v: 450, d: { shape: 'heat', cal: 75, len: 250, probe: 20, q: 3.2, vTip: 6.5, tail: { at: 190, len: 60, r: 33, rho: 4.7, mat: 'shot' } } },
+    { id: 'heat105', group: 'Shaped charges (HEAT)', name: '105 mm HEAT', kind: 'heat', v: 1170, d: { shape: 'heat', cal: 105, len: 420, probe: 110, q: 4.6, vTip: 7.5, tail: { at: 300, len: 150, r: 20, rho: 4, mat: 'shot' } } },
+    { id: 'heat120', group: 'Shaped charges (HEAT)', name: '120 mm HEAT (modern)', kind: 'heat', v: 1140, d: { shape: 'heat', cal: 120, len: 480, probe: 170, q: 6, vTip: 8.5, tail: { at: 330, len: 180, r: 20, rho: 4, mat: 'shot' } } },
+    { id: 'bazooka', group: 'Rockets & missiles', name: 'Bazooka rocket (60 mm HEAT, 1943)', kind: 'heat', v: 82, d: { shape: 'heat', cal: 60, len: 280, probe: 40, q: 1.7, vTip: 6, tail: { at: 280, len: 240, r: 20, rho: 0.8, mat: 'motor', tube: true } } },
+    { id: 'pzf', group: 'Rockets & missiles', name: 'Panzerfaust (150 mm HEAT, 1944)', kind: 'heat', v: 60, d: { shape: 'heat', cal: 149, len: 330, probe: 0, q: 1.4, vTip: 5.5, tail: { at: 330, len: 500, r: 16, rho: 0.6, mat: 'wood' } } },
+    { id: 'rpg7', group: 'Rockets & missiles', name: 'RPG-7 rocket (85 mm HEAT)', kind: 'heat', v: 115, d: { shape: 'heat', cal: 85, len: 330, probe: 120, q: 3.6, vTip: 7.2, tail: { at: 330, len: 600, r: 20, rho: 0.9, mat: 'motor', tube: true } } },
+    { id: 'law66', group: 'Rockets & missiles', name: 'LAW rocket (66 mm HEAT)', kind: 'heat', v: 145, d: { shape: 'heat', cal: 66, len: 260, probe: 30, q: 3.8, vTip: 7, tail: { at: 260, len: 250, r: 25, rho: 0.6, mat: 'motor', tube: true } } },
+    { id: 'atgm', group: 'Rockets & missiles', name: 'Wire-guided missile (120 mm HEAT)', kind: 'heat', v: 190, d: { shape: 'heat', cal: 120, len: 500, probe: 160, q: 4.3, vTip: 7.8, tail: { at: 500, len: 600, r: 57, rho: 1.2, mat: 'motor', tube: true } } },
+    { id: 'tandem', group: 'Rockets & missiles', name: 'Tandem missile (beats reactive armor)', kind: 'heat', v: 300, d: { shape: 'heat', cal: 152, len: 620, probe: 260, q: 6.2, vTip: 9, tandem: { cal: 40, q: 2, delay: 70 }, tail: { at: 620, len: 580, r: 72, rho: 1.2, mat: 'motor', tube: true } } },
+    { id: 'topjav', group: 'Rockets & missiles', name: 'Top-attack tandem missile (127 mm)', kind: 'heat', v: 190, d: { shape: 'heat', cal: 127, len: 560, probe: 200, q: 6.2, vTip: 9, tandem: { cal: 35, q: 2, delay: 70 }, tail: { at: 560, len: 540, r: 60, rho: 1.2, mat: 'motor', tube: true } } },
     { id: 'efp', group: 'Rockets & missiles', name: 'Top-attack slug (EFP, copper)', kind: 'ke', v: 2000, d: { shape: 'block', cal: 50, len: 120, mat: 'cu' } },
-    { id: 'hesh105', group: 'Squash head (HESH)', name: '105 mm HESH', kind: 'hesh', v: 730, d: { shape: 'hesh', cal: 105, len: 360 } },
-    { id: 'hesh120', group: 'Squash head (HESH)', name: '120 mm HESH', kind: 'hesh', v: 670, d: { shape: 'hesh', cal: 120, len: 410 } },
-    { id: 'hesh165', group: 'Squash head (HESH)', name: '165 mm HESH (demolition)', kind: 'hesh', v: 260, d: { shape: 'hesh', cal: 165, len: 520 } },
-    { id: 'he75', group: 'High explosive (HE)', name: '75 mm HE', kind: 'he', v: 550, d: { shape: 'shell', cal: 75, len: 280, nose: 2, mat: 'shot', fill: 0.62 } },
-    { id: 'he122', group: 'High explosive (HE)', name: '122 mm HE', kind: 'he', v: 680, d: { shape: 'shell', cal: 122, len: 460, nose: 2, mat: 'shot', fill: 0.62 } },
-    { id: 'he152', group: 'High explosive (HE)', name: '152 mm HE', kind: 'he', v: 650, d: { shape: 'shell', cal: 152, len: 600, nose: 2, mat: 'shot', fill: 0.62 } },
+    { id: 'hesh105', group: 'Squash head (HESH)', name: '105 mm HESH', kind: 'hesh', v: 730, d: { shape: 'hesh', cal: 105, len: 360, tail: { at: 330, len: 30, r: 48, rho: 7.85, mat: 'shot' } } },
+    { id: 'hesh120', group: 'Squash head (HESH)', name: '120 mm HESH', kind: 'hesh', v: 670, d: { shape: 'hesh', cal: 120, len: 410, tail: { at: 375, len: 35, r: 55, rho: 7.85, mat: 'shot' } } },
+    { id: 'hesh165', group: 'Squash head (HESH)', name: '165 mm HESH (demolition)', kind: 'hesh', v: 260, d: { shape: 'hesh', cal: 165, len: 520, tail: { at: 475, len: 45, r: 75, rho: 7.85, mat: 'shot' } } },
+    { id: 'he75', group: 'High explosive (HE)', name: '75 mm HE', kind: 'he', v: 550, d: { shape: 'shell', cal: 75, len: 280, nose: 2, mat: 'shot', fill: 0.62, tail: { at: 255, len: 25, r: 34, rho: 7.85, mat: 'shot' } } },
+    { id: 'he122', group: 'High explosive (HE)', name: '122 mm HE', kind: 'he', v: 680, d: { shape: 'shell', cal: 122, len: 460, nose: 2, mat: 'shot', fill: 0.62, tail: { at: 425, len: 35, r: 55, rho: 7.85, mat: 'shot' } } },
+    { id: 'he152', group: 'High explosive (HE)', name: '152 mm HE', kind: 'he', v: 650, d: { shape: 'shell', cal: 152, len: 600, nose: 2, mat: 'shot', fill: 0.62, tail: { at: 555, len: 45, r: 70, rho: 7.85, mat: 'shot' } } },
     // Real missiles (rough public numbers) made to shoot down aircraft, not tanks: a proximity fuze sets the warhead off next to the plane, and it sprays
     // fragments (or an expanding ring of steel rods) into the thin skin. Here they hit the armor head-on. blast: how hard the blast pushes (1 = an HE shell);
     // frags, fragV (km/s), fragM: the fragments; rods: they fly out sideways in a ring; warhead: kg; body: the rest of it crashes in behind (bodyRho: how heavy it is for its size, g/cm³); breach: mm of steel the blast breaks through here (for the formulas). look: how it's drawn.
@@ -294,6 +296,14 @@
     const gap = 0.6 * d.cal, len = Math.min(d.len - gap, P.v / 1000 * (BODY_WAIT + 100) - gap);   // (the front of it went up with the warhead)
     return len > 0 ? { x0: -gap - len, x1: -gap, r: d.cal / 2 * 0.95 } : null;
   }
+  // The rest of any other exploding round (d.tail) is usually far behind its warhead: a slow rocket's motor gets there milliseconds after the jet.
+  // So once the jet or blast has done its work, time jumps ahead to when it arrives, and it's watched crashing in for W µs (long enough for all
+  // of it to arrive, within limits).
+  const TAIL_MIN = 150, TAIL_MAX = 1500;
+  function projTail(P) {
+    const d = P && P.d, t = d && d.tail; if (!t || P.kind === 'ke') return null;
+    return { ...t, W: Math.max(TAIL_MIN, Math.min(TAIL_MAX, t.len / (P.v / 1000))) };
+  }
   // Several shells at once. 'spread' puts them side by side (gap = mm between their sides), all arriving together;
   // 'row' lines them up one behind another (gap = mm from one's tail to the next one's nose), like a burst from a machine gun.
   // Returns [{ dy, back }] (sideways offset from the aim line, distance behind the first), the middle one first; null for one shell.
@@ -329,7 +339,7 @@
     px: Float32Array, py: Float32Array, vx: Float32Array, vy: Float32Array, fx: Float32Array, fy: Float32Array, m: Float32Array, im: Float32Array,
     T: Float32Array, soft: Float32Array, u: Float32Array, shade: Float32Array, sk: Float32Array, kp: Float32Array, icp: Float32Array, melt: Float32Array,
     ax: Float32Array, ay: Float32Array, ag: Float32Array,
-    mat: Uint8Array, body: Int16Array, fixed: Uint8Array, alive: Uint8Array, nbond: Uint8Array, brk: Uint8Array, edge: Uint8Array, duct: Uint8Array,
+    mat: Uint8Array, body: Int16Array, tail: Uint8Array, fixed: Uint8Array, alive: Uint8Array, nbond: Uint8Array, brk: Uint8Array, edge: Uint8Array, duct: Uint8Array,
     attached: Uint8Array, rubble: Uint8Array, awake: Uint8Array, calm: Uint8Array, loose: Uint8Array, nadj: Uint8Array, inlist: Uint8Array,
     next: Int32Array, cellOf: Int32Array, occ: Int32Array, uf: Int32Array, snext: Int32Array, scell: Int32Array, alist: Int32Array,
   };
@@ -397,7 +407,7 @@
       if (proj) this.addShot(proj, null, volleyRounds(proj, scene.volley));
       else {   // a whole vehicle waits for its first shot
         this.targets = this.plates; this.rounds = []; this.scabs = []; this.firstPlate = this.lastPlate = this.plates[0]; this.projRange = [this.n, this.n]; this.shape = null;
-        this.kind = 'ke'; this.v0 = 1; this.hitAt = null; this.pending = null; this.jetQueue = null; this.shotT0 = 0; this.weldCap = Infinity;
+        this.kind = 'ke'; this.v0 = 1; this.hitAt = null; this.pending = null; this.jetQueue = null; this.shotT0 = 0; this.weldCap = Infinity; this.tails = null;
         if (this.sleepOn) for (let i = 0; i < this.n; i++) this.awake[i] = 0;
         this.setBox(0); this.dt0 = this.dt = CFL * h / 6;
       }
@@ -422,7 +432,7 @@
     addRaw(x, y, mi, body, vx, vy, u, edge, fixed) {
       if (this.n >= this.cap) this.growParticles(this.n + 1);
       const i = this.n++, m = MP[mi].rho * this.volume;
-      this.px[i] = x; this.py[i] = y; this.vx[i] = vx; this.vy[i] = vy; this.mat[i] = mi; this.body[i] = body; this.fixed[i] = fixed ? 1 : 0;
+      this.px[i] = x; this.py[i] = y; this.vx[i] = vx; this.vy[i] = vy; this.mat[i] = mi; this.body[i] = body; this.tail[i] = 0; this.fixed[i] = fixed ? 1 : 0;
       this.u[i] = u; this.edge[i] = edge; this.m[i] = m; this.im[i] = fixed ? 0 : 1 / this.m[i]; this.T[i] = 293; this.soft[i] = 1; this.alive[i] = 1;
       this.shade[i] = 0.88 + 0.24 * frac(Math.sin(i * 12.9898) * 43758.5453);
       this.nadj[i] = 0; this.nbond[i] = 0; this.brk[i] = 0; this.attached[i] = 0; this.rubble[i] = 0; this.ag[i] = 0; this.ax[i] = x; this.ay[i] = y;
@@ -540,7 +550,7 @@
       this.setBox(sh.x1 - sh.x0);
       // scoring for this shot
       this.kind = proj.kind; this.design = proj.d; this.v0 = v0;
-      this.triggered = false; this.jetQueue = null; this.scabs = []; this.penAt = 0; this.shotT0 = this.time; this.maxT = 293; this.res = null; this.tally = null;
+      this.triggered = false; this.jetQueue = null; this.scabs = []; this.penAt = 0; this.shotT0 = this.time; this.maxT = 293; this.res = null; this.tally = null; this.tails = null;
       this.targets = this.rounds.length === 1 ? R0.targets : [...new Set(this.rounds.flatMap(R => R.targets))];
       this.lastPlate = R0.lastPlate; this.firstPlate = R0.firstPlate;
       this.hitAt = null; this.residual = 0; this.everBehind = false;
@@ -1130,6 +1140,72 @@
       this.events.push({ type: 'scab', x: cx + n[0] * pl.T, y: cy + n[1] * pl.T, t: this.time });
     }
 
+    // The rest of each round (see projTail) arrives: time jumps ahead to just before the first of them hits something solid in its way (everything
+    // else stays where it was), and they're made of particles flying in at the round's speed. Returns what happened, or null if there's nothing to bring.
+    bringTails() {
+      const tl = projTail({ kind: this.kind, v: this.v0 * 1000, d: this.design });
+      if (!tl || this.tails || !this.rounds.length) return null;
+      const h = this.h, dyl = h * SQ3 / 2, v0 = this.v0, part = tl.len, rows = Math.max(0, Math.floor(tl.r / dyl)), wide = tl.r + h;
+      const flying = i => !this.tail[i] && (this.body[i] === 0 ? this.vx[i] * this.vx[i] + this.vy[i] * this.vy[i] > 0.0025 : !this.attached[i] && this.vx[i] < -0.05);   // bits flying about, not in the way
+      const solidFrom = (R, x0) => {   // the nearest solid thing in its lane (armor, wreckage, an earlier one's crumpled tail), ahead of x0
+        let s = Infinity;
+        for (let i = 0; i < this.n; i++) if (this.alive[i] && this.px[i] > x0 && this.px[i] < s && Math.abs(this.py[i] - R.aimY) < wide && !flying(i)) s = this.px[i];
+        return s;
+      };
+      const lanes = this.rounds.map(R => {
+        const front = R.noseX - tl.at + v0 * (this.time - this.shotT0);   // where its front is now
+        return { R, front, stop: Math.min(R.hitX, solidFrom(R, Math.min(front, R.hitX) - part - h)) - 2 * h };
+      });
+      const skip = Math.max(0, Math.min(...lanes.map(L => (L.stop - L.front) / v0)));
+      this.time += skip;
+      const made = [], b0 = this.nb;
+      for (const L of lanes) {
+        let x = Math.min(L.front + v0 * skip, L.stop);
+        if (L.stop - x > v0 * tl.W) continue;   // a later one of a row: still on its way when the watching stops
+        for (let k = 0; k < 6; k++) { const s = solidFrom(L.R, x - part - h); if (s >= x + 2 * h) break; x = s - 2 * h; }   // (never on top of anything solid)
+        for (let i = 0; i < this.n; i++) {   // bits that flew back into its way would have hit it on the way in: they're gone
+          if (this.alive[i] && this.px[i] > x - part - h && this.px[i] < x + h && Math.abs(this.py[i] - L.R.aimY) < wide && flying(i)) this.alive[i] = 0;
+        }
+        const wall = tl.tube && rows > 2 ? rows - 2 : -1, heavier = tl.rho / MATERIALS[tl.mat].rho * (wall < 0 ? 1 : (2 * rows + 1) / (2 * (rows - wall)));   // (a tube's walls carry all its weight)
+        const a = this.n;
+        for (let k = -rows; k <= rows; k++) if (Math.abs(k) > wall) for (let xx = -(Math.abs(k) % 2) * h / 2; xx >= -part; xx -= h) this.addRaw(x + xx, L.R.aimY + k * dyl, MAT_INDEX[tl.mat], 0, v0, 0, 0, 0, false);
+        for (let i = a; i < this.n; i++) { this.tail[i] = 1; this.m[i] *= heavier; this.im[i] = 1 / this.m[i]; this.setDerived(i); }
+        this.link(a, this.n);
+        for (let i = a; i < this.n; i++) this.nbond[i] = this.nadj[i];
+        L.R.tail = { x, i0: a, i1: this.n }; made.push(L.R);
+      }
+      this.weldCap += this.nb - b0;   // (its own bonds don't use up the re-joins)
+      if (!this.sleepOn) this.sleepNow();
+      let x0 = Infinity; for (const R of made) x0 = Math.min(x0, R.tail.x - part);
+      if (x0 - 4 * h < this.box[0]) this.setBox(0);   // room behind it
+      return (this.tails = { t0: this.time, skip, W: tl.W, rounds: made });
+    }
+    // Did any of the rest get through the armor (out past the back of the last plate on its line)?
+    tailThrough() {
+      if (!this.tails) return false;
+      return this.tails.rounds.some(R => {
+        const lp = R.lastPlate, n = lp.f.n, o = lp.f.o;
+        let k = 0; for (let i = R.tail.i0; i < R.tail.i1; i++) if (this.alive[i] && (this.px[i] - o[0]) * n[0] + (this.py[i] - o[1]) * n[1] > lp.T + 2 * this.h) k++;
+        return k >= 2;
+      });
+    }
+    // From now on, still particles sleep, as a whole vehicle's do (plain armor once its hit is over: only what's still moving costs anything)
+    sleepNow() {
+      this.compactBonds();
+      const adj = this.adj, bs = this.bslot, nadj = this.nadj;   // who's bonded to whom (only kept exactly right while sleeping)
+      nadj.fill(0); adj.fill(-1); bs.fill(-1);
+      for (let b = 0; b < this.nb; b++) for (const [i, j] of [[this.bi[b], this.bj[b]], [this.bj[b], this.bi[b]]]) { if (nadj[i] >= MAXN) continue; const o = i * MAXN + nadj[i]++; adj[o] = j; bs[o] = b; }
+      this.sleepOn = true; this.sleepV2 = 0.004 * 0.004; this.calmSteps = 25; this.an = 0;
+      this.shead = new Int32Array(this.head.length).fill(-1);
+      for (let i = 0; i < this.n; i++) {
+        this.inlist[i] = 0; this.calm[i] = 0; this.scell[i] = -1;
+        if (!this.alive[i]) { this.awake[i] = 0; continue; }
+        if ((this.body[i] > 0 && this.attached[i] && !this.loose[i]) || this.vx[i] * this.vx[i] + this.vy[i] * this.vy[i] < this.sleepV2) {   // armor still in place: its ringing has died down by now
+          this.awake[i] = 0; this.vx[i] = 0; this.vy[i] = 0; this.sAdd(i);
+        } else { this.awake[i] = 1; this.alist[this.an++] = i; this.inlist[i] = 1; }
+      }
+    }
+
     plateAt(x, y) {   // which plate is this point in (or nearest to)
       let best = null, bd = Infinity;
       for (const p of this.plates) {
@@ -1180,7 +1256,7 @@
       const [a] = this.projRange;
       let behind = 0, sx = 0, sy = 0, deepest = -Infinity, cnt = 0, mx = 0, my = 0, mvx = 0, mvy = 0, mass = 0, spall = 0;
       for (let i = a; i < this.n; i++) {
-        if (this.body[i] !== 0 || !this.alive[i]) continue;
+        if (this.body[i] !== 0 || !this.alive[i] || this.tail[i]) continue;   // (the rest of it crashing in later doesn't count)
         cnt++;
         const u = (this.px[i] - o[0]) * n[0] + (this.py[i] - o[1]) * n[1];
         const uf = (this.px[i] - fp.f.o[0]) * fp.f.n[0] + (this.py[i] - fp.f.o[1]) * fp.f.n[1];
@@ -1211,7 +1287,7 @@
       const lp = R.lastPlate, n = lp.f.n, o = lp.f.o, back = lp.T, fp = R.firstPlate;
       let behind = 0, sx = 0, sy = 0, deepest = -Infinity, cnt = 0, mx = 0, my = 0, mvx = 0, mvy = 0, mass = 0, spall = 0;
       for (const [a, b] of R.parts) for (let i = a; i < b; i++) {
-        if (this.body[i] !== 0 || !this.alive[i]) continue;
+        if (this.body[i] !== 0 || !this.alive[i] || this.tail[i]) continue;
         cnt++;
         const u = (this.px[i] - o[0]) * n[0] + (this.py[i] - o[1]) * n[1];
         const uf = (this.px[i] - fp.f.o[0]) * fp.f.n[0] + (this.py[i] - fp.f.o[1]) * fp.f.n[1];
@@ -1259,7 +1335,7 @@
       if (this.kind === 'ke' && this.hitAt && vIn < -0.05) return vSide > -vIn ? 'rico' : (r.spall > 2 ? 'spall' : 'stop');   // heading back out
       if (this.kind === 'ke' && this.hitAt && speed < 0.04) return r.spall > 2 ? 'spall' : 'stop';
       if (this.kind === 'heat' && this.triggered && !this.jetQueue && this.time - this.hitAt[2] > 40) {
-        let fast = 0; for (let i = this.projRange[1]; i < this.n; i++) if (this.alive[i] && this.body[i] === 0 && this.vx[i] > 0.4) fast++;
+        let fast = 0; for (let i = this.projRange[1]; i < this.n; i++) if (this.alive[i] && this.body[i] === 0 && !this.tail[i] && this.vx[i] > 0.4) fast++;
         if (!fast) return r.everBehind ? 'pen' : r.spall > 2 ? 'spall' : 'stop';
       }
       if (tooLong) return r.everBehind ? 'pen' : r.spall > 2 ? 'spall' : 'stop';
@@ -1339,5 +1415,5 @@
   const K = { STRENGTH: 1, STRETCH: 1, COMP: 1, CRUSH: 1, DUCT: 1, GRIP: 0.8, PSTR: 1, PCRUSH: 1, PIN: 0, DAMP: 0.02, CDAMP: 0.05, JET_SCALE: 1, JET_MASS: 1.25, HESH_PUSH: 0.3, HESH_CAP: 1, HE_PUSH: 0.35, ERA_FLY: 0.8, SLOPE: 3, SLOPE0: 1.15 };
   function tune(o) { Object.assign(K, o); }
 
-  return { MATERIALS, MAT_KEYS, MAT_INDEX, PROJECTILES, ARMORS, Sim, makeShape, plateThickness, autoLen, pickH, sceneArea, projCal, tune, inPoly, volleyRounds, missileBody };
+  return { MATERIALS, MAT_KEYS, MAT_INDEX, PROJECTILES, ARMORS, Sim, makeShape, plateThickness, autoLen, pickH, sceneArea, projCal, tune, inPoly, volleyRounds, missileBody, projTail };
 });

@@ -796,13 +796,13 @@
   // Bits flying through the inside: crew, ammo, fuel and engines soak up their energy (and get hurt by it).
   // A bit gives up a share of its energy that grows with how far it travels through a box; loose single bits always lose at least `soak`.
   // Returns what happened: ammo that just exploded, and an explosive shell bursting.
-  function zoneTick(run, steps) {
+  function zoneTick(run, steps) {   // (the rest of a round crashing in after its warhead, sim.tail, never hurts what's inside: that's down to the hit itself)
     const sim = run.sim, fr = run.frame, h = sim.h, dtAcc = steps * sim.dt, mods = run.veh.modules;
     if (!run.zin || run.zin.length < sim.cap) { const z = new Int16Array(sim.cap).fill(-1); if (run.zin) z.set(run.zin.subarray(0, Math.min(run.zin.length, z.length))); run.zin = z; }
     const zin = run.zin, c = fr.c, s = fr.s, O = fr.O, out = {}, al = sim.alist;
     for (let q = 0, an = sim.an; q < an; q++) {
       const i = al[q];
-      if (!sim.alive[i] || !sim.awake[i] || (sim.body[i] > 0 && sim.attached[i])) continue;
+      if (!sim.alive[i] || !sim.awake[i] || (sim.body[i] > 0 && sim.attached[i]) || sim.tail[i]) continue;
       const vx = sim.vx[i], vy = sim.vy[i], sp2 = vx * vx + vy * vy;
       if (sp2 < MIN_SPEED * MIN_SPEED) { zin[i] = -1; continue; }
       const x = O[0] + c * sim.px[i] - s * sim.py[i], y = O[1] + s * sim.px[i] + c * sim.py[i];
@@ -875,7 +875,7 @@
     let fast = 0;
     for (let q = 0, an = sim.an; q < an; q++) {
       const i = al[q];
-      if (!sim.alive[i] || !sim.awake[i] || (sim.body[i] > 0 && sim.attached[i])) continue;
+      if (!sim.alive[i] || !sim.awake[i] || (sim.body[i] > 0 && sim.attached[i]) || sim.tail[i]) continue;
       if (sim.vx[i] * sim.vx[i] + sim.vy[i] * sim.vy[i] < min * min) continue;
       const x = fr.O[0] + fr.c * sim.px[i] - fr.s * sim.py[i], y = fr.O[1] + fr.s * sim.px[i] + fr.c * sim.py[i];
       if (x > b[0] && x < b[1] && y > b[2] && y < b[3]) fast++;
@@ -937,7 +937,7 @@
     const find = x => { while (uf[x] !== x) { uf[x] = uf[uf[x]]; x = uf[x]; } return x; };
     for (let q = 0; q < sim.an; q++) {
       const i = sim.alist[q];
-      if (!sim.alive[i] || !sim.awake[i] || (sim.body[i] > 0 && sim.attached[i])) continue;
+      if (!sim.alive[i] || !sim.awake[i] || (sim.body[i] > 0 && sim.attached[i]) || sim.tail[i]) continue;
       if (sim.vx[i] * sim.vx[i] + sim.vy[i] * sim.vy[i] > MIN_SPEED * MIN_SPEED) mover[i] = 1;
     }
     for (let k = 0; k < sim.nb; k++) { const i = sim.bi[k]; if (i < 0) continue; const j = sim.bj[k]; if (mover[i] && mover[j]) { const a = find(i), c = find(j); if (a !== c) uf[a] = c; } }
