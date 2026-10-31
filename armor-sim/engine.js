@@ -165,6 +165,66 @@
     { id: 'meteor', group: 'Just for fun', name: 'Iron meteorite (made up, 3 km/s)', kind: 'ke', v: 3000, d: { shape: 'ball', cal: 150, mat: 'mild' } },
   ];
 
+  // ✏️ Your own projectiles (the Sandbox's workshop): a few simple settings (a "spec") become a full design like the ones above.
+  // type: 'shell' (solid shot), 'rod' (long dart), 'heat' (shaped charge), 'hesh' (squash head) or 'he' (explosive shell).
+  // cal is the width (a dart's too); the rest depends on the type. Anything missing or out of range is fixed up, so a spec from a link is safe.
+  const CUSTOM_TYPES = ['shell', 'rod', 'heat', 'hesh', 'he'];
+  const CUSTOM_DEF = { shell: { v: 900, cal: 75, len: 3.5, nose: 1.4, coreW: 45 }, rod: { v: 1600, cal: 25, len: 25 }, heat: { v: 300, cal: 100, q: 5, probe: 1 },
+    hesh: { v: 700, cal: 120, len: 3.4 }, he: { v: 650, cal: 120, len: 3.8, blast: 1, frags: 48 } };   // a new one's settings (len in widths)
+  const CUSTOM_KEYS = { shell: ['cal', 'v', 'len', 'nose', 'coreW'], rod: ['cal', 'v', 'len'], heat: ['cal', 'v', 'q', 'probe'], hesh: ['cal', 'v', 'len'], he: ['cal', 'v', 'len', 'blast', 'frags'] };
+  function customRanges(s) {   // each number's [lowest, highest, step]: the length's depend on the width
+    const t = s.type, c = s.cal, ke = t === 'shell' || t === 'rod';
+    return {
+      cal: [...{ shell: [5, 300], rod: [3, 80], heat: [20, 300], hesh: [40, 300], he: [20, 400] }[t], 1], v: ke ? [50, 3000, 5] : [30, 1500, 5],
+      len: t === 'rod' ? [5 * c, Math.min(2000, 60 * c), 1] : t === 'shell' ? [Math.ceil(0.6 * c), Math.min(2000, 8 * c), 1] : [2 * c, 6 * c, 1],
+      nose: [0.2, 3.5, 0.1], coreW: [20, 80, 1], q: [1, 8, 0.1], probe: [0, 3, 0.1], blast: [0.5, 3, 0.1], frags: [8, 160, 1],
+    };
+  }
+  function customProjectile(s) {
+    s = s && typeof s === 'object' ? s : {};
+    const type = CUSTOM_TYPES.includes(s.type) ? s.type : 'shell', D = CUSTOM_DEF[type];
+    const num = (v, lo, hi, d, step) => { v = +v; if (!isFinite(v)) v = d; return +(Math.round(Math.max(lo, Math.min(hi, v)) / step) * step).toFixed(2); };
+    const solid = (m, d) => (MATERIALS[m] && !MATERIALS[m].hidden ? m : d);
+    const id = /^myp-[\w-]{1,36}$/.test(s.id) ? s.id : 'myp-' + Math.random().toString(36).slice(2, 9);
+    const o = { type, name: String(s.name || '').trim().slice(0, 40) || 'My projectile' };
+    for (const k of CUSTOM_KEYS[type]) { const [lo, hi, st] = customRanges(o)[k]; o[k] = num(s[k], lo, hi, k === 'len' ? Math.round(D.len * o.cal) : D[k], st); }
+    if (type === 'shell') { o.mat = solid(s.mat, 'shot'); o.core = s.core ? solid(s.core, '') : ''; o.cap = !!s.cap; o.filler = !!s.filler; }
+    if (type === 'rod') o.mat = solid(s.mat, 'wha');
+    if (type === 'heat') { o.tandem = !!s.tandem; o.rocket = !!s.rocket; }
+    const P = { id, name: o.name, group: 'My projectiles', mine: true, spec: o, v: o.v }, c = o.cal, R = Math.round;
+    if (type === 'shell') {
+      P.kind = 'ke'; P.d = { shape: 'shell', cal: c, len: o.len, nose: o.nose, mat: o.mat };
+      if (o.core) P.d.core = { r: +(c / 2 * o.coreW / 100).toFixed(1), tip: -R(0.25 * c), len: R((o.len - 0.25 * c) * 0.8), nose: 1.2, mat: o.core };
+      if (o.cap) P.d.cap = { len: R(0.55 * c), mat: 'cap' };
+      if (o.filler) P.aphe = { fuse: 900, charge: +Math.min(6, Math.max(0.1, (c / 76) ** 1.6)).toFixed(2) };   // (like the APHE shells: goes off just behind the armor)
+    } else if (type === 'rod') {
+      P.kind = 'ke'; P.d = { shape: 'rod', dia: c, len: o.len, mat: o.mat };
+    } else if (type === 'heat') {
+      const len = R((o.probe + 2.5) * c);   // standoff probe, nose cone, then the charge
+      P.kind = 'heat'; P.d = { shape: 'heat', cal: c, len, probe: R(o.probe * c), q: o.q, vTip: +Math.min(9.5, 5 + 0.5 * o.q).toFixed(1) };
+      if (o.tandem) P.d.tandem = { cal: R(0.3 * c), q: 2, delay: 70 };
+      P.d.tail = o.rocket ? { at: len, len: R(Math.min(1500, Math.max(150, 1.6 * len))), r: Math.max(8, R(0.24 * c)), rho: 0.9, mat: 'motor', tube: true }   // a rocket's motor
+        : { at: R(0.72 * len), len: R(0.4 * len), r: Math.max(5, R(0.17 * c)), rho: 4, mat: 'shot' };   // a shell's tail fins
+    } else {
+      const base = R(0.08 * o.len);
+      P.kind = type; P.d = type === 'hesh' ? { shape: 'hesh', cal: c, len: o.len } : { shape: 'shell', cal: c, len: o.len, nose: 2, mat: 'shot', fill: 0.62, blast: o.blast, frags: o.frags };
+      if (type === 'he' && o.blast !== 1) P.d.breach = R(0.2 * (c / 10) ** 2 * o.blast);   // (the formulas' rough guess for a stronger or weaker blast)
+      P.d.tail = { at: o.len - base, len: base, r: R(0.45 * c), rho: 7.85, mat: 'shot' };   // its heavy steel base
+    }
+    return P;
+  }
+  // The nearest workshop settings for any projectile (to start your own from one)
+  function customSpec(P) {
+    if (P.spec) return { ...P.spec };
+    const d = P.d, s = { name: ('My ' + P.name).slice(0, 40), v: P.v };
+    if (P.kind === 'ke' && d.shape === 'rod') return { ...s, type: 'rod', cal: d.dia, len: d.len, mat: d.mat };
+    if (P.kind === 'ke') return { ...s, type: 'shell', cal: d.cal, len: d.len || d.cal, nose: d.nose != null ? d.nose : d.shape === 'ball' ? 0.5 : 0.3, mat: d.mat || 'shot',
+      core: d.core ? d.core.mat : '', coreW: d.core ? Math.round(d.core.r * 200 / d.cal) : 45, cap: !!d.cap, filler: !!P.aphe };
+    if (P.kind === 'heat') return { ...s, type: 'heat', cal: d.cal, q: d.q, probe: +(d.probe / d.cal).toFixed(1), tandem: !!d.tandem, rocket: !!(d.tail && d.tail.tube) };
+    if (P.kind === 'hesh') return { ...s, type: 'hesh', cal: d.cal, len: d.len };
+    return { ...s, type: 'he', cal: d.cal, len: d.len, blast: d.blast || 1, frags: d.frags || 48 };
+  }
+
   // ✏️ Armor setups (all made up). x = where the plate's front face crosses the shot line (mm),
   // ang = tilt in degrees (0 = facing the shell), len = how tall the plate is, layers from the outside in.
   const ARMORS = [
@@ -1415,5 +1475,5 @@
   const K = { STRENGTH: 1, STRETCH: 1, COMP: 1, CRUSH: 1, DUCT: 1, GRIP: 0.8, PSTR: 1, PCRUSH: 1, PIN: 0, DAMP: 0.02, CDAMP: 0.05, JET_SCALE: 1, JET_MASS: 1.25, HESH_PUSH: 0.3, HESH_CAP: 1, HE_PUSH: 0.35, ERA_FLY: 0.8, SLOPE: 3, SLOPE0: 1.15 };
   function tune(o) { Object.assign(K, o); }
 
-  return { MATERIALS, MAT_KEYS, MAT_INDEX, PROJECTILES, ARMORS, Sim, makeShape, plateThickness, autoLen, pickH, sceneArea, projCal, tune, inPoly, volleyRounds, missileBody, projTail };
+  return { MATERIALS, MAT_KEYS, MAT_INDEX, PROJECTILES, ARMORS, Sim, makeShape, plateThickness, autoLen, pickH, sceneArea, projCal, tune, inPoly, volleyRounds, missileBody, projTail, customProjectile, customSpec, customRanges, CUSTOM_TYPES };
 });

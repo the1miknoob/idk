@@ -19,7 +19,6 @@
     target: 'armor', veh: 'tiger', from: 'front', tilt: 0, vaim: null, count: 1, pattern: 'spread', gap: 40, solver: 'particles' };
   const COUNTS = [1, 2, 3, 5, 8];   // shots at once
   const SB = Object.assign(clone(DEF), store.get('armor-sandbox', {}) || {});
-  if (!E.PROJECTILES.some(p => p.id === SB.proj)) SB.proj = DEF.proj;
   if (!Array.isArray(SB.plates) || !SB.plates.length) SB.plates = clone(DEF.plates);
   SB.plates = SB.plates.map(p => ({ x: +p.x || 0, ang: clamp(+p.ang || 0, -80, 80), len: +p.len > 0 ? clamp(+p.len, 50, 3000) : 'auto', layers: (p.layers || []).filter(l => E.MATERIALS[l.mat]).map(l => ({ mat: l.mat, t: clamp(+l.t || 10, 1, 1000) })) })).filter(p => p.layers.length);
   if (!SB.plates.length) SB.plates = clone(DEF.plates);
@@ -35,7 +34,14 @@
   if (SB.pattern !== 'row') SB.pattern = 'spread';
   SB.gap = clamp(Math.round(+SB.gap || 0), 0, 300);
   const saveSB = () => store.set('armor-sandbox', SB);
-  const projDef = () => E.PROJECTILES.find(p => p.id === SB.proj);
+  // Your own projectiles (saved in this browser as their workshop settings, see E.customProjectile)
+  let myProj = [];
+  for (const s of store.get('armor-projectiles', []) || []) { const P = E.customProjectile(s); if (!myProj.some(q => q.id === P.id)) myProj.push(P); }
+  const saveMyProj = () => store.set('armor-projectiles', myProj.map(P => ({ ...P.spec, id: P.id })));
+  const allProj = () => E.PROJECTILES.concat(myProj);
+  if (!allProj().some(p => p.id === SB.proj)) SB.proj = DEF.proj;
+  let PB = null;   // the workshop while it's open: { P (the one you're making: shots use it straight away), srcId (the saved one you're changing), prev (what was picked before) }
+  const projDef = () => (PB ? PB.P : allProj().find(p => p.id === SB.proj));
   const speedOf = () => SB.v || projDef().v;
   const vol = () => ({ n: SB.count, pattern: SB.pattern, gap: SB.gap });   // several shots at once (engine.js: volleyRounds)
 
@@ -797,10 +803,11 @@
   const cached = (key, f) => { if (!fxCache.has(key)) { if (fxCache.size > 60) fxCache.clear(); fxCache.set(key, f()); } return fxCache.get(key); };
   function formulasForPlates() {
     const P = { ...projDef(), v: speedOf() }, t0 = performance.now();
-    const r = cached(JSON.stringify([P.id, P.v, SB.plates, SB.aim]), () => B.solve(P, B.stationsFromPlates(SB.plates, SB.aim)));
+    const r = cached(JSON.stringify([projKey(P), P.v, SB.plates, SB.aim]), () => B.solve(P, B.stationsFromPlates(SB.plates, SB.aim)));
     return { ...r, ms: Math.max(0.1, performance.now() - t0) };
   }
-  const formulasForGroup = (veh, P, group) => cached(JSON.stringify([veh.id, P.id, P.v, group.map(h => [h.i, Math.round(h.x), +h.cos.toFixed(4)])]), () => B.solve(P, B.stationsFromGroup(group)));
+  const projKey = P => (P.mine ? P.spec : P.id);   // (your own one keeps its id while you change it)
+  const formulasForGroup = (veh, P, group) => cached(JSON.stringify([veh.id, projKey(P), P.v, group.map(h => [h.i, Math.round(h.x), +h.cos.toFixed(4)])]), () => B.solve(P, B.stationsFromGroup(group)));
   const FX_RESULT = { through: '✓ through', stop: '✗ stopped', rico: '↗ bounced', spall: '💥 spalled', era: '💥 reactive' };
   const low = t => t.charAt(0).toLowerCase() + t.slice(1);
   function fxSummary(r) {
@@ -842,6 +849,7 @@
     const d = P.d, g = P.group;
     if (P.kind === 'heat') return Math.round(d.q * d.cal);   // a shaped charge goes about its design depth
     if (d.breach) return d.breach;                            // a missile's warhead (its body is mostly rocket motor)
+    if (P.mine && P.kind === 'ke') return Math.round(B.solve({ ...P, v }, steelBlock()).depth);   // your own: the full formulas know every material and shape
     if (g === 'Strange darts (made up)') return null;          // the formula only knows tungsten and uranium
     let s = null;
     if (P.kind === 'hesh') s = { type: 'hesh', cal: d.cal };
@@ -949,7 +957,7 @@
   // ✏️ Goals to try. Each test gets what just happened: veh (vehicle id, or null for plain armor), P (the round), v (how it went at the armor),
   // tally (several shots at once), and for vehicles from, fate, out (destroyed or knocked out), turret (thrown off), shots (since the last repair),
   // missed, saved (crew a capsule kept alive) and fuelFire; for plain armor held, thick and preset.
-  const gunSize = P => (P.group === 'Rockets & missiles' || P.group === 'Just for fun' || /^Air-to-air/.test(P.group) ? Infinity : P.bore || (P.d.shape === 'rod' ? Infinity : P.d.cal));
+  const gunSize = P => (P.mine || P.group === 'Rockets & missiles' || P.group === 'Just for fun' || /^Air-to-air/.test(P.group) ? Infinity : P.bore || (P.d.shape === 'rod' ? Infinity : P.d.cal));
   const CHALLENGES = [
     { id: 'bounce', text: 'Bounce a shell off a vehicle', test: c => c.veh && (c.v === 'rico' || !!(c.tally && c.tally.rico)) },
     { id: 'tiger76', text: 'Knock out a Tiger I from the front with a gun smaller than 80 mm', test: c => c.veh === 'tiger' && c.from === 'front' && gunSize(c.P) < 80 && c.out },
@@ -964,6 +972,7 @@
     { id: 'plutonium', text: 'Get the plutonium dart through 500 mm of armor (it won\'t go nuclear)', test: c => !c.veh && c.P.id === 'fspu' && c.v === 'pen' && c.thick >= 500 },
     { id: 'ship', text: 'Put a cannonball right through the side of a wooden warship', test: c => !c.veh && /^cannon/.test(c.P.id) && c.v === 'pen' && c.preset === 'ship' },
     { id: 'semple', text: 'Knock out the Bob Semple tank with a bullet', test: c => c.veh === 'semple' && c.P.group === 'Bullets' && c.out },
+    { id: 'maker', text: 'Make your own projectile and knock out a tank with it', test: c => c.veh && c.P.mine && c.out },
     { id: 'capsule', text: 'Blow up a T-14\'s ammo while its crew lives through it in their capsule', test: c => c.veh === 't14' && c.fate === 'destroyed' && c.saved > 0 },
     { id: 'volley8', text: 'Get all 8 shots of an 8-shot volley through', test: c => !!c.tally && c.tally.n === 8 && c.tally.pen === 8 && !c.missed },
   ];
@@ -985,8 +994,11 @@
   $('sb-ch-reset').addEventListener('click', () => { if (!confirm('Start all the challenges over?')) return; won = {}; store.set('armor-challenges', won); renderChallenges(); });
 
   // ===================== Controls =====================
-  const groups = [...new Set(E.PROJECTILES.map(p => p.group))];
-  $('sb-proj').innerHTML = groups.map(g => `<optgroup label="${esc(g)}">${E.PROJECTILES.filter(p => p.group === g).map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</optgroup>`).join('');
+  function renderProjList() {   // the library, then your own
+    const list = allProj(), groups = [...new Set(list.map(p => p.group))];
+    $('sb-proj').innerHTML = groups.map(g => `<optgroup label="${esc(g)}">${list.filter(p => p.group === g).map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</optgroup>`).join('');
+  }
+  renderProjList();
   $('sb-preset').innerHTML = E.ARMORS.map(a => `<option value="${a.id}">${esc(a.name)}</option>`).join('') + '<option value="custom">Custom (your own)</option>';
   const matGroups = [...new Set(E.MAT_KEYS.map(k => E.MATERIALS[k].group))];
   const matOptions = sel => matGroups.map(g => `<optgroup label="${esc(g)}">${E.MAT_KEYS.filter(k => E.MATERIALS[k].group === g && !E.MATERIALS[k].hidden).map(k => `<option value="${k}" ${k === sel ? 'selected' : ''}>${esc(E.MATERIALS[k].name)}</option>`).join('')}</optgroup>`).join('');
@@ -994,17 +1006,122 @@
 
   function renderProjControls() {
     const P = projDef();
-    $('sb-proj').value = P.id;
+    if (!PB) $('sb-proj').value = P.id;
+    $('sb-proj').hidden = $('sb-proj-btns').hidden = !!PB; $('sb-pb').hidden = !PB; $('sb-proj-kind').textContent = PB ? 'workshop' : P.mine ? 'yours' : 'library';
+    $('pb-edit').textContent = P.mine ? '✏️ Change it' : '✏️ Copy & change';
     const ke = P.kind === 'ke';
-    $('sb-v-field').hidden = !ke; $('sb-v-note').hidden = ke && !P.aphe && !P.note;
+    $('sb-v-field').hidden = !ke || !!PB; $('sb-v-note').hidden = ke && !P.aphe && !P.note;   // (the workshop has its own speed)
+    $('sb-v').min = P.mine ? 50 : 100; $('sb-v').max = P.mine ? 3000 : 2100;
     if (ke) { $('sb-v').value = speedOf(); $('sb-v-out').textContent = speedOf().toLocaleString() + ' m/s'; }
-    $('sb-v-note').textContent = P.note ? P.note : P.aphe ? 'Has a little explosive inside: if it gets into a vehicle, it goes off a moment later.' : P.d.tandem ? 'Two charges: a small one sets off reactive armor first, then the main jet goes through.' : P.kind === 'heat' ? 'Speed doesn\'t matter: the jet does the work (its tip flies at ' + P.d.vTip + ' km/s).' : 'Speed doesn\'t matter: it works by exploding on contact.';
+    $('sb-v-note').textContent = P.note ? P.note : P.aphe ? 'Has a little explosive inside: if it gets into a vehicle, it goes off a moment later.' : P.d.tandem ? 'Two charges: a small one sets off reactive armor first, then the main jet goes through.' : (P.kind === 'heat' ? 'Speed doesn\'t matter: the jet does the work (its tip flies at ' + P.d.vTip + ' km/s).' : 'Speed doesn\'t matter: it works by exploding on contact.')
+      + (PB && P.kind !== 'ke' ? ' Here it only changes how hard the rest of it slams in afterwards.' : '');
     $('sb-aim').value = SB.aim; $('sb-aim-out').textContent = (SB.aim > 0 ? '+' : '') + SB.aim + ' mm';
-    $('sb-proj-art').innerHTML = projSVG(P);
-    const d = P.d, size = d.shape === 'rod' ? `${d.dia} mm × ${d.len} mm rod` : `${P.bore ? P.bore + ' mm gun, ' + d.cal + ' mm penetrator' : d.cal + ' mm'}${d.len ? ' · ' + d.len + ' mm long' : ''}`;
-    $('sb-proj-info').textContent = size + (d.warhead ? ` · ${d.warhead} kg warhead (${d.rods ? 'steel rods' : 'fragments'})` : (d.core ? ` · ${E.MATERIALS[d.core.mat].name.toLowerCase()} core` : '') + ` · ${E.MATERIALS[d.mat || (P.kind === 'heat' ? 'cu' : 'shot')].name.toLowerCase()}`);
+    renderProjArt(P);
     renderVolley();
   }
+  function renderProjArt(P) {   // the picture and the size line
+    $('sb-proj-art').innerHTML = projSVG(P);
+    const d = P.d, size = d.shape === 'rod' ? `${d.dia} mm × ${d.len} mm rod` : `${P.bore ? P.bore + ' mm gun, ' + d.cal + ' mm penetrator' : d.cal + ' mm'}${d.len ? ' · ' + d.len + ' mm long' : ''}`;
+    $('sb-proj-info').textContent = size + (d.warhead ? ` · ${d.warhead} kg warhead (${d.rods ? 'steel rods' : 'fragments'})` : (d.core ? ` · ${E.MATERIALS[d.core.mat].name.toLowerCase()} core` : '') + ` · ${E.MATERIALS[d.mat || (P.kind === 'heat' ? 'cu' : 'shot')].name.toLowerCase()}`)
+      + (P.mine ? ` · about ${fmtKg(projMass(P))}` : '');
+  }
+  const fmtKg = kg => (kg < 1 ? `${Math.max(1, Math.round(kg * 1000)).toLocaleString()} g` : `${(kg < 10 ? +kg.toFixed(1) : Math.round(kg)).toLocaleString()} kg`);
+  function projMass(P) {   // roughly, in kg: its shape spun round its axis, each bit at its material's weight (plus the rest of it, d.tail)
+    const sh = E.makeShape(P.d), n = 80, dx = (sh.x1 - sh.x0) / n, dy = sh.r / 40, t = P.d.tail;
+    let g = 0;
+    for (let x = sh.x0 + dx / 2; x < sh.x1; x += dx) for (let y = dy / 2; y < sh.r; y += dy) { const m = sh.at(x, y); if (m) g += 2 * Math.PI * y * dy * dx * (E.MATERIALS[m] ? E.MATERIALS[m].rho : 1.6) / 1000; }
+    if (t && t.at + t.len > P.d.len) g += Math.PI * t.r * t.r * t.len * t.rho / 1000;
+    return g / 1000;
+  }
+
+  // ---------- 🛠️ the projectile workshop: make your own ----------
+  const PB_TYPES = { shell: '🔩 Solid shot', rod: '🎯 Dart', heat: '🔥 Shaped charge', hesh: '🧈 Squash head', he: '💥 Explosive' };
+  const PB_LABEL = { cal: 'Width', len: 'Length', nose: 'Nose (blunt → pointed)', coreW: 'Core width', q: 'Jet power (how deep it cuts)', probe: 'Standoff probe', blast: 'Blast', frags: 'Fragments', v: 'Speed' };
+  const pbShow = (k, s) => (k === 'nose' ? `${s.nose} · ${s.nose < 0.6 ? 'blunt' : s.nose < 1.6 ? 'rounded' : s.nose < 2.6 ? 'pointed' : 'needle-sharp'}` : k === 'coreW' ? `${s.coreW}% of it`
+    : k === 'q' ? `${s.q} × its width` : k === 'probe' ? (s.probe ? `${s.probe} × its width` : 'none') : k === 'blast' ? `${s.blast} × a shell's` : k === 'frags' ? `${s.frags}`
+    : k === 'v' ? `${s.v.toLocaleString()} m/s` : `${s[k].toLocaleString()} mm`);
+  function openPB(fresh) {
+    if (PB || busyNow()) return;
+    const cur = projDef(), own = cur.mine && !fresh;
+    PB = { P: E.customProjectile(fresh ? { type: 'shell', name: 'My projectile' } : { ...E.customSpec(cur), v: speedOf(), id: own ? cur.id : undefined }), srcId: own ? cur.id : null, prev: SB.proj, prevV: SB.v };
+    SB.v = null; $('pb-link').hidden = true; $('pb-delete').hidden = !own;
+    renderProjControls(); renderPB(); projChanged();
+    $('pb-name').focus();
+  }
+  function closePB() { PB = null; renderProjList(); renderProjControls(); saveSB(); projChanged(); }
+  function renderPB() {
+    const s = PB.P.spec;
+    $('pb-name').value = s.name;
+    $('pb-type').innerHTML = Object.entries(PB_TYPES).map(([k, t]) => `<button data-pbtype="${k}" class="${k === s.type ? 'on' : ''}" aria-pressed="${k === s.type}">${t}</button>`).join('');
+    const slider = k => `<div class="field"><label for="pb-${k}">${PB_LABEL[k]}</label><output id="pb-${k}-out"></output><input type="range" id="pb-${k}" data-pb="${k}"></div>`;
+    const matSel = (k, label, none) => `<label class="pb-sel">${label}<select data-pb="${k}">${none ? `<option value="">${none}</option>` : ''}${matOptions(s[k])}</select></label>`;
+    const tog = (k, label) => `<label class="toggle"><input type="checkbox" data-pb="${k}"${s[k] ? ' checked' : ''}> ${label}</label>`;
+    const F = {
+      shell: [slider('cal'), slider('len'), slider('nose'), matSel('mat', 'Made of'), matSel('core', 'Hard core inside', 'No core'), slider('coreW'), slider('v'),
+        tog('cap', 'Soft steel cap on the nose (grips sloped armor)'), tog('filler', 'Explosive filling (goes off once it\'s inside a vehicle)')],
+      rod: [slider('cal'), slider('len'), matSel('mat', 'Made of'), slider('v')],
+      heat: [slider('cal'), slider('q'), slider('probe'), slider('v'), tog('tandem', 'Tandem: a small front charge sets off reactive armor first'), tog('rocket', 'A rocket: its motor tube slams in behind')],
+      hesh: [slider('cal'), slider('len'), slider('v')],
+      he: [slider('cal'), slider('len'), slider('blast'), slider('frags'), slider('v')],
+    };
+    $('pb-fields').innerHTML = F[s.type].join('');
+    syncPB();
+  }
+  function syncPB() {   // the sliders' limits (a length's move with the width) and readouts, the picture, and what the formulas expect
+    const P = PB.P, s = P.spec, rg = E.customRanges(s);
+    document.querySelectorAll('#pb-fields input[type=range]').forEach(el => {
+      const k = el.dataset.pb, [lo, hi, st] = rg[k];
+      el.min = lo; el.max = hi; el.step = st; el.value = s[k]; $(`pb-${k}-out`).textContent = pbShow(k, s);
+    });
+    if ($('pb-coreW')) $('pb-coreW').closest('.field').hidden = !s.core;
+    renderProjControls();
+    $('pb-est').innerHTML = pbEstimate(P);
+  }
+  function pbEstimate(P) {   // the formulas' answer against a thick block of armor steel
+    const d = P.d, kg = `It weighs about <b>${fmtKg(projMass(P))}</b>.`;
+    if (P.kind === 'hesh') return `📏 ${kg} The formulas say it can knock a scab off the inside of steel armor up to about <b>${Math.round(1.25 * d.cal).toLocaleString()} mm</b> thick.`;
+    if (P.kind === 'he') return `📏 ${kg} The formulas say its blast breaks through about <b>${Math.round(d.breach || 0.2 * (d.cal / 10) ** 2).toLocaleString()} mm</b> of steel armor${d.breach ? ' (a rough guess for a stronger or weaker blast)' : ''}.`;
+    const r = B.solve(P, steelBlock());
+    return `📏 ${kg} The formulas say ${P.kind === 'heat' ? 'its jet cuts' : 'it goes'} about <b>${Math.round(r.depth).toLocaleString()} mm</b> into steel armor${P.kind === 'ke' ? ` at ${P.v.toLocaleString()} m/s` : ''}.`;
+  }
+  const steelBlock = () => B.stationsFromPlates([{ x: 0, ang: 0, len: 'auto', layers: [{ mat: 'rha', t: 4000 }] }], 0);
+  function pbSet(spec) { PB.P = E.customProjectile({ ...spec, id: PB.P.id }); syncPB(); projChanged(); }
+  $('pb-new').addEventListener('click', () => openPB(true));
+  $('pb-edit').addEventListener('click', () => openPB(false));
+  $('pb-type').addEventListener('click', e => {
+    const b = e.target.closest('[data-pbtype]'); if (!b || !PB) return;
+    const s = PB.P.spec; if (b.dataset.pbtype === s.type) return;
+    PB.P = E.customProjectile({ type: b.dataset.pbtype, name: s.name, cal: s.cal, id: PB.P.id }); renderPB(); projChanged();
+  });
+  $('pb-fields').addEventListener('input', e => {
+    const el = e.target.closest('[data-pb]'); if (!el || !PB) return;
+    const k = el.dataset.pb;
+    pbSet({ ...PB.P.spec, [k]: el.type === 'checkbox' ? el.checked : el.tagName === 'SELECT' ? el.value : +el.value });
+  });
+  $('pb-name').addEventListener('input', e => { if (PB) PB.P = E.customProjectile({ ...PB.P.spec, name: e.target.value, id: PB.P.id }); });
+  $('pb-save').addEventListener('click', () => {
+    if (!PB) return;
+    const P = PB.P, at = myProj.findIndex(q => q.id === P.id);
+    if (at >= 0) myProj[at] = P; else { myProj.push(P); if (myProj.length > 40) myProj.shift(); }
+    saveMyProj(); SB.proj = P.id; SB.v = null;
+    toast(`Saved “${P.name}”. It's under My projectiles, at the bottom of the list.`);
+    closePB();
+  });
+  $('pb-cancel').addEventListener('click', () => { if (!PB) return; SB.proj = PB.prev; SB.v = PB.prevV; closePB(); });
+  $('pb-delete').addEventListener('click', () => {
+    if (!PB || !PB.srcId || !confirm(`Delete “${PB.P.name}” for good?`)) return;
+    myProj = myProj.filter(q => q.id !== PB.srcId); saveMyProj();
+    SB.proj = DEF.proj; SB.v = null; closePB();
+  });
+  $('pb-share').addEventListener('click', async () => {
+    if (!PB) return;
+    const url = location.href.split('#')[0] + '#p=' + toB64(JSON.stringify(PB.P.spec)), box = $('pb-link');
+    box.value = url; box.hidden = false; box.select();
+    try { await navigator.clipboard.writeText(url); toast('Link copied! Anyone who opens it gets your projectile.'); }
+    catch (err) { toast('Copy the link below to share your projectile.'); }
+  });
+  function toB64(text) { let bin = ''; new TextEncoder().encode(text).forEach(b => { bin += String.fromCharCode(b); }); return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+  function fromB64(code) { const bin = atob(code.replace(/-/g, '+').replace(/_/g, '/')); return new TextDecoder().decode(Uint8Array.from(bin, ch => ch.charCodeAt(0))); }
   function renderVolley() {
     $('sb-count').innerHTML = COUNTS.map(n => `<button data-count="${n}" class="${n === SB.count ? 'on' : ''}" aria-pressed="${n === SB.count}">${n}</button>`).join('');
     document.querySelectorAll('#sb-pattern [data-pattern]').forEach(b => { b.classList.toggle('on', b.dataset.pattern === SB.pattern); b.setAttribute('aria-pressed', b.dataset.pattern === SB.pattern); });
@@ -1090,6 +1207,7 @@
     $('sb-skip').textContent = skipping ? '⏩ Skipping…' : '⏩ Skip';
     $('sb-step').disabled = state !== 'paused';
     $('sb-reset').disabled = !!ED || running;
+    $('pb-new').disabled = $('pb-edit').disabled = running;   // (the workshop opens between shots)
     $('sb-reset').textContent = VR && VR.run ? '🔧 Repair' : '↺ Reset';
     seg('sb-view', VIEWS, SB.view, 'view'); seg('sb-speed', SPEEDS, SB.speed, 'speed'); seg('sb-quality', QUALITY, SB.quality, 'quality'); seg('sb-solver', SOLVERS, SB.solver, 'solver');
     $('sb-solver').hidden = $('sb-solver-lbl').hidden = !!VR;   // vehicles always use particles (they work out what happens inside)
@@ -1472,12 +1590,21 @@
   let rsT = 0;
   new ResizeObserver(() => { if (!visible) return; clearTimeout(rsT); rsT = setTimeout(() => { if (!busyNow()) fit(); draw(); }, 80); }).observe(cv);
 
-  // ===================== Shared links (#v=…) =====================
+  // ===================== Shared links (#v=… a vehicle, #p=… a projectile) =====================
   let linkMsg = null;
   (function importFromLink() {
-    const m = location.hash.match(/[#&]v=([\w-]+)/);
+    const pm = location.hash.match(/[#&]p=([\w-]+)/), m = location.hash.match(/[#&]v=([\w-]+)/);
+    if (pm || m) history.replaceState(null, '', location.pathname + location.search);
+    if (pm) {
+      let P = null; try { const s = JSON.parse(fromB64(pm[1])); if (s && typeof s === 'object') P = E.customProjectile({ ...s, id: undefined }); } catch (e) { P = null; }
+      if (!P) { linkMsg = 'That projectile link looks broken, sorry.'; return; }
+      const key = q => JSON.stringify({ ...q.spec, id: 0 }), same = myProj.find(q => key(q) === key(P));
+      if (!same) { myProj.push(P); if (myProj.length > 40) myProj.shift(); saveMyProj(); renderProjList(); }
+      const got = same || P;
+      SB.proj = got.id; SB.v = null; saveSB();
+      linkMsg = `Loaded “${got.name}” from a link. It's saved in My projectiles.`;
+    }
     if (!m) return;
-    history.replaceState(null, '', location.pathname + location.search);
     const v = V.fromLink(m[1]);
     if (!v) { linkMsg = 'That vehicle link looks broken, sorry.'; return; }
     const key = x => JSON.stringify(V.pack(x)), same = mine.find(x => key(x) === key(v));
@@ -1497,7 +1624,7 @@
     },
     hide() { visible = false; if (physicsOn() || state === 'approach') { paused = state === 'approach' ? 'running' : state; state = 'paused'; skipping = false; } renderControlsState(); },
     get sim() { return sim; }, get state() { return state; }, get verdict() { return verdict; }, get vr() { return VR; }, get editor() { return ED; },
-    get mine() { return mine; }, fire, rebuild, SB, startEdit, toast, aim(x, y) { SB.vaim = [x, y]; aimChanged(); },
+    get mine() { return mine; }, get myProj() { return myProj; }, get pb() { return PB; }, fire, rebuild, SB, startEdit, toast, aim(x, y) { SB.vaim = [x, y]; aimChanged(); },
   };
   renderProjControls(); renderPlates(); renderTarget(); renderControlsState(); renderChallenges();
   if (linkMsg && S.mode !== 'sandbox') setMode('sandbox');
