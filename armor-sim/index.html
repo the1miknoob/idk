@@ -175,6 +175,8 @@
     .ed-sel .pc-head b { font-size: 14px; }
     .ed-field { display: grid; gap: 4px; margin-top: 8px; font-size: 13px; color: var(--muted); }
     .ed-field select { margin-top: 0; color: var(--text); }
+    .pb-sel { display: grid; gap: 4px; margin-top: 12px; font-size: 14px; color: var(--text-2); }
+    .pb-sel select { margin: 0; }
     .ed-link { width: 100%; margin-top: 8px; background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 8px; padding: 6px 8px; font: 12px var(--mono); color: var(--text-2); }
     .mchips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
     .mchip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line-2); background: var(--panel-2); border-radius: 8px; padding: 4px 8px; font-size: 13px; color: var(--text-2); }
@@ -272,10 +274,28 @@
     <!-- ===== Sandbox controls ===== -->
     <aside class="sb-controls" id="sb-controls">
       <section class="card" aria-labelledby="h-sbp">
-        <h2 id="h-sbp"><span>Projectile</span><span>library</span></h2>
+        <h2 id="h-sbp"><span>Projectile</span><span id="sb-proj-kind">library</span></h2>
         <select id="sb-proj" aria-label="Projectile" style="margin-top:0"></select>
         <div class="sb-art" id="sb-proj-art"></div>
         <p class="blurb" id="sb-proj-info"></p>
+        <div class="sb-row" id="sb-proj-btns">
+          <button class="btn small" id="pb-edit">✏️ Copy &amp; change</button>
+          <button class="btn small" id="pb-new">🛠️ Make your own</button>
+        </div>
+        <div id="sb-pb" hidden>
+          <label class="ed-name" style="margin-top:12px">Name <input type="text" id="pb-name" maxlength="40" autocomplete="off"></label>
+          <div class="seg sm" id="pb-type" role="group" aria-label="What kind of projectile" style="margin-top:10px"></div>
+          <div id="pb-fields"></div>
+          <p class="sb-est" id="pb-est"></p>
+          <div class="sb-row">
+            <button class="btn small fire" id="pb-save">✓ Save</button>
+            <button class="btn small" id="pb-share">🔗 Share link</button>
+            <button class="btn small" id="pb-cancel">✕ Cancel</button>
+            <button class="btn small" id="pb-delete">🗑 Delete</button>
+          </div>
+          <input type="text" id="pb-link" class="ed-link" readonly hidden aria-label="Share link">
+          <p class="blurb">Every change works straight away: press <b>Fire</b> to try it, and save it when you like it.</p>
+        </div>
         <div class="field" id="sb-v-field"><label for="sb-v">Impact speed</label><output id="sb-v-out"></output><input type="range" id="sb-v" min="100" max="2100" step="10"></div>
         <p class="blurb" id="sb-v-note" hidden></p>
         <div class="field" id="sb-aim-field"><label for="sb-aim">Aim higher or lower</label><output id="sb-aim-out"></output><input type="range" id="sb-aim" min="-300" max="300" step="5"></div>
@@ -544,6 +564,7 @@
         </ul>
         <p><b>Damage stays</b>, so you can keep shooting the same vehicle: a hole lets the next shell straight through. <b>🔧 Repair</b> makes it good as new.</p>
         <p>To keep it quick, full physics runs for the first 1.2 milliseconds after the hit. After that, anything still flying carries on in a straight line as one solid lump, and flying wreckage is slowed down so you can watch it. Don't want to wait? Press <b>⏩ Skip</b> during a shot to jump to the result: it drops the slow motion and the replays and runs the physics as fast as your computer can. The real tanks follow their real outlines, lengths, gun lengths, wheels and cupolas, with rough armor numbers from public sources; their insides are simplified. Cast turrets (T-34-85, IS-2, Sherman, Pershing, T-55, T-62) are rounded: thickest at the front and thinner as they curve over the top, like the real ones. Look out for details like the T-55's spare fuel drum and infrared searchlight, the red Shtora jammers on the T-90 that confuse guided missiles, the chains under the Merkava's turret that set off rockets before they hit, the bell-shaped "pig's head" gun mantlet on the Tiger II and StuG III, and the skirts over the tracks of modern tanks. With <b>Build a new one</b> you can draw your own vehicle, save it, and send it to a friend with a link.</p>
+        <p>🛠️ <b>Make your own projectile</b> in the Projectile card, or <b>Copy &amp; change</b> any real one. Pick a solid shot, a dart, a shaped charge, a squash head or an explosive shell, then set its width, length, nose, speed and what it's made of. A solid shot can get a hard core, a soft steel cap or an explosive filling; a shaped charge a standoff probe, a tandem front charge or a rocket motor. Every change works straight away, so you can fire it before you save it, and the formulas tell you how deep it should go and how much it weighs. A gold shell with a uranium core? A diamond dart? Try it. Your projectiles are saved in this browser, and <b>Share link</b> sends one to a friend.</p>
       </div>
       <div class="card">
         <h3>🚀 Rockets, uranium and sandbags</h3>
@@ -583,7 +604,7 @@
       </div>
       <div class="card">
         <h3>🏆 Challenges</h3>
-        <p>The Sandbox has 15 challenges to try, like knocking out a Tiger I with a small gun, stopping an RPG-7 with thin armor or sending a cannonball through a warship. Each one ticks off by itself when you pull it off, and your progress is saved in this browser.</p>
+        <p>The Sandbox has 16 challenges to try, like knocking out a Tiger I with a small gun, stopping an RPG-7 with thin armor, sending a cannonball through a warship or knocking out a tank with a projectile you made yourself. Each one ticks off by itself when you pull it off, and your progress is saved in this browser.</p>
       </div>
       <div class="card">
         <h3>🧮 How the Calculator works</h3>
