@@ -2,10 +2,31 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Mikaeel</title>
   <meta name="description" content="Personal website of Mikaeel: projects, a music player and a personal dashboard.">
   <meta name="theme-color" content="#5b5bd6">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Mikaeel">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <script>
+    // Before anything is drawn: your theme, accent color and font (⚙️ Customize), which home page to show, and "start in" an app
+    (function () {
+      var r = document.documentElement, s = {};
+      try { s = JSON.parse(localStorage.getItem('app-settings')) || {}; } catch (e) {}
+      try { var t = localStorage.getItem('theme'); if (t) r.dataset.theme = t; } catch (e) {}
+      var launched = /[?&]source=app\b/.test(location.search), inApp = launched;
+      try { inApp = inApp || sessionStorage.getItem('in-app') === '1'; } catch (e) {}
+      inApp = inApp || navigator.standalone === true || matchMedia('(display-mode: standalone), (display-mode: minimal-ui), (display-mode: fullscreen)').matches;
+      if (launched && typeof s.start === 'string' && /^[a-z0-9-]+\/([a-z0-9-]+\/)?$/.test(s.start)) { try { sessionStorage.setItem('in-app', '1'); } catch (e) {} location.replace(s.start); return; }
+      var v = s.view || 'auto';
+      r.dataset.view = v === 'app' || (v === 'auto' && inApp) ? 'app' : 'site';
+      if (/^#[0-9a-f]{6}$/i.test(s.accent || '')) { r.style.setProperty('--accent', s.accent); r.style.setProperty('--accent-soft', 'color-mix(in srgb, ' + s.accent + ' 16%, var(--surface))'); }
+      var F = { system: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif', rounded: '"Nunito", ui-rounded, "SF Pro Rounded", system-ui, sans-serif', serif: 'ui-serif, Georgia, "Times New Roman", serif', mono: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace' };
+      if (F[s.font]) r.style.setProperty('--font', F[s.font]);
+    })();
+  </script>
   <meta property="og:type" content="website">
   <meta property="og:title" content="Mikaeel">
   <meta property="og:description" content="Hey, I'm Mikaeel 👋 Check out my projects: games, a customizable music player, a personal dashboard, a typing test and more.">
@@ -49,7 +70,7 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html { scroll-behavior: smooth; }
     body {
-      font-family: "Space Grotesk", system-ui, sans-serif;
+      font-family: var(--font, "Space Grotesk", system-ui, sans-serif);
       background: var(--bg);
       color: var(--text);
       line-height: 1.6;
@@ -177,11 +198,16 @@
   </style>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="home.css">
   <script src="site.js" defer></script>
+  <script src="home.js" defer></script>
 </head>
 <body>
 
-  <nav>
+  <!-- The app home screen (home.js builds it): shown when the site runs as an installed app, or when you pick it -->
+  <div id="app-view"></div>
+
+  <nav class="site-only">
     <div class="wrap">
       <a href="#" class="logo">Mikaeel</a>
       <div class="nav-links">
@@ -192,12 +218,13 @@
         <a href="games/" title="Games">🎮<span class="hide-sm"> Games</span></a>
         <a href="world-watch/" title="World Watch">🛰️<span class="hide-sm"> World</span></a>
         <button id="jump-btn" class="nav-icon" aria-label="Jump to a page (Ctrl+K)" title="Jump to a page (Ctrl+K)">🔎</button>
+        <button id="app-btn" class="nav-icon" aria-label="Switch to the app home screen" title="App home screen: your apps like on a phone, and ⚙️ Customize">📱</button>
         <button id="theme-toggle" aria-label="Toggle dark mode">🌙</button>
       </div>
     </div>
   </nav>
 
-  <main class="wrap">
+  <main class="wrap site-only">
 
     <!-- ✏️ EDIT: your name and a one-line intro -->
     <header>
@@ -302,9 +329,9 @@
 
   </main>
 
-  <button id="to-top" aria-label="Back to top" title="Back to top">↑</button>
+  <button id="to-top" class="site-only" aria-label="Back to top" title="Back to top">↑</button>
 
-  <footer>
+  <footer class="site-only">
     <div class="wrap">© <span id="year"></span> Mikaeel · Made with HTML, CSS and a bit of JavaScript.</div>
   </footer>
 
@@ -349,85 +376,7 @@
       setTimeout(step, 2200);
     }
 
-    // ---------- Jump back in: last song + dashboard stuff from this browser ----------
-    (async function continueSection() {
-      const read = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
-      const grid = document.getElementById('cont-grid');
-      const cards = [];
-      const card = (href, art, k, v, sub) => {
-        const a = document.createElement('a');
-        a.className = 'cont'; a.href = href;
-        a.innerHTML = '<div class="art"></div><div class="txt"><div class="k"></div><div class="v"></div><div class="s"></div></div>';
-        a.querySelector('.art').textContent = art;
-        a.querySelector('.k').innerHTML = k;
-        a.querySelector('.v').textContent = v;
-        a.querySelector('.s').textContent = sub || '';
-        return a;
-      };
-
-      const now = read('mp-now');
-      if (now && now.name) {
-        const c = card('music-player/', '🎵', '<span class="eq-bars"><i></i><i></i><i></i></span>Last played', now.name, now.artist || 'Open your music player');
-        cards.push(c);
-        // Load the cover art straight from the music player's saved songs
-        try {
-          const req = indexedDB.open('music-player');
-          req.onsuccess = () => {
-            const dbc = req.result;
-            if (!dbc.objectStoreNames.contains('tracks')) return dbc.close();
-            const get = dbc.transaction('tracks').objectStore('tracks').get(now.id);
-            get.onsuccess = () => {
-              const t = get.result;
-              if (t && t.cover) {
-                const art = c.querySelector('.art');
-                art.style.backgroundImage = `url("${URL.createObjectURL(t.cover)}")`;
-                art.textContent = '';
-              }
-              dbc.close();
-            };
-          };
-        } catch (e) {}
-      }
-
-      const todos = read('dash-todos');
-      if (Array.isArray(todos) && todos.length) {
-        const left = todos.filter(t => !t.done);
-        cards.push(card('dashboard/', left.length ? '✅' : '🎉', 'To-do',
-          left.length ? `${left.length} task${left.length === 1 ? '' : 's'} left` : 'All done!',
-          left[0] ? 'Next: ' + left[0].text : 'Nice work.'));
-      }
-
-      const cds = read('dash-countdowns');
-      if (Array.isArray(cds) && cds.length) {
-        const today = new Date(); today.setHours(0, 0, 0, 0);
-        const upcoming = cds.map(c => { const [y, m, d] = c.date.split('-').map(Number); return { ...c, n: Math.round((new Date(y, m - 1, d) - today) / 86400000) }; })
-          .filter(c => c.n >= 0).sort((a, b) => a.n - b.n)[0];
-        if (upcoming) cards.push(card('dashboard/', '📅', 'Coming up', upcoming.name,
-          upcoming.n === 0 ? 'Today! 🎉' : `in ${upcoming.n} day${upcoming.n === 1 ? '' : 's'}`));
-      }
-
-      const chess = read('chess-game');
-      if (chess && Array.isArray(chess.moves) && chess.moves.length && !chess.over) {
-        const n = Math.ceil(chess.moves.length / 2);
-        const vs = chess.mode === 'ai' ? `vs computer (${chess.level})` : 'vs a friend';
-        cards.push(card('games/chess/', '♟️', 'Chess game in progress', `Move ${n} ${vs}`, chess.status || 'Tap to keep playing'));
-      }
-
-      // the last game you played (saved by the games themselves)
-      const GAME_INFO = { blockpop: ['🧩', 'Block Pop', 'games/block-pop/'], mergedrop: ['🪐', 'Merge Drop', 'games/merge-drop/'], wordhunt: ['🔤', 'Word Hunt', 'games/word-hunt/'],
-        nightswarm: ['🌙', 'Night Swarm', 'games/night-swarm/'], skyhop: ['🎈', 'Sky Hop', 'games/sky-hop/'], snake: ['🐍', 'Snake', 'games/snake/'], 2048: ['🔢', '2048', 'games/2048/'],
-        reactionlab: ['⚡', 'Reaction Lab', 'games/reaction-lab/'], armor: ['🛡️', 'Armor Pen Sim', 'armor-sim/'] };
-      const last = read('games-last'), plays = read('games-played') || {};
-      if (last && GAME_INFO[last.id]) {
-        const [emo, name, href] = GAME_INFO[last.id], n = plays[last.id] || 1;
-        cards.push(card(href, emo, 'Last game', name, `Played ${n} time${n === 1 ? '' : 's'} · tap to play again`));
-      } else if (last && last.id === 'typing') cards.push(card('typing-test/', '⌨️', 'Typing Test', 'Beat your speed', 'Tap to take another test'));
-
-      if (cards.length) {
-        cards.forEach(c => grid.appendChild(c));
-        document.getElementById('continue').classList.add('show');
-      }
-    })();
+    // ("Jump back in", installing the app and the app home screen are in home.js)
 
     // ---------- Reveal sections as you scroll ----------
     if ('IntersectionObserver' in window && !reduceMotion) {
@@ -439,13 +388,8 @@
       document.querySelectorAll('.reveal').forEach(el => el.classList.add('in'));
     }
 
-    // ---------- Quick jump + install as an app ----------
+    // ---------- Quick jump ----------
     document.getElementById('jump-btn').addEventListener('click', () => window.SiteJump && SiteJump.open());
-    let installEvt = null;
-    const installBtn = document.getElementById('install-btn');
-    addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; installBtn.hidden = false; });
-    installBtn.addEventListener('click', async () => { if (!installEvt) return; installEvt.prompt(); await installEvt.userChoice; installEvt = null; installBtn.hidden = true; });
-    addEventListener('appinstalled', () => { installBtn.hidden = true; });
 
     // ---------- Back to top ----------
     const toTop = document.getElementById('to-top');
