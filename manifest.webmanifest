@@ -1,20 +1,32 @@
 {
+  "id": "./",
   "name": "Mikaeel's site",
   "short_name": "Mikaeel",
-  "description": "Games, a music player, a dashboard, a live world map and more, made by Mikaeel.",
-  "start_url": "./",
+  "description": "Games, a music player, a dashboard, a live world map, a tank armor simulator and more, made by Mikaeel. Installed, it opens on a home screen you can make your own.",
+  "start_url": "./?source=app",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#0f1220",
-  "theme_color": "#5b6cff",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#111114",
+  "theme_color": "#5b5bd6",
+  "categories": ["games", "entertainment", "utilities"],
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "screenshots": [
+    { "src": "screenshots/home-phone.jpg", "sizes": "750x1334", "type": "image/jpeg", "form_factor": "narrow", "label": "Your home screen: every app and game, a clock and Jump back in" },
+    { "src": "screenshots/home-wide.jpg", "sizes": "1280x800", "type": "image/jpeg", "form_factor": "wide", "label": "The home screen on a bigger screen" }
   ],
   "shortcuts": [
     { "name": "Games", "url": "games/" },
     { "name": "Music Player", "url": "music-player/" },
     { "name": "World Watch", "url": "world-watch/" },
-    { "name": "Dashboard", "url": "dashboard/" }
+    { "name": "Dashboard", "url": "dashboard/" },
+    { "name": "Armor Pen Sim", "url": "armor-sim/" },
+    { "name": "Chess", "url": "games/chess/" }
   ]
 }

@@ -1,34 +1,123 @@
-// Shared by every page: quick-jump search (Ctrl+K or /) and offline support.
+// Shared by every page: quick-jump search (Ctrl+K or /), offline support, and the app shell when the site is installed as an app
+// (a home button on every page, recently opened apps, calm mode and an offline notice). Settings come from the home screen's ⚙️ Customize.
 (function () {
   'use strict';
   const ROOT = new URL('./', document.currentScript.src).href;   // the site's home folder, wherever this page is
 
-  // ✏️ EDIT: every page you can jump to
+  // ✏️ EDIT: every page you can jump to: [emoji, name, address, search words, kind ('app' or 'game'), icon color, a line about it]
   const PAGES = [
-    ['🏠', 'Home', '', 'start main about projects'],
-    ['🎵', 'Music Player', 'music-player/', 'songs audio play skins stickers'],
-    ['📊', 'Dashboard', 'dashboard/', 'clock weather todo notes timer countdown'],
-    ['🛰️', 'World Watch', 'world-watch/', 'map news war conflicts earthquakes space live tv'],
-    ['🛡️', 'Armor Pen Sim', 'armor-sim/', 'tank shell armor penetration ricochet heat sim sandbox physics particles vehicle builder destruction turret rocket missile rpg motor tail fins projectile maker make your own shell custom aim-9 sidewinder amraam air-to-air fighter jet challenges volley burst formulas ballistic limit plutonium dart cannonball musket pykrete tiger panther maus t-34 sherman kv-1 churchill pershing leopard abrams t-90 bmp merkava armata t-14 bob semple'],
-    ['🎮', 'Games Arcade', 'games/', 'all games play'],
-    ['🧩', 'Block Pop', 'games/block-pop/', 'puzzle blocks'],
-    ['🪐', 'Merge Drop', 'games/merge-drop/', 'planets merge puzzle'],
-    ['🔤', 'Word Hunt', 'games/word-hunt/', 'word daily guess'],
-    ['🌙', 'Night Swarm', 'games/night-swarm/', 'survive action'],
-    ['🎈', 'Sky Hop', 'games/sky-hop/', 'tap fly arcade'],
-    ['🐍', 'Snake', 'games/snake/', 'classic arcade'],
-    ['🔢', '2048', 'games/2048/', 'tiles numbers puzzle'],
-    ['⚡', 'Reaction Lab', 'games/reaction-lab/', 'reaction time aim memory'],
-    ['♟️', 'Chess', 'games/chess/', 'board strategy analysis'],
-    ['⌨️', 'Typing Test', 'typing-test/', 'wpm speed keyboard'],
-    ['🏆', 'Tier List Maker', 'tier-list/', 'rank s tier'],
-    ['🎡', 'Spin the Wheel', 'spin-wheel/', 'random picker decide'],
+    ['🏠', 'Home', '', 'start main about projects', 'home', '#5b5bd6', 'Back to the start'],
+    ['🎵', 'Music Player', 'music-player/', 'songs audio play skins stickers', 'app', '#e0457b', 'Your songs, with skins, visualizers and stickers'],
+    ['📊', 'Dashboard', 'dashboard/', 'clock weather todo notes timer countdown', 'app', '#3b82f6', 'Clock, weather, to-dos, notes and a focus timer'],
+    ['🛰️', 'World Watch', 'world-watch/', 'map news war conflicts earthquakes space live tv', 'app', '#0e9f9e', 'A live world map: news, earthquakes, storms, the space station'],
+    ['🛡️', 'Armor Pen Sim', 'armor-sim/', 'tank shell armor penetration ricochet heat sim sandbox physics particles vehicle builder destruction turret rocket missile rpg motor tail fins projectile maker make your own shell custom aim-9 sidewinder amraam air-to-air fighter jet challenges volley burst formulas ballistic limit plutonium dart cannonball musket pykrete tiger panther maus t-34 sherman kv-1 churchill pershing leopard abrams t-90 bmp merkava armata t-14 bob semple', 'app', '#64748b', 'Fire shells at armor and at tanks made of particles'],
+    ['🎮', 'Games Arcade', 'games/', 'all games play', 'app', '#8b5cf6', 'All the games in one place'],
+    ['🧩', 'Block Pop', 'games/block-pop/', 'puzzle blocks', 'game', '#06b6d4', 'Fit the blocks, clear the lines'],
+    ['🪐', 'Merge Drop', 'games/merge-drop/', 'planets merge puzzle', 'game', '#6366f1', 'Drop and merge the planets'],
+    ['🔤', 'Word Hunt', 'games/word-hunt/', 'word daily guess', 'game', '#65a30d', 'Guess the word of the day'],
+    ['🌙', 'Night Swarm', 'games/night-swarm/', 'survive action', 'game', '#4338ca', 'Survive the swarm for as long as you can'],
+    ['🎈', 'Sky Hop', 'games/sky-hop/', 'tap fly arcade', 'game', '#0ea5e9', 'Tap to fly through the gaps'],
+    ['🐍', 'Snake', 'games/snake/', 'classic arcade', 'game', '#16a34a', 'The classic: eat and grow'],
+    ['🔢', '2048', 'games/2048/', 'tiles numbers puzzle', 'game', '#ca8a04', 'Slide the tiles to make 2048'],
+    ['⚡', 'Reaction Lab', 'games/reaction-lab/', 'reaction time aim memory', 'game', '#ea580c', 'Test your reactions, aim and memory'],
+    ['♟️', 'Chess', 'games/chess/', 'board strategy analysis', 'game', '#78716c', 'Play the computer or a friend'],
+    ['⌨️', 'Typing Test', 'typing-test/', 'wpm speed keyboard', 'app', '#d97706', 'How fast can you type?'],
+    ['🏆', 'Tier List Maker', 'tier-list/', 'rank s tier', 'app', '#dc2626', 'Rank anything from S to F'],
+    ['🎡', 'Spin the Wheel', 'spin-wheel/', 'random picker decide', 'app', '#22a35a', 'Can\'t decide? Let the wheel pick'],
   ];
+
+  // ---------- Settings (changed on the home screen: ⚙️ Customize) ----------
+  const DEFAULTS = {
+    view: 'auto',            // home page: 'auto' (the app home screen when installed), 'app' or 'site'
+    accent: '',              // your own accent color ('' = the usual purple)
+    wall: 'aurora', dim: 35, // home screen background: 'aurora', 'gradient', 'dots', 'plain' or 'photo' (dim: how much darker your photo is made, %)
+    font: 'grotesk', text: 100,
+    icon: 'm', shape: 'rounded', labels: true, layout: 'grid', group: true,
+    name: '', clock: true, greeting: true, search: true, cont: true, recent: true, dock: true, hour: 'auto', seconds: false,
+    start: '',               // the app that opens when you launch the installed app ('' = the home screen)
+    homeBtn: 'auto', corner: 'bl',   // the 🏠 button on other pages: 'auto' (only in the app), 'always' or 'never', and which corner
+    calm: false,             // turn off animations on every page
+  };
+  function settings() {
+    let s = null; try { s = JSON.parse(localStorage.getItem('app-settings')); } catch (e) {}
+    return Object.assign({}, DEFAULTS, s && typeof s === 'object' ? s : {});
+  }
+  function saveSettings(s) { try { localStorage.setItem('app-settings', JSON.stringify(s)); } catch (e) {} }
+
+  // Running as the installed app? (launching it opens ?source=app, remembered for the rest of the visit)
+  const standalone = () => matchMedia('(display-mode: standalone), (display-mode: minimal-ui), (display-mode: fullscreen)').matches || navigator.standalone === true;
+  try { if (/[?&]source=app\b/.test(location.search)) sessionStorage.setItem('in-app', '1'); } catch (e) {}
+  const inApp = () => { if (standalone()) return true; try { return sessionStorage.getItem('in-app') === '1'; } catch (e) { return false; } };
+
+  const here = () => { const p = location.href.split(/[?#]/)[0].replace(/index\.html$/, ''); return PAGES.find(x => ROOT + x[2] === p); };
 
   // ---------- Offline support (only on the real website, not when opened as a file) ----------
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     addEventListener('load', () => navigator.serviceWorker.register(ROOT + 'sw.js').catch(() => {}));
   }
+
+  // ---------- Recently opened (for the home screen) ----------
+  function recent() { try { const r = JSON.parse(localStorage.getItem('site-recent')); return Array.isArray(r) ? r : []; } catch (e) { return []; } }
+  (function remember() {
+    const p = here(); if (!p || !p[2]) return;
+    const list = [{ p: p[2], t: Date.now() }, ...recent().filter(r => r && r.p !== p[2])].slice(0, 12);
+    try { localStorage.setItem('site-recent', JSON.stringify(list)); } catch (e) {}
+  })();
+
+  // ---------- The app shell ----------
+  const css = document.createElement('style');
+  css.textContent = `
+    .site-home { position: fixed; z-index: 99990; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font-size: 20px; line-height: 1;
+      text-decoration: none; background: rgba(18,22,34,.6); border: 1px solid rgba(255,255,255,.2); box-shadow: 0 6px 18px rgba(0,0,0,.3);
+      -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); opacity: .8; transition: opacity .15s, transform .15s; -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+    .site-home:hover, .site-home:focus-visible { opacity: 1; transform: scale(1.06); text-decoration: none; }
+    .site-home:focus-visible { outline: 2px solid var(--site-accent, #8b8bf5); outline-offset: 2px; }
+    .site-home.tl, .site-home.tr { top: calc(10px + env(safe-area-inset-top, 0px)); }
+    .site-home.bl, .site-home.br { bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+    .site-home.tl, .site-home.bl { left: calc(10px + env(safe-area-inset-left, 0px)); }
+    .site-home.tr, .site-home.br { right: calc(10px + env(safe-area-inset-right, 0px)); }
+    .site-toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 20px); z-index: 99995; max-width: calc(100% - 32px);
+      background: #151a26; color: #eef1f7; border: 1px solid #2c3550; border-radius: 999px; padding: 9px 16px; font: 14px/1.35 system-ui, sans-serif;
+      box-shadow: 0 10px 30px rgba(0,0,0,.35); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
+    .site-toast.show { opacity: 1; transform: translate(-50%, 0); }`;
+  document.head.appendChild(css);
+  function applyCalm(on) {   // calm mode: no animations or smooth scrolling on any page
+    let st = document.getElementById('site-calm');
+    if (on && !st) { st = document.createElement('style'); st.id = 'site-calm'; st.textContent = '*, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }'; document.head.appendChild(st); }
+    if (!on && st) st.remove();
+  }
+  let toastEl = null, toastT = 0;
+  function toast(msg, ms = 3200) {
+    if (!toastEl) { toastEl = document.createElement('div'); toastEl.className = 'site-toast'; toastEl.setAttribute('role', 'status'); document.body.appendChild(toastEl); }
+    toastEl.textContent = msg; toastEl.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.remove('show'), ms);
+  }
+  let homeEl = null;
+  function homeButton(s = settings()) {   // a way home from every other page (the installed app has no address bar or back button on some phones)
+    const show = here() !== PAGES[0] && (s.homeBtn === 'always' || (s.homeBtn === 'auto' && inApp()));
+    if (!show) { if (homeEl) { homeEl.remove(); homeEl = null; } return; }
+    if (!homeEl) {
+      homeEl = document.createElement('a'); homeEl.href = ROOT; homeEl.textContent = '🏠'; homeEl.title = 'Home (hold it to jump anywhere)'; homeEl.setAttribute('aria-label', 'Home');
+      let hold = 0, held = false;
+      homeEl.addEventListener('pointerdown', () => { held = false; hold = setTimeout(() => { held = true; open(); }, 550); });
+      ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => homeEl.addEventListener(t, () => clearTimeout(hold)));
+      homeEl.addEventListener('click', e => { if (held) e.preventDefault(); });
+      homeEl.addEventListener('contextmenu', e => e.preventDefault());
+      document.body.appendChild(homeEl);
+    }
+    homeEl.className = 'site-home ' + (['tl', 'tr', 'bl', 'br'].includes(s.corner) ? s.corner : 'bl');
+    if (s.accent) homeEl.style.setProperty('--site-accent', s.accent);
+  }
+  (function shell() {
+    const s = settings();
+    applyCalm(s.calm);
+    const go = () => homeButton(s);
+    if (document.body) go(); else addEventListener('DOMContentLoaded', go);
+    if (inApp()) {
+      addEventListener('offline', () => toast('📴 You\'re offline. Saved pages and games still work.'));
+      addEventListener('online', () => toast('✅ Back online'));
+    }
+  })();
 
   // ---------- Quick jump ----------
   let box = null, list = null, input = null, sel = 0, shown = [];
@@ -61,7 +150,6 @@
     });
     box.addEventListener('click', e => { if (e.target === box) close(); });
   }
-  const here = () => { const p = location.href.split(/[?#]/)[0].replace(/index\.html$/, ''); return PAGES.find(x => ROOT + x[2] === p); };
   function render() {
     const q = input.value.trim().toLowerCase();
     shown = PAGES.filter(p => !q || (p[1] + ' ' + p[3]).toLowerCase().includes(q));
@@ -78,5 +166,5 @@
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') { e.preventDefault(); box && box.classList.contains('open') ? close() : open(); }
     else if (e.key === '/' && !typing && !e.ctrlKey && !e.metaKey && document.body.dataset.noSlash === undefined) { e.preventDefault(); open(); }
   });
-  window.SiteJump = { open, close, pages: PAGES, root: ROOT };
+  window.SiteJump = { open, close, pages: PAGES, root: ROOT, settings, saveSettings, DEFAULTS, inApp, standalone, recent, toast, applyCalm, homeButton };
 })();

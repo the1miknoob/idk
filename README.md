@@ -13,7 +13,9 @@ Live at: https://the1miknoob.github.io/idk/
 
 ## Site-wide features
 - **Quick jump:** press `Ctrl` + `K` (or `/`) on any page to search and jump to any app or game (`site.js`)
-- **Install as an app + works offline:** the site can be installed from the browser, and pages and games keep working without internet (`manifest.webmanifest`, `sw.js`). Live data like news and weather still needs internet.
+- **Install as an app + works offline:** the site can be installed from the browser (on an iPhone: Share → Add to Home Screen), and pages and games keep working without internet (`manifest.webmanifest`, `sw.js`). Live data like news and weather still needs internet.
+- **The app home screen** (`home.js`, `home.css`): the installed app opens on a phone-style home screen with a clock, a greeting, search, Jump back in, recently opened apps, every app and game as an icon, and a dock. Hold an icon (or tap ✏️) to drag apps around, hide them, pin them to the dock, or give them your own name, emoji and color. The 📱 button shows it in a browser too.
+- **⚙️ Customize:** theme, accent color, background (aurora, glow, dots, plain or your own photo), font, text size, icon size and shape, grid or list, which parts to show, 12/24-hour clock, an app to open when the app starts, the 🏠 button that every other page gets inside the app (and its corner), calm mode (no animations anywhere), and backing up or restoring everything you've saved on the site.
 
 Word Hunt checks guesses against the 5-letter words from [an-array-of-english-words](https://github.com/words/an-array-of-english-words) (MIT License).
 

@@ -1,8 +1,8 @@
 // Offline support: keeps a copy of the site so pages and games still open without internet.
 // Live data (news, weather, maps…) is never stored here; it always comes fresh from the internet.
-const VERSION = 'v6';
+const VERSION = 'v7';
 const CACHE = 'mikaeel-site-' + VERSION;
-const PAGES = ['', '404.html', 'site.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png',
+const PAGES = ['', '404.html', 'site.js', 'home.js', 'home.css', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png',
   'music-player/', 'dashboard/', 'world-watch/', 'armor-sim/', 'armor-sim/engine.js', 'armor-sim/ballistics.js', 'armor-sim/vehicles.js', 'armor-sim/sandbox.js', 'typing-test/', 'tier-list/', 'spin-wheel/',
   'games/', 'games/shared.css', 'games/shared.js', 'games/block-pop/', 'games/merge-drop/', 'games/word-hunt/', 'games/word-hunt/words.js',
   'games/night-swarm/', 'games/sky-hop/', 'games/snake/', 'games/2048/', 'games/reaction-lab/', 'games/chess/'];
