@@ -9,6 +9,7 @@
     ['🏠', 'Home', '', 'start main about projects', 'home', '#5b5bd6', 'Back to the start'],
     ['🎵', 'Music Player', 'music-player/', 'songs audio play skins stickers', 'app', '#e0457b', 'Your songs, with skins, visualizers and stickers'],
     ['📊', 'Dashboard', 'dashboard/', 'clock weather todo notes timer countdown', 'app', '#3b82f6', 'Clock, weather, to-dos, notes and a focus timer'],
+    ['📚', 'Study Buddy', 'study/', 'study learn flashcards quiz notes homework revise revision school test exam math maths history science geography practice research wikipedia', 'app', '#c026d3', 'Type any topic: notes, flashcards, a quiz and more'],
     ['🛰️', 'World Watch', 'world-watch/', 'map news war conflicts earthquakes space live tv', 'app', '#0e9f9e', 'A live world map: news, earthquakes, storms, the space station'],
     ['🛡️', 'Armor Pen Sim', 'armor-sim/', 'tank shell armor penetration ricochet heat sim sandbox physics particles vehicle builder destruction turret rocket missile rpg motor tail fins projectile maker make your own shell custom aim-9 sidewinder amraam air-to-air fighter jet challenges volley burst formulas ballistic limit plutonium dart cannonball musket pykrete tiger panther maus t-34 sherman kv-1 churchill pershing leopard abrams t-90 bmp merkava armata t-14 bob semple', 'app', '#64748b', 'Fire shells at armor and at tanks made of particles'],
     ['🎮', 'Games Arcade', 'games/', 'all games play', 'app', '#8b5cf6', 'All the games in one place'],

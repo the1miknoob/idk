@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Study Buddy · Mikaeel</title>
+  <meta name="description" content="Study anything: type a topic and get notes, flashcards, a quiz, a matching game and math practice, made from Wikipedia in seconds.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../games/shared.css">
+  <style>
+    :root { --study: #c026d3; }
+    .hero { text-align: center; padding: 26px 0 8px; }
+    .hero h1 { font-size: clamp(30px, 6vw, 44px); line-height: 1.1; }
+    .hero p { color: var(--muted); margin: 10px auto 0; max-width: 520px; }
+    .search { position: relative; max-width: 620px; margin: 22px auto 0; }
+    .search form { display: flex; gap: 8px; }
+    .search input {
+      flex: 1; min-width: 0; font-size: 18px; padding: 14px 16px; border-radius: 14px; border: 2px solid var(--border); background: var(--surface); outline: none;
+    }
+    .search input:focus { border-color: var(--accent); }
+    .search .btn { font-size: 17px; padding: 0 20px; border-radius: 14px; }
+    .sugg { position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 30; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 16px 40px rgba(0,0,0,.18); overflow: hidden; text-align: left; }
+    .sugg button { display: block; width: 100%; text-align: left; padding: 10px 16px; border: 0; background: none; cursor: pointer; }
+    .sugg button.on, .sugg button:hover { background: var(--accent-soft); }
+    .opts { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; margin-top: 12px; color: var(--muted); font-size: 14px; }
+    .opts label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+    .opts input { accent-color: var(--accent); width: 16px; height: 16px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 18px auto 0; max-width: 680px; }
+    .chips button { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: 14px; }
+    .chips button:hover { border-color: var(--accent); }
+    h2.sec { font-size: 15px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 28px 0 10px; }
+    .sets { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+    .setcard { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; text-align: left; position: relative; min-width: 0; }
+    .setcard:hover { border-color: var(--accent); }
+    .setcard img, .setcard .ph { width: 52px; height: 52px; border-radius: 10px; object-fit: cover; flex: none; background: var(--accent-soft); display: grid; place-items: center; font-size: 24px; }
+    .setcard b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .setcard small { color: var(--muted); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .setcard .x { position: absolute; top: 4px; right: 6px; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 14px; padding: 4px; }
+    .bar { height: 6px; border-radius: 99px; background: var(--surface-2); overflow: hidden; margin-top: 5px; }
+    .bar i { display: block; height: 100%; background: var(--good); border-radius: 99px; transition: width .3s; }
+    .txt { min-width: 0; flex: 1; }
+
+    /* researching */
+    .steps { max-width: 420px; margin: 40px auto; list-style: none; display: grid; gap: 12px; }
+    .steps li { display: flex; gap: 12px; align-items: center; color: var(--muted); font-size: 17px; }
+    .steps li .dot { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); flex: none; font-size: 14px; }
+    .steps li.now { color: var(--text); font-weight: 600; }
+    .steps li.now .dot { background: var(--accent); color: var(--on-accent); animation: pulse 1s ease-in-out infinite alternate; }
+    .steps li.done .dot { background: var(--good); color: #fff; }
+    @keyframes pulse { to { transform: scale(1.15); } }
+    .msg { max-width: 560px; margin: 32px auto; text-align: center; }
+    .msg h2 { font-size: 24px; margin-bottom: 8px; }
+    .msg .choices { display: grid; gap: 8px; margin-top: 16px; text-align: left; }
+    .msg .choices button { border: 1px solid var(--border); background: var(--surface); border-radius: 12px; padding: 10px 14px; cursor: pointer; text-align: left; }
+    .msg .choices button:hover { border-color: var(--accent); }
+    .msg .choices small { display: block; color: var(--muted); }
+
+    /* a study set */
+    .s-head { display: flex; gap: 16px; align-items: center; margin: 12px 0 6px; }
+    .s-head img { width: 92px; height: 92px; border-radius: 16px; object-fit: cover; flex: none; background: var(--surface-2); }
+    .s-head h1 { font-size: clamp(24px, 5vw, 34px); line-height: 1.15; }
+    .s-head p { color: var(--muted); }
+    .s-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 14px; color: var(--muted); margin-top: 6px; }
+    .linkbtn { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0; font-size: 14px; }
+    .others { font-size: 14px; color: var(--muted); margin-top: 8px; }
+    .others button { background: none; border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; margin: 2px 2px; cursor: pointer; font-size: 13px; color: var(--text); }
+    .tabs { display: flex; gap: 6px; overflow-x: auto; margin: 16px -16px 14px; padding: 4px 16px; scrollbar-width: none; position: sticky; top: 0; z-index: 10; background: var(--bg); }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tabs button { flex: none; border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 8px 14px; cursor: pointer; font-weight: 500; }
+    .tabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+    .pane { animation: fadein .2s; }
+    @keyframes fadein { from { opacity: 0; transform: translateY(6px); } }
+    .tools { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    .tools .btn { padding: 7px 12px; font-size: 14px; }
+
+    /* notes */
+    .note { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 16px 18px; margin-bottom: 12px; }
+    .note h3 { font-size: 17px; margin-bottom: 8px; }
+    .note p, .note li { line-height: 1.6; }
+    .note ul { padding-left: 20px; display: grid; gap: 6px; }
+    .gloss { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px 18px; }
+    .gloss div b { display: block; }
+    .gloss div span { color: var(--muted); font-size: 15px; }
+    .tl { list-style: none; padding: 0 !important; border-left: 3px solid var(--accent-soft); margin-left: 8px; }
+    .tl li { position: relative; padding-left: 18px; }
+    .tl li::before { content: ""; position: absolute; left: -8px; top: 7px; width: 13px; height: 13px; border-radius: 50%; background: var(--accent); }
+    .tl b { color: var(--accent); margin-right: 6px; }
+    textarea.mine { width: 100%; min-height: 130px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg); padding: 10px 12px; resize: vertical; line-height: 1.5; }
+
+    /* flashcards */
+    .deckbar { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .flip { perspective: 1200px; margin: 0 auto; max-width: 620px; cursor: pointer; user-select: none; }
+    .flip .in { position: relative; min-height: 260px; transition: transform .45s; transform-style: preserve-3d; }
+    .flip.turned .in { transform: rotateY(180deg); }
+    .face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 22px; padding: 26px; display: grid; place-items: center; text-align: center;
+      background: var(--surface); border: 1px solid var(--border); box-shadow: 0 12px 30px rgba(0,0,0,.1); overflow: auto; }
+    .face.back { transform: rotateY(180deg); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+    .face .big { font-size: clamp(22px, 4.6vw, 32px); font-weight: 700; line-height: 1.25; }
+    .face .mid { font-size: clamp(17px, 3.4vw, 21px); line-height: 1.45; }
+    .face small { display: block; color: var(--muted); margin-top: 12px; font-size: 14px; line-height: 1.45; }
+    .face .tag { position: absolute; top: 12px; left: 16px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    .cardnav { display: flex; justify-content: center; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+    .btn.bad { background: color-mix(in srgb, var(--bad) 14%, var(--surface)); border-color: color-mix(in srgb, var(--bad) 40%, var(--border)); }
+    .btn.good { background: color-mix(in srgb, var(--good) 16%, var(--surface)); border-color: color-mix(in srgb, var(--good) 45%, var(--border)); }
+    .count { text-align: center; color: var(--muted); margin-top: 10px; font-size: 14px; }
+
+    /* quiz, write, practice */
+    .qbox { max-width: 640px; margin: 0 auto; }
+    .qtop { display: flex; justify-content: space-between; color: var(--muted); font-size: 14px; margin-bottom: 8px; }
+    .prompt { font-size: 20px; font-weight: 600; margin-bottom: 10px; }
+    .quote { font-size: 18px; line-height: 1.55; background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }
+    .answers { display: grid; gap: 8px; }
+    .answers button { text-align: left; border: 2px solid var(--border); background: var(--surface); border-radius: 14px; padding: 12px 14px; cursor: pointer; font-size: 16px; line-height: 1.4; display: flex; gap: 10px; align-items: baseline; }
+    .answers button:hover:not(:disabled) { border-color: var(--accent); }
+    .answers button kbd { flex: none; }
+    .answers button.right { border-color: var(--good); background: color-mix(in srgb, var(--good) 14%, var(--surface)); }
+    .answers button.wrong { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, var(--surface)); }
+    .answers button:disabled { cursor: default; }
+    .typein { display: flex; gap: 8px; }
+    .typein input { flex: 1; min-width: 0; font-size: 18px; padding: 12px 14px; border-radius: 12px; border: 2px solid var(--border); background: var(--surface); outline: none; }
+    .typein input:focus { border-color: var(--accent); }
+    .typein input.right { border-color: var(--good); } .typein input.wrong { border-color: var(--bad); }
+    .feedback { margin-top: 12px; padding: 12px 14px; border-radius: 12px; line-height: 1.5; }
+    .feedback.right { background: color-mix(in srgb, var(--good) 14%, var(--surface)); }
+    .feedback.wrong { background: color-mix(in srgb, var(--bad) 12%, var(--surface)); }
+    .next { margin-top: 14px; display: flex; justify-content: flex-end; gap: 8px; }
+    .setup { max-width: 560px; margin: 0 auto; display: grid; gap: 14px; }
+    .setup .lbl { font-size: 14px; color: var(--muted); margin-bottom: 6px; }
+    .result { text-align: center; max-width: 640px; margin: 0 auto; }
+    .result .score { font-size: 56px; font-weight: 700; color: var(--accent); line-height: 1.1; }
+    .review { text-align: left; margin-top: 16px; display: grid; gap: 8px; }
+    .review div { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; }
+    .review small { color: var(--muted); display: block; }
+    .steps-box { margin-top: 12px; background: var(--surface-2); border-radius: 12px; padding: 12px 16px; }
+    .steps-box ol { padding-left: 20px; display: grid; gap: 4px; }
+
+    /* match */
+    .match { display: grid; grid-template-columns: 1fr 1.6fr; gap: 10px; max-width: 760px; margin: 0 auto; }
+    .match .col { display: grid; gap: 8px; align-content: start; }
+    .match button { border: 2px solid var(--border); background: var(--surface); border-radius: 12px; padding: 10px 12px; cursor: pointer; text-align: left; min-height: 54px; font-size: 15px; line-height: 1.35; transition: opacity .3s, transform .15s; }
+    .match button.sel { border-color: var(--accent); background: var(--accent-soft); }
+    .match button.done { opacity: 0; pointer-events: none; transform: scale(.95); }
+    .match button.shake { animation: shake .35s; border-color: var(--bad); }
+    @keyframes shake { 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+    @media (max-width: 560px) { .match { grid-template-columns: 1fr 1.3fr; } .match button { font-size: 14px; padding: 8px 10px; } }
+
+    /* read */
+    .read h3 { margin: 18px 0 6px; font-size: 19px; }
+    .read h4 { margin: 14px 0 4px; font-size: 16px; }
+    .read p { line-height: 1.7; margin-bottom: 10px; }
+    .credit { color: var(--muted); font-size: 13px; text-align: center; margin: 30px auto 0; max-width: 560px; }
+
+    @media (max-width: 560px) {
+      .s-head img { width: 64px; height: 64px; }
+      .search .btn { padding: 0 14px; }
+      .flip .in { min-height: 230px; }
+    }
+    @media print {
+      .g-nav, .tabs, .tools, .others, .credit, .s-meta, #home, textarea.mine, .toast { display: none !important; }
+      .note { break-inside: avoid; border-color: #ccc; }
+      body { background: #fff; color: #000; }
+    }
+  </style>
+  <meta name="theme-color" content="#5b6cff">
+  <meta property="og:title" content="Study Buddy · Mikaeel">
+  <meta property="og:description" content="Study anything: notes, flashcards, a quiz and math practice for any topic, made in seconds.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://the1miknoob.github.io/idk/icon-512.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <link rel="apple-touch-icon" href="../apple-touch-icon.png">
+  <script src="../site.js" defer></script>
+  <script src="../games/shared.js" defer></script>
+  <script src="brain.js" defer></script>
+  <script src="practice.js" defer></script>
+  <script src="study.js" defer></script>
+</head>
+<body data-no-slash>
+  <div class="wrap wide" style="max-width:900px">
+    <nav class="g-nav">
+      <a href="../">← Back to Mikaeel's site</a>
+      <div class="right">
+        <button class="icon-btn" data-mute-toggle aria-label="Sound">🔊</button>
+        <button class="icon-btn" data-theme-toggle aria-label="Light or dark">🌙</button>
+      </div>
+    </nav>
+
+    <!-- start: search for anything -->
+    <section id="home">
+      <div class="hero">
+        <h1>📚 Study Buddy</h1>
+        <p>Type anything you want to learn. I'll read up on it and make you notes, flashcards, a quiz and more.</p>
+        <div class="search">
+          <form id="form" autocomplete="off">
+            <input id="q" type="search" placeholder="Any topic, e.g. volcanoes" aria-label="What do you want to study?" aria-autocomplete="list" aria-controls="sugg" enterkeyhint="search">
+            <button class="btn primary" type="submit">Study ✨</button>
+          </form>
+          <div class="sugg" id="sugg" role="listbox" hidden></div>
+        </div>
+        <div class="opts">
+          <label><input type="checkbox" id="simple"> 🧒 Simpler words (Simple English Wikipedia)</label>
+        </div>
+        <div class="chips" id="examples"></div>
+      </div>
+      <div id="recent-wrap" hidden>
+        <h2 class="sec">Your study sets</h2>
+        <div class="sets" id="recent"></div>
+      </div>
+    </section>
+
+    <!-- researching… -->
+    <section id="loading" hidden>
+      <ol class="steps" id="steps" aria-live="polite"></ol>
+    </section>
+
+    <!-- couldn't find it, or which one did you mean -->
+    <section id="msg" class="msg" hidden aria-live="polite"></section>
+
+    <!-- a study set -->
+    <main id="set" hidden>
+      <div class="s-head">
+        <img id="s-img" alt="" hidden>
+        <div>
+          <h1 id="s-title"></h1>
+          <p id="s-desc"></p>
+          <div class="s-meta" id="s-meta"></div>
+        </div>
+      </div>
+      <div class="others" id="s-others" hidden></div>
+      <div class="tabs" role="tablist" aria-label="Ways to study" id="tabs"></div>
+      <div id="pane" role="tabpanel"></div>
+    </main>
+
+    <p class="credit" id="credit">Facts come from <a href="https://www.wikipedia.org/" target="_blank" rel="noopener">Wikipedia</a> (CC BY-SA) and are picked out automatically, so now and then one can be off. Check the article for anything important.</p>
+  </div>
+</body>
+</html>

@@ -91,6 +91,11 @@
     const cards = [];
     const now = read('mp-now', null);
     if (now && now.name) cards.push({ href: 'music-player/', art: '🎵', k: '<span class="eq-bars"><i></i><i></i><i></i></span>Last played', v: now.name, s: now.artist || 'Open your music player', track: now.id });
+    const studied = read('study-index', null);   // the topic you studied last (Study Buddy)
+    if (Array.isArray(studied) && studied[0] && typeof studied[0].title === 'string') {
+      const s = studied[0], p = read('study-prog:' + s.key, {}) || {}, k = Object.keys(p.known || {}).length;
+      cards.push({ href: `study/?topic=${encodeURIComponent(s.title)}${s.lang === 'simple' ? '&lang=simple' : ''}#cards`, art: '📚', k: 'Studying', v: s.title, s: s.cards ? `${Math.min(k, s.cards)} of ${s.cards} cards known` : 'Tap to keep studying' });
+    }
     const todos = read('dash-todos', null);
     if (Array.isArray(todos) && todos.length) {
       const left = todos.filter(t => t && !t.done);
