@@ -23,6 +23,7 @@
   ],
   "shortcuts": [
     { "name": "Games", "url": "games/" },
+    { "name": "Study Buddy", "url": "study/" },
     { "name": "Music Player", "url": "music-player/" },
     { "name": "World Watch", "url": "world-watch/" },
     { "name": "Dashboard", "url": "dashboard/" },
