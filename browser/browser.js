@@ -8,11 +8,26 @@
   const CFG = self.__uv$config;
   const PREFIX = CFG.prefix;                               // pages through the proxy live here: /idk/browser/go/…
 
-  // ✏️ EDIT: free public proxy servers (Wisp). "Automatic" uses the first one in this list that answers.
-  const SERVERS = [
-    { name: 'Mercury Workshop', url: 'wss://wisp.mercurywork.shop/' },
+  // ---------- saving ----------
+  const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem('browser-' + k)); return v == null ? d : v; } catch (e) { return d; } };
+  const save = (k, v) => { try { localStorage.setItem('browser-' + k, JSON.stringify(v)); } catch (e) {} };
+
+  // ✏️ EDIT: free public proxy servers (Wisp), run by other people. They come and go, so there are lots.
+  // "Automatic" tests them in this order (each one has to actually load a small page) and uses the first that works,
+  // and moves on to the next one by itself if pages stop loading.
+  const SERVERS = load('servers', null) || [
+    { name: 'FreeWisp', url: 'wss://wisp.freewisp.org/' },
+    { name: 'Terbium', url: 'wss://wisp.terbiumon.top/wisp/' },
     { name: 'Anura', url: 'wss://anura.pro/' },
+    { name: 'DayDreamX', url: 'wss://daydreamx.pro/wisp/' },
+    { name: 'Go Into Space', url: 'wss://gointospace.app/wisp/' },
+    { name: 'Truffled', url: 'wss://truffled.lol/wisp/' },
+    { name: 'Fern', url: 'wss://fern.best/wisp/' },
+    { name: 'WebMC', url: 'wss://wisp.webmc.fun/' },
+    { name: 'Overcooked', url: 'wss://learn.overcookedchicken.org/wisp/' },
+    { name: 'Mercury Workshop (slow demo)', url: 'wss://wisp.mercurywork.shop/' },
   ];
+  const CHECK_URL = load('check-url', '') || 'https://example.com/';   // the tiny page every server has to load to count as working
   // ✏️ EDIT: search engines (%s is what was typed)
   const ENGINES = {
     ddg: ['DuckDuckGo', 'https://duckduckgo.com/?q=%s'],
@@ -33,9 +48,6 @@
   const SANDBOX = 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads allow-pointer-lock allow-presentation';
   const COLORS = ['#5b5bd6', '#e0457b', '#0e9f9e', '#d97706', '#16a34a', '#3b82f6', '#c026d3', '#dc2626', '#64748b'];
 
-  // ---------- saving ----------
-  const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem('browser-' + k)); return v == null ? d : v; } catch (e) { return d; } };
-  const save = (k, v) => { try { localStorage.setItem('browser-' + k, JSON.stringify(v)); } catch (e) {} };
   const prefs = Object.assign({ server: 'auto', custom: '', engine: 'ddg', restore: true }, load('prefs', {}));
   let bookmarks = load('bookmarks', []), visits = load('history', []);
   let quick = load('quick', null) || QUICK.map(([e, n, u]) => ({ e, n, u }));
@@ -103,12 +115,49 @@
     if (prefs.server && prefs.server !== 'auto') return [prefs.server];
     return SERVERS.map(s => s.url);
   }
-  async function pickServer() {
+  const serverName = url => (SERVERS.find(s => s.url === url) || {}).name || host(String(url).replace(/^ws/, 'http'));
+  // Load a tiny page through one server, in a worker of its own (so a broken server can't upset the real connection)
+  function deepCheck(url, ms = 10000) {
+    return new Promise(res => {
+      let w = null, said = false;
+      const done = r => { clearTimeout(timer); try { w && w.terminate(); } catch (e) {} res(r); };
+      const timer = setTimeout(() => done({ ok: false, error: said ? 'timed out' : 'timed out (no answer)' }), ms);
+      try { w = new Worker(BASE + 'check.js', { type: 'module' }); } catch (e) { return done({ ok: null, error: 'can\'t test here' }); }
+      w.onmessage = e => { said = true; done(e.data || { ok: false }); };
+      w.onerror = e => { e.preventDefault && e.preventDefault(); done({ ok: null, error: 'can\'t test here: ' + (e.message || 'worker error') }); };
+      w.postMessage({ wisp: url, url: CHECK_URL });
+    });
+  }
+  const tested = {};          // server → what its last test found
+  const bad = new Set();      // servers that stopped working this visit (Automatic skips them)
+  async function pickServer(force) {
     const list = serverList();
-    if (!list.length) return { url: '', ok: false };
-    const tries = list.map(u => ping(u));   // all at once, but the earlier ones win
-    for (let i = 0; i < list.length; i++) if (await tries[i]) return { url: list[i], ok: true };
-    return { url: list[0], ok: false };
+    if (!list.length) return { url: '', ok: false, why: 'none' };
+    const auto = prefs.server === 'auto';
+    // The server that worked last time goes first, and if it still answers it's used straight away
+    const good = load('good', null);
+    if (auto && !force && good && list.includes(good.u) && !bad.has(good.u) && await ping(good.u, 5000)) return { url: good.u, ok: true };
+    const pool = list.filter(u => !auto || !bad.has(u));
+    const pings = await Promise.all(pool.map(u => ping(u, 6000)));
+    const alive = pool.filter((u, i) => pings[i]);
+    pool.forEach((u, i) => { if (!pings[i]) tested[u] = { ok: false, error: 'no answer' }; });
+    if (!alive.length) return { url: pool[0] || list[0], ok: false, why: 'none answered' };
+    // Answering isn't enough (some are overloaded or blocked): it has to load a page. Three at a time; the first to pass wins.
+    let unsure = '';
+    for (let i = 0; i < alive.length && !unsure; i += 3) {
+      const batch = alive.slice(i, i + 3);
+      const win = await new Promise(res => {
+        let left = batch.length;
+        batch.forEach(u => deepCheck(u).then(r => {
+          tested[u] = r; drawNow();
+          if (r.ok) res(u);
+          else { if (r.ok === null && !unsure) unsure = u; if (--left === 0) res(''); }
+        }));
+      });
+      if (win) { save('good', { u: win, at: Date.now() }); return { url: win, ok: true }; }
+    }
+    if (unsure) return { url: unsure, ok: true };
+    return { url: alive[0], ok: false, why: 'no pages' };
   }
   function activated(reg) {
     return new Promise((res, rej) => {
@@ -121,13 +170,15 @@
       });
     });
   }
-  async function connect() {
-    setStatus('wait', 'Finding a proxy server…');
-    const pick = await pickServer();
-    server.url = pick.url; server.ok = pick.ok;
-    if (pick.ok) await useServer(pick.url);   // never hand the tunnel a server that isn't answering (it can break it)
-    if (pick.ok) setStatus('ok', 'Proxy on · ' + host(pick.url.replace(/^ws/, 'http')));
-    else setStatus('bad', pick.url ? 'Can\'t reach the proxy server · tap to change it' : 'Pick a proxy server in Settings');
+  async function connect(force) {
+    setStatus('wait', prefs.server === 'auto' ? 'Finding a proxy server that works…' : 'Connecting to the proxy server…');
+    const pick = await pickServer(force);
+    server.url = pick.url; server.ok = pick.ok; server.why = pick.why || '';
+    if (pick.ok) await useServer(pick.url);   // never hand the tunnel a server that isn't working (it can break it)
+    if (pick.ok) setStatus('ok', 'Proxy on · ' + serverName(pick.url));
+    else setStatus('bad', pick.why === 'none' ? 'Pick a proxy server in Settings'
+      : pick.why === 'no pages' ? 'The proxy servers answer but can\'t load pages · tap for help' : 'Can\'t reach any proxy server · tap for help');
+    drawNow();
     return pick.ok;
   }
   // The encrypted tunnel (epoxy) runs in one background worker shared by every tab; this points it at a proxy server
@@ -158,8 +209,37 @@
     }
     return engineP;
   }
-  async function reconnect() {   // after changing servers, or when a page fails
-    try { const fresh = !engineP; await engine(); return fresh ? server.ok : await connect(); } catch (e) { return false; }
+  async function reconnect(force) {   // after changing servers, or when pages fail
+    try { const fresh = !engineP; await engine(); return fresh ? server.ok : await connect(force); } catch (e) { return false; }
+  }
+  // A page failed. If the server is the problem, Automatic moves on to the next working server and tries the page again.
+  let switching = null, fails = 0;
+  async function failover(t) {
+    if (prefs.server !== 'auto' || !server.url || t.retried === t.url) return;
+    if (!switching) {
+      switching = (async () => {
+        const was = server.url;
+        const r = await deepCheck(was);
+        fails++;
+        if (r.ok && fails < 3) return false;   // the server is fine, so it's this website
+        bad.add(was); fails = 0;
+        if (load('good', null) && load('good', null).u === was) save('good', null);
+        await reconnect(true);
+        return server.ok && server.url !== was;
+      })();
+    }
+    const moved = await switching;
+    switching = null;
+    if (moved && t.err && t.url) { t.retried = t.url; toast('🔁 Switched to another proxy server: ' + serverName(server.url)); go(t, t.url, true); }
+  }
+  async function nextServer(t) {   // the "Try another server" button
+    if (prefs.server !== 'auto') { openSheet('settings'); return; }
+    if (server.url) bad.add(server.url);
+    t.err = null; t.loading = true; paint(t);
+    const ok = await reconnect(true);
+    if (!ok) bad.clear();   // nothing else works: let them all be tried again next time
+    toast(ok ? '🔁 Now using ' + serverName(server.url) : '😕 No other server is working right now');
+    go(t, t.url, true);
   }
   function setStatus(kind, text) {
     $('#status-dot').className = 'dot' + (kind === 'ok' ? ' ok' : kind === 'bad' ? ' bad' : '');
@@ -232,7 +312,7 @@
     if (t.url !== url) return;   // something else was opened while waiting
     if (!server.ok) {
       t.loading = false;
-      t.err = classify('No proxy server answered: ' + (serverList().join(', ') || 'none picked') + ' (WebSocket)');
+      t.err = noServer();
       paint(t); return;
     }
     if (!t.frame) { makeFrame(t).src = proxied(url); return; }
@@ -272,9 +352,10 @@
     const bad = doc.getElementById('errorTitle') && doc.getElementById('errorTrace');
     if (bad) {
       const msg = doc.getElementById('errorTrace').value || '';
-      if (!t.err || t.err.msg !== msg) { t.err = classify(msg); t.loading = false; paint(t); }
+      if (!t.err || t.err.raw !== msg) { t.err = classify(msg); t.err.msg += '\n(proxy server: ' + server.url + ')'; t.err.raw = msg; t.loading = false; paint(t); failover(t); }
       return;
     }
+    if (doc.readyState === 'complete' && doc.body && doc.body.childElementCount) fails = 0;
     if (t.err && t.err.kind !== 'support') { t.err = null; paint(t); }
     const title = (doc.title || '').trim().slice(0, 200) || host(t.url);
     if (title !== t.title) {
@@ -297,12 +378,23 @@
     if (t === active) { setAddr(); renderBar(); }
     saveTabs();
   }
+  function noServer() {
+    const pages = server.why === 'no pages', none = server.why === 'none';
+    return {
+      kind: 'proxy', icon: '📡',
+      h: none ? 'Pick a proxy server' : pages ? 'The proxy servers aren\'t working right now' : 'Can\'t reach any proxy server',
+      p: none ? 'Choose a server in Settings, or switch back to Automatic.'
+        : (pages ? 'The free proxy servers answered, but none of them could load a test page (they may be overloaded).' : 'None of the free proxy servers answered.')
+          + ' If you\'re on a school or work network, it may block proxy servers. You can try again later, or use your own server (Settings).',
+      msg: Object.keys(tested).length ? Object.entries(tested).map(([u, r]) => `${u}: ${r.ok ? 'works' : r.error || 'failed'}`).join('\n') : 'No servers tested.',
+    };
+  }
   function classify(msg) {
     const m = String(msg);
     let kind = 'site', h = 'This page couldn\'t be opened', p = 'The proxy couldn\'t load this page. Some websites block proxies or don\'t work well through one.', icon = '😕';
     if (/websocket|wisp|ws:\/\/|wss:\/\/|bare-mux|no bare clients|MessagePort|transport/i.test(m) || (/failed to fetch|network/i.test(m) && !/dns|resolve/i.test(m))) {
-      kind = 'proxy'; icon = '📡'; h = 'Can\'t reach the proxy server';
-      p = 'The proxy server didn\'t answer. Try again, or pick a different server in Settings.';
+      kind = 'proxy'; icon = '📡'; h = 'The proxy server stopped answering';
+      p = 'The free proxy server this page went through isn\'t working right now. Try another server, or try again in a moment.';
     } else if (/dns|resolve|getaddrinfo|ENOTFOUND|not found|NXDOMAIN|invalid url|hostname/i.test(m)) {
       icon = '🔎'; h = 'That website couldn\'t be found'; p = 'Check the address for typos, or search for it instead.';
     } else if (/IncompleteMessage|closed before message completed|connection refused|unreachable/i.test(m)) {
@@ -410,7 +502,8 @@
       $('#err-p').textContent = err.p || err.msg;
       $('#err-trace').textContent = err.msg || '';
       $('#err-retry').hidden = err.kind === 'support';
-      $('#err-settings').hidden = err.kind === 'support' || err.kind === 'site';
+      $('#err-next').hidden = err.kind === 'support' || prefs.server !== 'auto' || (err.kind === 'proxy' && !server.ok);
+      $('#err-settings').hidden = err.kind === 'support';
     }
     document.title = (ntp ? 'New tab' : t.title || host(t.url)) + ' · Browser';
     setAddr(); renderBar();
@@ -520,15 +613,16 @@
         <div class="row" style="margin-top:14px"><button class="btn" id="h-clear">🗑️ Clear history</button></div>`;
       drawHistory();
     } else {
-      const radio = (val, name, small) => `<label class="opt"><input type="radio" name="srv" value="${esc(val)}" ${prefs.server === val ? 'checked' : ''}>
-        <span class="ot"><b>${esc(name)}</b>${small ? `<small>${esc(small)}</small>` : ''}${val === 'custom' ? `<input type="url" id="custom" placeholder="wss://your-server.example/" value="${esc(prefs.custom)}" spellcheck="false">` : ''}</span><span class="pg" data-pg="${esc(val)}"></span></label>`;
+      const radio = (val, name, small, cls) => `<label class="opt${cls ? ' ' + cls : ''}"><input type="radio" name="srv" value="${esc(val)}" ${prefs.server === val ? 'checked' : ''}>
+        <span class="ot"><b>${esc(name)}</b>${small ? `<small>${esc(small)}</small>` : ''}${val === 'custom' ? `<input type="url" id="custom" placeholder="wss://your-server.example/wisp/" value="${esc(prefs.custom)}" spellcheck="false">` : ''}</span><span class="pg" data-pg="${esc(val)}">${val === 'auto' || val === 'custom' ? '' : result(tested[val])}</span></label>`;
       body.innerHTML = `<h3>Proxy server</h3>
-        <p>Pages go through a free Wisp proxy server run by other people. If pages won't load, try a different one, or add your own.</p>
-        ${radio('auto', 'Automatic', 'Uses the first server in the list that answers')}
-        ${SERVERS.map(s => radio(s.url, s.name, s.url)).join('')}
-        ${radio('custom', 'My own server', '')}
+        <p>Pages go through a free Wisp proxy server run by other people. They come and go, so <b>Automatic</b> tests them, uses one that works, and moves on by itself if it stops working.</p>
         <div class="now" id="now"></div>
-        <div class="row"><button class="btn" id="test">📶 Test the servers</button></div>
+        <div class="row" style="margin-bottom:10px"><button class="btn" id="test">📶 Test all the servers</button></div>
+        ${radio('auto', 'Automatic (best)', 'Tests the servers and uses one that can load pages')}
+        ${SERVERS.map(s => radio(s.url, s.name, s.url, 'small')).join('')}
+        ${radio('custom', 'My own server', 'Run your own with wisp-js or wisp-server-python')}
+        <p style="margin-top:8px">If none of them work, your network (for example at school or work) may block proxy servers.</p>
         <h3>Search engine</h3>
         <select id="engine" aria-label="Search engine">${Object.entries(ENGINES).map(([k, v]) => `<option value="${k}" ${prefs.engine === k ? 'selected' : ''}>${esc(v[0])}</option>`).join('')}</select>
         <h3>When you come back</h3>
@@ -546,10 +640,17 @@
       drawNow();
     }
   }
+  function result(r) {
+    if (!r) return '';
+    if (r.ok) return '✅ works' + (r.ms ? ` · ${r.ms} ms` : '');
+    if (r.ok === null) return '🟢 answers';
+    return r.error === 'no answer' ? '❌ no answer' : '⚠️ can\'t load pages';
+  }
   function drawNow() {
     const el = $('#now');
     if (!el) return;
-    el.innerHTML = server.url ? `Now using: <b>${esc(server.url)}</b> ${server.ok ? '🟢' : '🔴'}` : 'Not connected yet.';
+    el.innerHTML = server.url ? `Now using: <b>${esc(serverName(server.url))}</b> ${server.ok ? '🟢 working' : '🔴 not working'}` : 'Not connected yet.';
+    document.querySelectorAll('[data-pg]').forEach(x => { const u = x.dataset.pg; if (u !== 'auto' && u !== 'custom' && tested[u]) x.textContent = result(tested[u]); });
   }
   function drawHistory() {
     const q = histFilter.toLowerCase();
@@ -722,6 +823,7 @@
     // error screen
     $('#err-retry').onclick = () => retry();
     $('#err-settings').onclick = () => openSheet('settings');
+    $('#err-next').onclick = () => nextServer(active);
     $('#err-direct').onclick = () => act('direct');
 
     // side sheet
@@ -741,16 +843,20 @@
       } else if (id === 'clear-sites') {
         if (confirm('Clear cookies and saved data for all websites? You\'ll be logged out of sites you opened here.')) clearSites();
       } else if (id === 'test') {
-        const b = e.target; b.disabled = true; b.textContent = '📶 Testing…';
-        const urls = SERVERS.map(s => s.url).concat(prefs.custom ? [prefs.custom] : []);
-        document.querySelectorAll('[data-pg]').forEach(el => el.textContent = '…');
-        await Promise.all(urls.map(async u => {
-          const ms = await ping(u);
-          const el = document.querySelector(`[data-pg="${CSS.escape(u === prefs.custom && !SERVERS.some(s => s.url === u) ? 'custom' : u)}"]`);
-          if (el) el.textContent = ms ? `🟢 ${ms} ms` : '🔴 no answer';
-        }));
-        const auto = document.querySelector('[data-pg="auto"]'); if (auto) auto.textContent = '';
-        b.disabled = false; b.textContent = '📶 Test the servers';
+        const b = e.target; b.disabled = true; b.textContent = '📶 Testing… (this takes a few seconds)';
+        const urls = SERVERS.map(s => s.url).concat(prefs.custom && !SERVERS.some(s => s.url === prefs.custom) ? [prefs.custom] : []);
+        const cell = u => document.querySelector(`[data-pg="${CSS.escape(SERVERS.some(s => s.url === u) ? u : 'custom')}"]`);
+        urls.forEach(u => { const el = cell(u); if (el) el.textContent = '…'; });
+        const one = async u => {
+          const r = (await ping(u, 6000)) ? await deepCheck(u) : { ok: false, error: 'no answer' };
+          tested[u] = r; if (r.ok) bad.delete(u);
+          const el = cell(u); if (el) el.textContent = result(r);
+        };
+        for (let i = 0; i < urls.length; i += 3) await Promise.all(urls.slice(i, i + 3).map(one));
+        const works = urls.filter(u => tested[u] && tested[u].ok).length;
+        b.disabled = false; b.textContent = '📶 Test all the servers';
+        toast(works ? `✅ ${works} of ${urls.length} servers work right now` : '😕 None of the servers are working right now');
+        if (prefs.server === 'auto' && !server.ok && works) { await reconnect(true); drawNow(); }
       }
     });
     body.addEventListener('change', async e => {

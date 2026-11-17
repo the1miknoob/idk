@@ -149,6 +149,8 @@
     .opt b { font-weight: 600; display: block; }
     .opt small { color: var(--muted); display: block; word-break: break-all; }
     .opt .pg { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+    .opt.small { padding: 6px 10px; margin-bottom: 4px; }
+    .opt.small small { font-size: 12px; }
     .opt input[type=url] { width: 100%; margin-top: 6px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); }
     .sheet select { width: 100%; padding: 9px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); }
     .sheet .row { flex-wrap: wrap; gap: 8px; }
@@ -244,6 +246,7 @@
           <p id="err-p"></p>
           <div class="row">
             <button class="btn primary" id="err-retry">⟳ Try again</button>
+            <button class="btn" id="err-next">🔁 Try another server</button>
             <button class="btn" id="err-settings">⚙️ Proxy settings</button>
             <button class="btn" id="err-direct">↗️ Open without the proxy</button>
           </div>
