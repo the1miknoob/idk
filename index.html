@@ -321,6 +321,11 @@
           <h3>Study Buddy</h3>
           <p>Type any topic, from photosynthesis to the French Revolution, and it reads up on it and makes notes, flashcards, a quiz, a matching game and math practice.</p>
         </a>
+        <a class="card" href="browser/" style="color:inherit;text-decoration:none">
+          <div class="emoji">🌐</div>
+          <h3>Browser</h3>
+          <p>A web browser inside the site. Pages load through a proxy, with tabs, bookmarks, history and a search bar.</p>
+        </a>
       </div>
     </section>
 
@@ -365,7 +370,7 @@
     const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     // ---------- Typing effect (✏️ EDIT: change the words) ----------
-    const WORDS = ['games', 'music players', 'study tools', 'dashboards', 'world maps', 'armor simulators', 'chess engines', 'tier lists', 'websites', 'cool stuff', 'things I\'m proud of'];
+    const WORDS = ['games', 'music players', 'study tools', 'web browsers', 'dashboards', 'world maps', 'armor simulators', 'chess engines', 'tier lists', 'websites', 'cool stuff', 'things I\'m proud of'];
     const typed = document.getElementById('typed');
     if (!reduceMotion) {
       let w = 0, i = WORDS[0].length, deleting = true;

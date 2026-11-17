@@ -33,6 +33,10 @@
     a:hover { transform: translateY(-1px); }
     @media (prefers-reduced-motion: reduce) { .big span { animation: none; } }
   </style>
+  <script>
+    // A page from the 🌐 Browser (…/browser/go/…) opened while its proxy wasn't running: open it in the Browser instead
+    (function () { var p = location.pathname, i = p.indexOf('/browser/go/'); if (i >= 0) location.replace(p.slice(0, i) + '/browser/?go=' + encodeURIComponent(p.slice(i + 12) + location.search)); })();
+  </script>
   <meta name="description" content="That page doesn&#x27;t exist, but there&#x27;s lots more to explore on Mikaeel&#x27;s site.">
   <meta name="theme-color" content="#5b6cff">
   <meta property="og:title" content="Page not found · Mikaeel">
