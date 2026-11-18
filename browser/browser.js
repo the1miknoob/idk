@@ -177,6 +177,16 @@
     if (unsure) return { url: unsure, ok: true };
     return { url: alive[0], ok: false, why: 'no pages' };
   }
+  const SW_VERSION = 2;   // must match VERSION in sw.js
+  function swVersion(reg) {
+    const w = reg.active;
+    if (!w) return Promise.resolve(0);
+    return new Promise(res => {
+      const ch = new MessageChannel(), timer = setTimeout(() => res(0), 1500);
+      ch.port1.onmessage = e => { clearTimeout(timer); res(+e.data || 0); };
+      try { w.postMessage({ browser: 'version' }, [ch.port2]); } catch (e) { clearTimeout(timer); res(0); }
+    });
+  }
   function activated(reg) {
     return new Promise((res, rej) => {
       const w = reg.installing || reg.waiting || reg.active;
@@ -235,8 +245,14 @@
       engineP = (async () => {
         const why = unsupported();
         if (why) throw Object.assign(new Error(why), { kind: 'support' });
-        swReg = await navigator.serviceWorker.register(BASE + 'sw.js', { scope: PREFIX });
+        swReg = await navigator.serviceWorker.register(BASE + 'sw.js', { scope: PREFIX, updateViaCache: 'none' });
         await activated(swReg);
+        // After an update, the old proxy worker can still be running for a moment: wait for the new one
+        for (let i = 0; i < 30 && (await swVersion(swReg)) < SW_VERSION; i++) {
+          if (i % 5 === 0) try { await swReg.update(); } catch (e) {}
+          await new Promise(r => setTimeout(r, 400));
+          await activated(swReg);
+        }
         await startScramjet();
         await connect();
       })();

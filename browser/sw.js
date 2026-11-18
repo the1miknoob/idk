@@ -20,9 +20,15 @@ const scramjet = new ScramjetServiceWorker();
 const HERE = new URL('./', location).href;                 // …/browser/
 const SCRAMJET = [HERE + 'go/sj/', HERE + 'scramjet/'];    // Scramjet's pages and its own files
 
+const VERSION = 2;   // ✏️ bump this when this file changes, so the Browser page waits for the new copy
+
 self.addEventListener('install', () => self.skipWaiting());
-// "Clear cookies and site data" in the Browser's settings: forget the cookies Scramjet keeps in memory too
-self.addEventListener('message', e => { if (e.data && e.data.browser === 'clear-cookies') scramjet.cookieStore = new scramjet.cookieStore.constructor(); });
+self.addEventListener('message', e => {
+  const d = e.data || {};
+  if (d.browser === 'version' && e.ports[0]) e.ports[0].postMessage(VERSION);   // the page checks it's talking to this copy
+  // "Clear cookies and site data" in the Browser's settings: forget the cookies Scramjet keeps in memory too
+  if (d.browser === 'clear-cookies') scramjet.cookieStore = new scramjet.cookieStore.constructor();
+});
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 
 const oops = (err, url) => new Response(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Error</title></head><body>
