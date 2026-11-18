@@ -231,13 +231,28 @@
       prefix: SJ_PREFIX,
       files: { wasm: BASE + 'scramjet/scramjet.wasm.wasm', all: BASE + 'scramjet/scramjet.all.js', sync: BASE + 'scramjet/scramjet.sync.js' },
     });
-    try { const c = make(); await c.init(); sj = c; }
+    try { const c = make(); await c.init(); sj = c; await seedSuffixList(); }
     catch (e) {
       // Its saved data is damaged: start it fresh (if that can't happen yet, use Ultraviolet for now)
       console.warn('Scramjet:', e);
       await new Promise(res => { const d = indexedDB.deleteDatabase('$scramjet'); d.onsuccess = d.onerror = res; setTimeout(res, 3000); });
-      try { const c = make(); await c.init(); sj = c; } catch (e2) { sjBroken = String(e2 && e2.message || e2); console.warn('Scramjet still not working, using Ultraviolet:', e2); }
+      try { const c = make(); await c.init(); sj = c; await seedSuffixList(); } catch (e2) { sjBroken = String(e2 && e2.message || e2); console.warn('Scramjet still not working, using Ultraviolet:', e2); }
     }
+  }
+  // Scramjet needs the public suffix list (which part of an address is the "site") for every page that loads things from
+  // other sites, and it downloads it through the proxy every hour; when that fails, those pages break. So it gets a copy from here.
+  async function seedSuffixList() {
+    try {
+      const db = await new Promise((res, rej) => { const r = indexedDB.open('$scramjet'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+      const store = 'publicSuffixList';
+      if (!db.objectStoreNames.contains(store)) return db.close();
+      const have = await new Promise(res => { const q = db.transaction(store).objectStore(store).get(store); q.onsuccess = () => res(q.result); q.onerror = () => res(null); });
+      if (!(have && have.from === 'browser' && have.expiry > Date.now() + 30 * 864e5)) {
+        const data = await (await fetch(BASE + 'scramjet/psl.json')).json();
+        await new Promise(res => { const tx = db.transaction(store, 'readwrite'); tx.objectStore(store).put({ data, expiry: Date.now() + 365 * 864e5, from: 'browser' }, store); tx.oncomplete = tx.onerror = res; });
+      }
+      db.close();
+    } catch (e) { console.warn('Couldn\'t give Scramjet the suffix list:', e); }
   }
   const core = () => (prefs.core === 'sj' && !sj ? 'uv' : prefs.core);   // the engine actually in use
   function engine() {
