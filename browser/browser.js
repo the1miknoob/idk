@@ -7,6 +7,9 @@
   const BASE = location.pathname.replace(/[^/]*$/, '');   // this folder, e.g. /idk/browser/
   const CFG = self.__uv$config;
   const PREFIX = CFG.prefix;                               // pages through the proxy live here: /idk/browser/go/…
+  const SJ_PREFIX = PREFIX + 'sj/';                        // …and Scramjet's pages here: /idk/browser/go/sj/…
+  // Two proxy engines: Scramjet (newer, handles big modern sites like YouTube) and Ultraviolet (older)
+  const CORES = { sj: 'Scramjet', uv: 'Ultraviolet' };
 
   // ---------- saving ----------
   const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem('browser-' + k)); return v == null ? d : v; } catch (e) { return d; } };
@@ -48,7 +51,8 @@
   const SANDBOX = 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads allow-pointer-lock allow-presentation';
   const COLORS = ['#5b5bd6', '#e0457b', '#0e9f9e', '#d97706', '#16a34a', '#3b82f6', '#c026d3', '#dc2626', '#64748b'];
 
-  const prefs = Object.assign({ server: 'auto', custom: '', engine: 'ddg', restore: true }, load('prefs', {}));
+  const prefs = Object.assign({ server: 'auto', custom: '', engine: 'ddg', restore: true, core: 'sj' }, load('prefs', {}));
+  if (!CORES[prefs.core]) prefs.core = 'sj';
   let bookmarks = load('bookmarks', []), visits = load('history', []);
   let quick = load('quick', null) || QUICK.map(([e, n, u]) => ({ e, n, u }));
   if (!Array.isArray(bookmarks)) bookmarks = [];
@@ -77,17 +81,30 @@
     const eng = ENGINES[prefs.engine] || ENGINES.ddg;
     return eng[1].replace('%s', encodeURIComponent(s));
   }
-  const proxied = url => PREFIX + CFG.encodeUrl(url);
-  // A proxied address (…/go/xyz) → the real web address, or null
+  // A web address → its address through the proxy (Scramjet keeps the #part separate, like it does itself)
+  function proxied(url, c = core()) {
+    if (c === 'uv') return PREFIX + CFG.encodeUrl(url);
+    const u = new URL(url), hash = u.hash.slice(1);
+    u.hash = '';
+    return SJ_PREFIX + encodeURIComponent(u.href) + (hash ? '#' + encodeURIComponent(hash) : '');
+  }
+  // A proxied address (…/go/xyz or …/go/sj/xyz) → the real web address, or null
   function realOf(href) {
     try {
       const u = new URL(href, location.href);
       if (u.origin !== location.origin || !u.pathname.startsWith(PREFIX)) return null;
-      let r = CFG.decodeUrl(u.pathname.slice(PREFIX.length) + u.search);
-      if (u.hash) r = r.replace(/#.*$/, '') + u.hash;
+      let r;
+      if (u.pathname.startsWith(SJ_PREFIX)) {
+        r = decodeURIComponent(u.pathname.slice(SJ_PREFIX.length)) + u.search;
+        if (u.hash) r = r.replace(/#.*$/, '') + '#' + decodeURIComponent(u.hash.slice(1));
+      } else {
+        r = CFG.decodeUrl(u.pathname.slice(PREFIX.length) + u.search);
+        if (u.hash) r = r.replace(/#.*$/, '') + u.hash;
+      }
       return /^https?:/i.test(r) ? r : null;
     } catch (e) { return null; }
   }
+  const coreOf = href => { try { return new URL(href, location.href).pathname.startsWith(SJ_PREFIX) ? 'sj' : 'uv'; } catch (e) { return prefs.core; } };
 
   // ---------- the proxy engine ----------
   let engineP = null, conn = null, bare = null;
@@ -117,7 +134,7 @@
   }
   const serverName = url => (SERVERS.find(s => s.url === url) || {}).name || host(String(url).replace(/^ws/, 'http'));
   // Load a tiny page through one server, in a worker of its own (so a broken server can't upset the real connection)
-  function deepCheck(url, ms = 10000) {
+  function deepCheck(url, ms = 10000, target = CHECK_URL) {
     return new Promise(res => {
       let w = null, said = false;
       const done = r => { clearTimeout(timer); try { w && w.terminate(); } catch (e) {} res(r); };
@@ -125,19 +142,20 @@
       try { w = new Worker(BASE + 'check.js', { type: 'module' }); } catch (e) { return done({ ok: null, error: 'can\'t test here' }); }
       w.onmessage = e => { said = true; done(e.data || { ok: false }); };
       w.onerror = e => { e.preventDefault && e.preventDefault(); done({ ok: null, error: 'can\'t test here: ' + (e.message || 'worker error') }); };
-      w.postMessage({ wisp: url, url: CHECK_URL });
+      w.postMessage({ wisp: url, url: target });
     });
   }
   const tested = {};          // server → what its last test found
   const bad = new Set();      // servers that stopped working this visit (Automatic skips them)
-  async function pickServer(force) {
+  async function pickServer(force, avoid) {
     const list = serverList();
     if (!list.length) return { url: '', ok: false, why: 'none' };
     const auto = prefs.server === 'auto';
     // The server that worked last time goes first, and if it still answers it's used straight away
     const good = load('good', null);
     if (auto && !force && good && list.includes(good.u) && !bad.has(good.u) && await ping(good.u, 5000)) return { url: good.u, ok: true };
-    const pool = list.filter(u => !auto || !bad.has(u));
+    const pool = list.filter(u => !auto || (!bad.has(u) && !(avoid && avoid.has(u))));
+    if (!pool.length) return { url: '', ok: false, why: 'all tried' };
     const pings = await Promise.all(pool.map(u => ping(u, 6000)));
     const alive = pool.filter((u, i) => pings[i]);
     pool.forEach((u, i) => { if (!pings[i]) tested[u] = { ok: false, error: 'no answer' }; });
@@ -170,9 +188,10 @@
       });
     });
   }
-  async function connect(force) {
+  async function connect(force, avoid) {
     setStatus('wait', prefs.server === 'auto' ? 'Finding a proxy server that works…' : 'Connecting to the proxy server…');
-    const pick = await pickServer(force);
+    const pick = await pickServer(force, avoid);
+    if (pick.why === 'all tried' && server.ok) { setStatus('ok', 'Proxy on · ' + serverName(server.url)); return false; }   // keep the one we have
     server.url = pick.url; server.ok = pick.ok; server.why = pick.why || '';
     if (pick.ok) await useServer(pick.url);   // never hand the tunnel a server that isn't working (it can break it)
     if (pick.ok) setStatus('ok', 'Proxy on · ' + serverName(pick.url));
@@ -192,13 +211,33 @@
     await conn.setTransport(EPOXY, [{ wisp: url }]);
     save('wisp', url);
   }
+  // Scramjet's settings are saved where the proxy worker can read them, before any page opens
+  let sj = null, swReg = null;
+  let sjBroken = '';
+  async function startScramjet() {
+    if (sj || typeof $scramjetLoadController !== 'function') return;
+    const { ScramjetController } = $scramjetLoadController();
+    const make = () => new ScramjetController({
+      prefix: SJ_PREFIX,
+      files: { wasm: BASE + 'scramjet/scramjet.wasm.wasm', all: BASE + 'scramjet/scramjet.all.js', sync: BASE + 'scramjet/scramjet.sync.js' },
+    });
+    try { const c = make(); await c.init(); sj = c; }
+    catch (e) {
+      // Its saved data is damaged: start it fresh (if that can't happen yet, use Ultraviolet for now)
+      console.warn('Scramjet:', e);
+      await new Promise(res => { const d = indexedDB.deleteDatabase('$scramjet'); d.onsuccess = d.onerror = res; setTimeout(res, 3000); });
+      try { const c = make(); await c.init(); sj = c; } catch (e2) { sjBroken = String(e2 && e2.message || e2); console.warn('Scramjet still not working, using Ultraviolet:', e2); }
+    }
+  }
+  const core = () => (prefs.core === 'sj' && !sj ? 'uv' : prefs.core);   // the engine actually in use
   function engine() {
     if (!engineP) {
       engineP = (async () => {
         const why = unsupported();
         if (why) throw Object.assign(new Error(why), { kind: 'support' });
-        const reg = await navigator.serviceWorker.register(BASE + 'sw.js', { scope: PREFIX });
-        await activated(reg);
+        swReg = await navigator.serviceWorker.register(BASE + 'sw.js', { scope: PREFIX });
+        await activated(swReg);
+        await startScramjet();
         await connect();
       })();
       const p = engineP;
@@ -209,28 +248,60 @@
     }
     return engineP;
   }
-  async function reconnect(force) {   // after changing servers, or when pages fail
-    try { const fresh = !engineP; await engine(); return fresh ? server.ok : await connect(force); } catch (e) { return false; }
+  async function reconnect(force, avoid) {   // after changing servers, or when pages fail
+    try { const fresh = !engineP; await engine(); return fresh ? server.ok : await connect(force, avoid); } catch (e) { return false; }
   }
   // A page failed. If the server is the problem, Automatic moves on to the next working server and tries the page again.
-  let switching = null, fails = 0;
+  // When a page fails, Automatic works out whether it's the server or the website. Free servers often refuse big sites
+  // (like YouTube) or cap how much you use them, so the page is tried through other servers in the background first.
+  let switching = false;
+  const refused = {};   // website → servers it didn't load through
+  const firstOk = (list, test) => new Promise(res => {   // run the tests together; the first one that passes wins
+    let left = list.length;
+    if (!left) return res('');
+    list.forEach(u => test(u).then(r => { tested[u] = tested[u] && !r.ok ? tested[u] : r; if (r.ok) res(u); else if (--left === 0) res(''); }));
+  });
   async function failover(t) {
-    if (prefs.server !== 'auto' || !server.url || t.retried === t.url) return;
-    if (!switching) {
-      switching = (async () => {
-        const was = server.url;
-        const r = await deepCheck(was);
-        fails++;
-        if (r.ok && fails < 3) return false;   // the server is fine, so it's this website
-        bad.add(was); fails = 0;
-        if (load('good', null) && load('good', null).u === was) save('good', null);
-        await reconnect(true);
-        return server.ok && server.url !== was;
-      })();
-    }
-    const moved = await switching;
-    switching = null;
-    if (moved && t.err && t.url) { t.retried = t.url; toast('🔁 Switched to another proxy server: ' + serverName(server.url)); go(t, t.url, true); }
+    if (prefs.server !== 'auto' || !server.url || !t.url || !t.err || switching) return;
+    t.tries = t.tries || {};
+    const url = t.url, site = host(url), n = t.tries[url] || 0, was = server.url;
+    if (n >= 3) return;   // tried enough servers for this page
+    switching = true;
+    try {
+      let to = '';
+      if (t.err.kind === 'proxy' && !(await deepCheck(was)).ok) {   // the server itself stopped working
+        bad.add(was);
+        if ((load('good', null) || {}).u === was) save('good', null);
+        await reconnect(true, refused[site]);
+        if (server.ok && server.url !== was) to = server.url;
+      }
+      if (!to) {
+        const skip = new Set([was, ...bad, ...(refused[site] || [])]);
+        const others = SERVERS.map(x => x.url).filter(u => !skip.has(u))
+          .sort((a, b) => (tested[b] && tested[b].ok ? 1 : 0) - (tested[a] && tested[a].ok ? 1 : 0)).slice(0, 4);
+        if (others.length) {
+          if (t.err && t.url === url) { t.err.p = 'Checking whether it opens through another proxy server…'; paint(t); }
+          setStatus('wait', 'Trying ' + site + ' through other proxy servers…');
+          to = await firstOk(others, u => deepCheck(u, 15000, url));
+          if (to) {
+            (refused[site] = refused[site] || new Set()).add(was);
+            await useServer(to);
+            server.url = to; server.ok = true;
+            save('good', { u: to, at: Date.now() });
+          }
+          setStatus(server.ok ? 'ok' : 'bad', server.ok ? 'Proxy on · ' + serverName(server.url) : 'Can\'t reach any proxy server · tap for help');
+          drawNow();
+        }
+      }
+      if (to && t.err && t.url === url) {
+        t.tries[url] = n + 1;
+        toast('🔁 ' + site + ' didn\'t load through ' + serverName(was) + '. Trying ' + serverName(to) + '…');
+        go(t, url, true);
+      } else if (t.err && t.url === url && t.err.kind !== 'proxy') {
+        t.err.p = site + ' didn\'t load through any of the proxy servers. The site might be down, or the free servers might be blocking it (they often block big sites like YouTube, or limit how much you can use them). Try again later.';
+        paint(t);
+      }
+    } finally { switching = false; }
   }
   async function nextServer(t) {   // the "Try another server" button
     if (prefs.server !== 'auto') { openSheet('settings'); return; }
@@ -293,6 +364,7 @@
     f.allowFullscreen = true;
     f.hidden = t !== active;
     f.addEventListener('load', () => { t.loading = false; t.from = null; sync(t); hook(t); paint(t); });
+    if (sj) try { sj.createFrame(f); } catch (e) {}   // lets Scramjet treat this frame as the page's own window
     $('#frames').appendChild(f);
     t.frame = f;
     applyZoom(t);
@@ -355,7 +427,6 @@
       if (!t.err || t.err.raw !== msg) { t.err = classify(msg); t.err.msg += '\n(proxy server: ' + server.url + ')'; t.err.raw = msg; t.loading = false; paint(t); failover(t); }
       return;
     }
-    if (doc.readyState === 'complete' && doc.body && doc.body.childElementCount) fails = 0;
     if (t.err && t.err.kind !== 'support') { t.err = null; paint(t); }
     const title = (doc.title || '').trim().slice(0, 200) || host(t.url);
     if (title !== t.title) {
@@ -392,7 +463,14 @@
   function classify(msg) {
     const m = String(msg);
     let kind = 'site', h = 'This page couldn\'t be opened', p = 'The proxy couldn\'t load this page. Some websites block proxies or don\'t work well through one.', icon = '😕';
-    if (/websocket|wisp|ws:\/\/|wss:\/\/|bare-mux|no bare clients|MessagePort|transport/i.test(m) || (/failed to fetch|network/i.test(m) && !/dns|resolve/i.test(m))) {
+    if (/BlockedAddress|Throttled/i.test(m)) {
+      kind = 'blocked'; icon = '🚧'; h = 'This proxy server won\'t open this site';
+      p = 'Some free proxy servers block big sites (like YouTube) or limit how much you can use them.';
+    } else if (/ServerStreamUnreachable|ServerStreamConnectionRefused|ServerStreamInvalidInfo/i.test(m)) {
+      icon = '🔎'; h = 'This site can\'t be reached'; p = 'The proxy server couldn\'t connect to this website. Check the address for typos, or try again later.';
+    } else if (/ServerStreamConnectionTimedOut|ServerStreamTimedOut/i.test(m)) {
+      icon = '⏳'; h = 'The page took too long'; p = 'The website didn\'t answer the proxy server in time. Try again in a moment.';
+    } else if (/websocket|wisp|ws:\/\/|wss:\/\/|bare-mux|no bare clients|MessagePort|transport/i.test(m) || (/failed to fetch|network/i.test(m) && !/dns|resolve/i.test(m))) {
       kind = 'proxy'; icon = '📡'; h = 'The proxy server stopped answering';
       p = 'The free proxy server this page went through isn\'t working right now. Try another server, or try again in a moment.';
     } else if (/dns|resolve|getaddrinfo|ENOTFOUND|not found|NXDOMAIN|invalid url|hostname/i.test(m)) {
@@ -503,6 +581,9 @@
       $('#err-trace').textContent = err.msg || '';
       $('#err-retry').hidden = err.kind === 'support';
       $('#err-next').hidden = err.kind === 'support' || prefs.server !== 'auto' || (err.kind === 'proxy' && !server.ok);
+      const other = prefs.core === 'sj' ? 'uv' : 'sj';
+      $('#err-core').hidden = err.kind === 'support' || err.kind === 'proxy' || err.kind === 'blocked' || !t.url;
+      $('#err-core').textContent = '🧪 Try with ' + CORES[other];
       $('#err-settings').hidden = err.kind === 'support';
     }
     document.title = (ntp ? 'New tab' : t.title || host(t.url)) + ' · Browser';
@@ -623,6 +704,11 @@
         ${SERVERS.map(s => radio(s.url, s.name, s.url, 'small')).join('')}
         ${radio('custom', 'My own server', 'Run your own with wisp-js or wisp-server-python')}
         <p style="margin-top:8px">If none of them work, your network (for example at school or work) may block proxy servers.</p>
+        <h3>Proxy engine</h3>
+        <select id="core" aria-label="Proxy engine">
+          <option value="sj" ${prefs.core === 'sj' ? 'selected' : ''}>Scramjet (best for YouTube and big sites)</option>
+          <option value="uv" ${prefs.core === 'uv' ? 'selected' : ''}>Ultraviolet (older; try it if a site breaks)</option>
+        </select>
         <h3>Search engine</h3>
         <select id="engine" aria-label="Search engine">${Object.entries(ENGINES).map(([k, v]) => `<option value="${k}" ${prefs.engine === k ? 'selected' : ''}>${esc(v[0])}</option>`).join('')}</select>
         <h3>When you come back</h3>
@@ -635,7 +721,7 @@
           <kbd>Alt+L</kbd><span>Go to the address bar</span><kbd>Alt+R</kbd><span>Reload</span><kbd>Alt+←</kbd><span>Back</span><kbd>Alt+→</kbd><span>Forward</span>
           <kbd>Alt+1…9</kbd><span>Switch tabs</span><kbd>Alt+H</kbd><span>History</span><kbd>Alt+D</kbd><span>Bookmark this page</span></div>
         <h3>How it works</h3>
-        <p>🛡️ The Browser runs a proxy right in this page (<a href="https://github.com/titaniumnetwork-dev/Ultraviolet" target="_blank" rel="noopener">Ultraviolet</a>). It sends each page through an encrypted tunnel to a Wisp proxy server, which fetches it from the website. Websites see the proxy server, not you. Secure (https) pages are encrypted all the way, so the proxy server can't read them.</p>
+        <p>🛡️ The Browser runs a proxy right in this page (<a href="https://github.com/MercuryWorkshop/scramjet" target="_blank" rel="noopener">Scramjet</a>, or <a href="https://github.com/titaniumnetwork-dev/Ultraviolet" target="_blank" rel="noopener">Ultraviolet</a>). It sends each page through an encrypted tunnel to a Wisp proxy server, which fetches it from the website. Websites see the proxy server, not you. Secure (https) pages are encrypted all the way, so the proxy server can't read them.</p>
         <p>⚠️ Some sites (especially ones you log in to, or video sites) may not work perfectly through a proxy. Never type passwords for important accounts into a proxy you don't trust.</p>`;
       drawNow();
     }
@@ -666,9 +752,16 @@
   }
   function closeSheet() { $('#sheet').hidden = true; $('#scrim').hidden = true; }
   async function clearSites() {
+    const site = k => k.startsWith('__uv$') || /^(localhost|[a-z0-9-]+(\.[a-z0-9-]+)+)(:\d+)?@/i.test(k);   // websites' saved data (both engines)
     try {
-      for (const k of Object.keys(localStorage)) if (k.startsWith('__uv$')) localStorage.removeItem(k);
-      for (const k of Object.keys(sessionStorage)) if (k.startsWith('__uv$')) sessionStorage.removeItem(k);
+      for (const k of Object.keys(localStorage)) if (site(k)) localStorage.removeItem(k);
+      for (const k of Object.keys(sessionStorage)) if (site(k)) sessionStorage.removeItem(k);
+    } catch (e) {}
+    try { if (swReg && swReg.active) swReg.active.postMessage({ browser: 'clear-cookies' }); } catch (e) {}
+    try {
+      const db = await new Promise((res, rej) => { const r = indexedDB.open('$scramjet'); r.onsuccess = () => res(r.result); r.onerror = rej; });
+      if (db.objectStoreNames.contains('cookies')) await new Promise(res => { const tx = db.transaction('cookies', 'readwrite'); tx.objectStore('cookies').clear(); tx.oncomplete = tx.onerror = res; });
+      db.close();
     } catch (e) {}
     try {
       indexedDB.deleteDatabase('__op');
@@ -824,6 +917,7 @@
     $('#err-retry').onclick = () => retry();
     $('#err-settings').onclick = () => openSheet('settings');
     $('#err-next').onclick = () => nextServer(active);
+    $('#err-core').onclick = () => useCore(prefs.core === 'sj' ? 'uv' : 'sj');
     $('#err-direct').onclick = () => act('direct');
 
     // side sheet
@@ -872,6 +966,8 @@
         el.value = v; prefs.custom = v; prefs.server = 'custom'; save('prefs', prefs);
         const r = document.querySelector('input[name=srv][value=custom]'); if (r) r.checked = true;
         if (v) { await reconnect(); drawNow(); toast(server.ok ? '✅ Connected to your server' : '⚠️ Your server didn\'t answer'); }
+      } else if (el.id === 'core') {
+        useCore(el.value);
       } else if (el.id === 'engine') { prefs.engine = el.value; save('prefs', prefs); renderNtp(); toast('Search engine: ' + ENGINES[el.value][0]); }
       else if (el.id === 'restore') { prefs.restore = el.checked; save('prefs', prefs); }
     });
@@ -881,6 +977,14 @@
     // keep the address, title and icon up to date (pages can change them at any time)
     setInterval(() => { tabs.forEach(t => { if (t.frame && (t === active || t.loading || t.expect)) { sync(t); hook(t); } }); renderBar(); }, 400);
     addEventListener('pagehide', saveTabs);
+  }
+  // Switch proxy engines (Settings, or the button on the error screen) and reopen the page with it
+  function useCore(core) {
+    if (!CORES[core] || core === prefs.core) return;
+    prefs.core = core; save('prefs', prefs);
+    toast('🧪 Now using ' + CORES[core] + ' (you can change this in Settings)');
+    const sel = document.getElementById('core'); if (sel) sel.value = core;
+    if (active && active.url) go(active, active.url, true);
   }
   function removeLink(kind, u) {
     if (kind === 'bm') { bookmarks = bookmarks.filter(b => b.u !== u); save('bookmarks', bookmarks); }
