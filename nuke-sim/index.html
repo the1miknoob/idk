@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Nuke Sim · Mikaeel</title>
+  <meta name="description" content="A sober, educational simulation of a nuclear war on a world map: missile arcs, damage rings and a rough casualty estimate, plus a build-your-own mode for a single bomb.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☢️</text></svg>">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    /* ---------- Colors and sizes (the effect colors match render.js and custom.js) ---------- */
+    :root {
+      --bg: #040506;
+      --glass: rgba(9, 11, 15, .78);
+      --glass-2: rgba(16, 19, 25, .86);
+      --line: rgba(255, 255, 255, .09);
+      --line-2: rgba(255, 255, 255, .2);
+      --text: #ecebe7;
+      --muted: #8d929b;
+      --dim: #5d626b;
+      --accent: #ffb547;            /* warm amber for "on" states */
+      --red: #ff4d3d;
+      --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --bar-h: 54px;
+      --panel-w: 340px;
+      --gap: 12px;
+      --panel-space: calc(var(--panel-w) + var(--gap) * 2);   /* how much of the right side the panel covers */
+      --safe-b: env(safe-area-inset-bottom, 0px);
+    }
+    body.panel-closed { --panel-space: 0px; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      background: var(--bg); color: var(--text); overflow: hidden;
+      font-family: "Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 14px;
+      -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
+    }
+    a { color: inherit; }
+    button, select { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    svg { display: block; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* ---------- The map fills the whole screen ---------- */
+    #map { position: fixed; inset: 0; z-index: 0; background: #05080c; }
+    .vignette {
+      position: fixed; inset: 0; z-index: 1; pointer-events: none;
+      background: radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(0, 0, 0, .55) 100%);
+    }
+    .leaflet-container { background: #05080c; font-family: inherit; }
+    .leaflet-control-attribution { background: rgba(4, 5, 7, .72) !important; color: var(--dim) !important; font-size: 10px; }
+    .leaflet-control-attribution a { color: var(--muted) !important; }
+    .leaflet-bar { border: 1px solid var(--line) !important; box-shadow: 0 6px 18px rgba(0, 0, 0, .4) !important; }
+    .leaflet-bar a { background: var(--glass-2); color: var(--text); border-bottom-color: var(--line); }
+    .leaflet-bar a:hover { background: #1b2028; color: #fff; }
+    .leaflet-bar a.leaflet-disabled { background: var(--glass); color: var(--dim); }
+    .leaflet-right { right: var(--panel-space); transition: right .3s ease; }
+    .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--glass-2); color: var(--text); border: 1px solid var(--line-2); }
+    .leaflet-popup-content-wrapper { border-radius: 10px; }
+    .leaflet-tooltip { background: var(--glass-2); color: var(--text); border: 1px solid var(--line-2); box-shadow: none; }
+    .tiles-fallback { filter: brightness(.55) saturate(.7); }
+
+    /* ---------- Top bar ---------- */
+    .bar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 30; height: var(--bar-h);
+      display: flex; align-items: center; gap: 10px; padding: 0 14px;
+      background: linear-gradient(180deg, rgba(4, 5, 7, .92), rgba(4, 5, 7, .72));
+      border-bottom: 1px solid var(--line); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    }
+    .back { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); text-decoration: none; font-size: 13px; white-space: nowrap; padding: 6px 4px; }
+    .back:hover { color: var(--text); }
+    .brand { font-weight: 700; letter-spacing: .14em; text-transform: uppercase; font-size: 14px; white-space: nowrap; padding-right: 6px; }
+    .brand b { color: var(--accent); font-weight: 700; }
+    .bar-main { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .bar-more { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+    .ctl {
+      height: 34px; border-radius: 8px; border: 1px solid var(--line); background: rgba(255, 255, 255, .04);
+      padding: 0 11px; display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; font-size: 13px;
+      transition: border-color .15s, background .15s;
+    }
+    .ctl:hover { border-color: var(--line-2); background: rgba(255, 255, 255, .07); }
+    select.ctl {
+      appearance: none; -webkit-appearance: none; padding-right: 28px; cursor: pointer;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238d929b' stroke-width='1.6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 10px center;
+    }
+    select.ctl option { background: #101318; color: var(--text); }
+    #scenario { width: 230px; max-width: 100%; font-weight: 500; }
+    .ctl svg { width: 15px; height: 15px; fill: currentColor; flex: none; }
+    .icon-btn { width: 34px; padding: 0; justify-content: center; }
+    .btn-play { min-width: 92px; justify-content: center; font-weight: 600; border-color: rgba(255, 181, 71, .45); color: #ffd69a; background: rgba(255, 181, 71, .1); }
+    .btn-play:hover { border-color: var(--accent); background: rgba(255, 181, 71, .16); }
+    .btn-play .i-pause, .btn-play .i-replay { display: none; }
+    body.running .btn-play .i-play { display: none; }
+    body.running .btn-play .i-pause { display: block; }
+    body.ended .btn-play .i-play { display: none; }
+    body.ended .btn-play .i-replay { display: block; }
+    body.waiting .btn-play { animation: invite 1.8s ease-in-out infinite; }
+    @keyframes invite { 50% { box-shadow: 0 0 0 4px rgba(255, 181, 71, .16), 0 0 18px rgba(255, 181, 71, .25); } }
+    .btn-text { display: none; }
+    .seg { display: inline-flex; margin-left: auto; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; height: 34px; flex: none; }
+    .seg button { border: 0; background: none; padding: 0 12px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+    .seg button + button { border-left: 1px solid var(--line); }
+    .seg button:hover { color: var(--text); }
+    .seg button[aria-pressed="true"] { background: rgba(255, 255, 255, .1); color: var(--text); font-weight: 600; }
+    .seg .short { display: none; }
+    .menu-btn { display: none; }
+
+    /* ---------- Heads-up display over the map (phase card, clock, counter) ---------- */
+    .hud { position: fixed; top: var(--bar-h); left: 0; bottom: 0; right: var(--panel-space); z-index: 10; pointer-events: none; transition: right .3s ease; }
+    .phase {
+      position: absolute; top: var(--gap); left: var(--gap); width: 340px; max-width: calc(100% - 24px);
+      padding: 13px 16px 14px; border-radius: 12px; background: var(--glass); border: 1px solid var(--line);
+      -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); box-shadow: 0 10px 30px rgba(0, 0, 0, .35);
+      transition: opacity .35s ease, transform .35s ease;
+    }
+    .phase.fade { opacity: 0; transform: translateY(-4px); }
+    .phase-kicker { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin-bottom: 5px; }
+    #phase-title { font-size: 17px; font-weight: 700; line-height: 1.25; margin-bottom: 5px; }
+    #phase-text { font-size: 13px; line-height: 1.5; color: #c5c7cb; }
+    .phase.end #phase-title { color: #fff; }
+    .phase.end .phase-kicker { color: var(--red); }
+    .clock-wrap { position: absolute; top: var(--gap); left: 50%; transform: translateX(-50%); text-align: center; }
+    #clock {
+      font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 24px; font-weight: 500; letter-spacing: .06em;
+      padding: 6px 16px; border-radius: 10px; background: rgba(0, 0, 0, .62); border: 1px solid var(--line); color: #f4f3ef;
+      text-shadow: 0 0 12px rgba(255, 255, 255, .15);
+    }
+    .clock-sub { margin-top: 5px; font-family: var(--mono); font-size: 11px; letter-spacing: .08em; color: var(--muted); text-shadow: 0 1px 3px #000; }
+    .counter {
+      position: absolute; left: 50%; bottom: calc(26px + var(--safe-b)); transform: translateX(-50%); text-align: center;
+      padding: 12px 22px 11px; border-radius: 6px; background: rgba(2, 2, 3, .86); border: 1px solid rgba(255, 255, 255, .14);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, .55); white-space: nowrap; max-width: calc(100% - 24px);
+    }
+    #fatalities { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 27px; font-weight: 500; color: #fff; letter-spacing: .01em; }
+    #injuries { margin-top: 3px; font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted); }
+    .counter.bump #fatalities { animation: bump .5s ease-out; }
+    @keyframes bump { 0% { text-shadow: 0 0 18px rgba(255, 120, 60, .9); } 100% { text-shadow: none; } }
+
+    /* ---------- Side panel (a bottom sheet on phones) ---------- */
+    .panel {
+      position: fixed; z-index: 20; top: calc(var(--bar-h) + var(--gap)); right: var(--gap); bottom: var(--gap); width: var(--panel-w);
+      background: var(--glass); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 16px 40px rgba(0, 0, 0, .45);
+      -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); display: flex; flex-direction: column;
+      transition: transform .3s ease;
+    }
+    body.panel-closed .panel { transform: translateX(calc(100% + var(--gap))); }
+    .panel-tab {
+      position: absolute; left: -31px; top: 14px; width: 30px; height: 44px; border-radius: 8px 0 0 8px;
+      background: var(--glass-2); border: 1px solid var(--line); border-right: 0; color: var(--muted); display: grid; place-items: center;
+    }
+    .panel-tab:hover { color: var(--text); }
+    .panel-tab svg { width: 14px; height: 14px; transition: transform .3s ease; }
+    body.panel-closed .panel-tab svg { transform: rotate(180deg); }
+    .sheet-head { display: none; }
+    .panel-body { overflow-y: auto; overscroll-behavior: contain; padding: 4px 16px 16px; scrollbar-width: thin; scrollbar-color: #2a2f37 transparent; flex: 1; min-height: 0; }
+    .p-sec { padding: 14px 0; border-bottom: 1px solid var(--line); }
+    .p-sec:last-child { border-bottom: 0; }
+    .p-kicker { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-bottom: 9px; display: flex; justify-content: space-between; gap: 8px; }
+    #scenario-name { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+    #scenario-blurb { color: #c5c7cb; font-size: 13px; line-height: 1.5; }
+    #sec-custom { display: none; }
+    body.mode-custom #sec-custom { display: block; }
+    body.mode-custom #sec-about { display: none; }
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .stat { background: rgba(255, 255, 255, .035); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; }
+    .stat span { display: block; font-size: 11px; color: var(--muted); }
+    .stat b { display: block; font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 18px; font-weight: 500; margin-top: 2px; }
+    #by-country { display: grid; gap: 8px; }
+    .bc-row { font-size: 12.5px; }
+    .bc-top { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+    .bc-top b { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 500; }
+    .bc-bar { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, .06); overflow: hidden; }
+    .bc-bar i { display: block; height: 100%; border-radius: 2px; transition: width .4s ease; }
+    .empty { color: var(--dim); font-size: 12.5px; }
+    #log { list-style: none; display: grid; gap: 1px; font-family: var(--mono); font-size: 11.5px; line-height: 1.45; max-height: 300px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #2a2f37 transparent; }
+    #log li { padding: 5px 6px; border-radius: 6px; color: #c9cbcf; }
+    #log li.new { animation: flashrow 1.4s ease-out; }
+    @keyframes flashrow { from { background: rgba(255, 160, 80, .2); } to { background: transparent; } }
+    #log .lt { color: var(--muted); }
+    #log .ld { color: #ff8f80; }
+    #log .lg { display: block; color: var(--muted); font-size: 11px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #legend { list-style: none; display: grid; gap: 9px; }
+    #legend li { display: grid; grid-template-columns: 18px 1fr; gap: 9px; align-items: start; font-size: 12.5px; line-height: 1.4; }
+    #legend b { font-weight: 600; display: block; }
+    #legend span { color: var(--muted); font-size: 12px; }
+    .sw { width: 16px; height: 16px; border-radius: 50%; margin-top: 1px; border: 2px solid var(--c); background: color-mix(in srgb, var(--c) 28%, transparent); box-shadow: 0 0 8px color-mix(in srgb, var(--c) 55%, transparent); }
+    .sw.fill { background: var(--c); }
+    .sw.plume { border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; width: 18px; height: 11px; margin-top: 3px; transform: rotate(-12deg); }
+    .p-note { color: var(--dim); font-size: 11.5px; line-height: 1.5; padding-top: 12px; }
+    .p-note button { background: none; border: 0; color: var(--muted); text-decoration: underline; padding: 0; font-size: inherit; }
+    .p-note button:hover { color: var(--text); }
+    .custom-missing { color: var(--muted); font-size: 13px; line-height: 1.5; }
+
+    /* ---------- Intro and Learn overlays ---------- */
+    .overlay {
+      position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 20px;
+      background: rgba(2, 3, 4, .72); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+      animation: fadein .35s ease;
+    }
+    .overlay[hidden] { display: none; }
+    .overlay.closing { opacity: 0; transition: opacity .3s ease; }
+    @keyframes fadein { from { opacity: 0; } }
+    .card {
+      position: relative; width: min(620px, 100%); max-height: calc(100vh - 40px); max-height: calc(100dvh - 40px); overflow-y: auto;
+      background: #0b0d11; border: 1px solid var(--line-2); border-radius: 16px; padding: 30px 32px 26px; box-shadow: 0 30px 80px rgba(0, 0, 0, .6);
+      scrollbar-width: thin; scrollbar-color: #2a2f37 transparent;
+    }
+    .card-kicker { font-family: var(--mono); font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+    #intro-title { font-size: clamp(24px, 4.2vw, 32px); line-height: 1.15; letter-spacing: -.01em; margin-bottom: 16px; }
+    #intro-body p { color: #c9cbcf; line-height: 1.6; margin-bottom: 12px; font-size: 15px; }
+    .intro-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+    .btn-primary, .btn-ghost { height: 44px; padding: 0 20px; border-radius: 10px; font-weight: 600; font-size: 15px; }
+    .btn-primary { background: #f2efe8; color: #0b0d11; border: 1px solid #f2efe8; }
+    .btn-primary:hover { background: #fff; }
+    .btn-ghost { background: none; color: var(--text); border: 1px solid var(--line-2); }
+    .btn-ghost:hover { border-color: var(--muted); }
+    .fine { margin-top: 16px; color: var(--dim); font-size: 12px; line-height: 1.5; }
+    .learn-card { width: min(760px, 100%); }
+    .learn-card h2 { font-size: 24px; margin-bottom: 4px; }
+    .close {
+      position: sticky; top: 0; float: right; margin: -12px -14px 0 12px; width: 36px; height: 36px; border-radius: 50%;
+      border: 1px solid var(--line-2); background: #13161c; color: var(--muted); display: grid; place-items: center; z-index: 1;
+    }
+    .close:hover { color: var(--text); }
+    .close svg { width: 14px; height: 14px; }
+    .learn-sec { padding: 16px 0; border-bottom: 1px solid var(--line); }
+    .learn-sec h3 { font-size: 16px; margin-bottom: 8px; }
+    .learn-sec p, .learn-sec li { color: #c5c7cb; line-height: 1.6; font-size: 14px; }
+    .learn-sec p + p, .learn-sec ul + p, .learn-sec p + ul { margin-top: 9px; }
+    .learn-sec ul { padding-left: 20px; }
+    .learn-sec li + li { margin-top: 5px; }
+    .learn-sec strong { color: var(--text); }
+    .sources { padding-left: 20px; }
+    .sources li { margin-top: 5px; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+    .sources a { color: #d6d8dc; }
+    .sources a:hover { color: #fff; }
+    .fatal-msg { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; text-align: center; padding: 24px; background: var(--bg); color: var(--text); line-height: 1.6; }
+    .fatal-msg button { margin-top: 14px; }
+
+    /* ---------- Medium screens: tuck the extra controls into a menu ---------- */
+    @media (max-width: 1240px) {
+      .clock-wrap { left: auto; right: var(--gap); transform: none; text-align: right; }
+    }
+    @media (max-width: 1100px) {
+      .back-text { display: none; }
+      .seg .long { display: none; } .seg .short { display: inline; }
+    }
+    @media (max-width: 960px) {
+      :root { --panel-w: 300px; }
+      .bar { gap: 8px; padding: 0 10px; }
+      .bar-main { flex: 1; }
+      #scenario { flex: 1; width: auto; min-width: 0; }
+      .menu-btn { display: inline-flex; }
+      .bar-more {
+        display: none; position: absolute; top: calc(100% + 6px); right: 8px; width: 240px; flex: none;
+        flex-direction: column; align-items: stretch; gap: 8px; padding: 10px; border-radius: 12px;
+        background: rgba(9, 11, 15, .97); border: 1px solid var(--line-2); box-shadow: 0 16px 40px rgba(0, 0, 0, .55);
+      }
+      body.menu-open .bar-more { display: flex; }
+      .bar-more .ctl { width: 100%; justify-content: flex-start; height: 40px; }
+      .bar-more .icon-btn { padding: 0 11px; }
+      .btn-text { display: inline; }
+      .seg { margin-left: 0; height: 40px; }
+      .seg button { flex: 1; }
+      .seg .long { display: inline; } .seg .short { display: none; }
+      .phase { width: 300px; }
+    }
+
+    /* ---------- Phones: compact bar, smaller counter, panel becomes a bottom sheet ---------- */
+    @media (max-width: 640px) {
+      :root { --bar-h: 50px; --gap: 8px; --sheet-head: 50px; }
+      body, body.panel-closed { --panel-space: 0px; }
+      .brand { display: none; }
+      .back { font-size: 18px; padding: 6px 2px; }
+      .btn-play { min-width: 0; width: 40px; padding: 0; }
+      .btn-play .play-text { display: none; }
+      .ctl { height: 36px; }
+      .hud { bottom: calc(var(--sheet-head) + var(--safe-b)); }
+      .clock-wrap { left: 50%; right: auto; transform: translateX(-50%); text-align: center; top: 8px; }
+      #clock { font-size: 17px; padding: 4px 12px; }
+      .clock-sub { font-size: 10px; margin-top: 3px; }
+      .phase { top: 70px; left: 8px; right: 8px; width: auto; max-width: none; padding: 10px 12px; }
+      #phase-title { font-size: 14.5px; margin-bottom: 3px; }
+      #phase-text { font-size: 12px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+      .phase.end #phase-text { -webkit-line-clamp: 6; }
+      .counter { bottom: 30px; padding: 8px 12px 7px; }
+      #fatalities { font-size: clamp(13px, 4.3vw, 17px); }
+      #injuries { font-size: 11px; }
+      .leaflet-control-zoom { display: none; }
+      .leaflet-bottom { bottom: calc(var(--sheet-head) + var(--safe-b)); }
+      .leaflet-control-attribution { font-size: 9px; max-width: 100vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .panel {
+        top: auto; left: 0; right: 0; bottom: 0; width: auto; height: min(68vh, 560px); height: min(68dvh, 560px);
+        border-radius: 16px 16px 0 0; border-bottom: 0; padding-bottom: var(--safe-b);
+        transform: translateY(calc(100% - var(--sheet-head) - var(--safe-b)));
+      }
+      body.sheet-open .panel { transform: none; }
+      body.panel-closed .panel { transform: translateY(calc(100% - var(--sheet-head) - var(--safe-b))); }
+      body.sheet-open.panel-closed .panel { transform: none; }
+      .panel-tab { display: none; }
+      .sheet-head {
+        display: flex; align-items: center; gap: 10px; height: var(--sheet-head); flex: none; width: 100%; padding: 0 16px;
+        background: none; border: 0; border-bottom: 1px solid var(--line); position: relative; text-align: left;
+      }
+      .grip { position: absolute; left: 50%; top: 6px; width: 38px; height: 4px; margin-left: -19px; border-radius: 2px; background: rgba(255, 255, 255, .22); }
+      .sheet-title { font-weight: 700; font-size: 14px; }
+      .sheet-stats { margin-left: auto; font-family: var(--mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .sheet-chev { width: 14px; height: 14px; color: var(--muted); transform: rotate(-90deg); transition: transform .3s ease; flex: none; }
+      body.sheet-open .sheet-chev { transform: rotate(90deg); }
+      .panel-body { padding: 0 14px 14px; }
+      #log { max-height: none; }
+      .card { padding: 24px 20px 20px; border-radius: 14px; }
+      .overlay { padding: 12px; }
+      .close { margin: -8px -6px 0 10px; }
+    }
+    @media (max-width: 380px) {
+      .back { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      body.waiting .btn-play, #log li.new, .counter.bump #fatalities, .overlay { animation: none !important; }
+      .phase, .panel, .hud, .leaflet-right { transition: none !important; }
+    }
+  </style>
+  <meta name="theme-color" content="#040506">
+  <meta property="og:title" content="Nuke Sim · Mikaeel">
+  <meta property="og:description" content="A sober, educational simulation of a nuclear war on a world map, with a rough casualty estimate and a build-your-own mode.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://the1miknoob.github.io/idk/icon-512.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <link rel="apple-touch-icon" href="../apple-touch-icon.png">
+  <script src="../site.js" defer></script>
+</head>
+<body class="waiting">
+  <div id="map" aria-label="World map"></div>
+  <div class="vignette"></div>
+
+  <!-- Top bar -->
+  <header class="bar" id="bar">
+    <a class="back" href="../" title="Back to Mikaeel's site" aria-label="Back to Mikaeel's site"><span aria-hidden="true">←</span><span class="back-text">Mikaeel's site</span></a>
+    <div class="brand">Nuke <b>Sim</b></div>
+    <div class="bar-main">
+      <select id="scenario" class="ctl" aria-label="Scenario" title="Choose a scenario"></select>
+      <button id="play" class="ctl btn-play" type="button" aria-label="Play" title="Play / pause (Space)">
+        <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z"/></svg>
+        <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.5h4.2v15H6zM13.8 4.5H18v15h-4.2z"/></svg>
+        <svg class="i-replay" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5V1.5L7.5 5.8 12 10V7a5.5 5.5 0 1 1-5.5 5.5h-2.5A8 8 0 1 0 12 4.5z"/></svg>
+        <span class="play-text">Play</span>
+      </button>
+    </div>
+    <div class="bar-more" id="bar-more">
+      <select id="speed" class="ctl" aria-label="Simulation speed" title="Simulation speed: sim time per real second"></select>
+      <button id="restart" class="ctl icon-btn" type="button" aria-label="Restart" title="Restart (R)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5V1.5L7.5 5.8 12 10V7a5.5 5.5 0 1 1-5.5 5.5h-2.5A8 8 0 1 0 12 4.5z"/></svg>
+        <span class="btn-text">Restart</span>
+      </button>
+      <div class="seg" role="group" aria-label="Mode">
+        <button id="mode-scenario" type="button" aria-pressed="true">Scenario</button>
+        <button id="mode-custom" type="button" aria-pressed="false"><span class="long">Build your own</span><span class="short">Custom</span></button>
+      </div>
+      <button id="learn" class="ctl" type="button" title="How it works, sources and limits">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 1.8a8.2 8.2 0 1 1 0 16.4 8.2 8.2 0 0 1 0-16.4zM11 10.5h2V17h-2zm0-3.5h2v2h-2z"/></svg>
+        <span>Learn</span>
+      </button>
+    </div>
+    <button id="menu-btn" class="ctl icon-btn menu-btn" type="button" aria-label="More controls" aria-expanded="false" aria-controls="bar-more">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.2h16v1.8H4zm0 5h16V13H4zm0 5h16V18H4z"/></svg>
+    </button>
+  </header>
+
+  <!-- Heads-up display over the map -->
+  <div class="hud" id="hud">
+    <div class="phase" id="phase" aria-live="polite">
+      <div class="phase-kicker" id="phase-kicker">Loading</div>
+      <h2 id="phase-title">Nuke Sim</h2>
+      <p id="phase-text">Getting the map ready…</p>
+    </div>
+    <div class="clock-wrap">
+      <div id="clock" title="Time since the first launch">T+00:00:00</div>
+      <div class="clock-sub" id="clock-sub">Paused</div>
+    </div>
+    <div class="counter" id="counter">
+      <div id="fatalities"><span class="lbl">Estimated fatalities: </span><span id="fatalities-num">0</span></div>
+      <div id="injuries"><span class="lbl">Estimated injuries: </span><span id="injuries-num">0</span></div>
+    </div>
+  </div>
+
+  <!-- Side panel (bottom sheet on phones) -->
+  <aside class="panel" id="panel" aria-label="Details">
+    <button class="panel-tab" id="panel-toggle" type="button" aria-label="Hide the details panel" aria-expanded="true" aria-controls="panel">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <button class="sheet-head" id="sheet-head" type="button" aria-expanded="false" aria-controls="panel-body">
+      <span class="grip" aria-hidden="true"></span>
+      <span class="sheet-title">Details</span>
+      <span class="sheet-stats" id="sheet-stats">0 detonated</span>
+      <svg class="sheet-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <div class="panel-body" id="panel-body">
+      <section class="p-sec" id="sec-about">
+        <div class="p-kicker">Scenario</div>
+        <div id="scenario-name"></div>
+        <p id="scenario-blurb"></p>
+      </section>
+      <section class="p-sec" id="sec-custom">
+        <div class="p-kicker">Build your own</div>
+        <div id="custom-panel"></div>
+      </section>
+      <section class="p-sec">
+        <div class="stats">
+          <div class="stat"><span>Warheads launched</span><b id="stat-launched">0</b></div>
+          <div class="stat"><span>In flight</span><b id="stat-flight">0</b></div>
+          <div class="stat"><span>Detonated</span><b id="stat-detonated">0</b></div>
+          <div class="stat"><span>Total yield</span><b id="stat-yield">0 kt</b></div>
+        </div>
+      </section>
+      <section class="p-sec">
+        <div class="p-kicker"><span>Fatalities by country</span></div>
+        <div id="by-country"><p class="empty">No detonations yet.</p></div>
+      </section>
+      <section class="p-sec">
+        <div class="p-kicker"><span>Detonations</span><span id="log-count"></span></div>
+        <ol id="log" aria-live="off"></ol>
+        <p class="empty" id="log-empty">Nothing has detonated yet.</p>
+      </section>
+      <section class="p-sec">
+        <div class="p-kicker">What the colors mean</div>
+        <ul id="legend"></ul>
+      </section>
+      <p class="p-note"><span id="disclaimer"></span> <button type="button" id="note-learn">How the numbers are made</button></p>
+    </div>
+  </aside>
+
+  <!-- First-visit intro -->
+  <div class="overlay" id="intro" role="dialog" aria-modal="true" aria-labelledby="intro-title" hidden>
+    <div class="card">
+      <div class="card-kicker">Nuke Sim</div>
+      <h1 id="intro-title"></h1>
+      <div id="intro-body"></div>
+      <div class="intro-actions">
+        <button id="intro-start" class="btn-primary" type="button">Start</button>
+        <button id="intro-learn" class="btn-ghost" type="button">How it works</button>
+      </div>
+      <p class="fine" id="intro-fine"></p>
+    </div>
+  </div>
+
+  <!-- Learn more -->
+  <div class="overlay" id="learn-panel" role="dialog" aria-modal="true" aria-labelledby="learn-title" hidden>
+    <div class="card learn-card">
+      <button class="close" id="learn-close" type="button" aria-label="Close">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+      </button>
+      <div class="card-kicker">Learn</div>
+      <h2 id="learn-title">How this works</h2>
+      <div id="learn-body"></div>
+      <div class="learn-sec">
+        <h3>Sources and further reading</h3>
+        <ul class="sources" id="learn-sources"></ul>
+      </div>
+      <p class="fine" id="learn-disclaimer"></p>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+  <script src="data/cities.js"></script>
+  <script src="data/targets.js"></script>
+  <script src="content.js"></script>
+  <script src="effects.js"></script>
+  <script src="scenarios.js"></script>
+  <script src="maplayer.js"></script>
+  <script src="render.js"></script>
+  <script src="custom.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
