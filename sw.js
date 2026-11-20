@@ -8,7 +8,7 @@ const PAGES = ['', '404.html', 'site.js', 'home.js', 'home.css', 'manifest.webma
   'games/night-swarm/', 'games/sky-hop/', 'games/snake/', 'games/2048/', 'games/reaction-lab/', 'games/chess/',
   'study/', 'study/brain.js', 'study/practice.js', 'study/study.js', 'browser/', 'browser/browser.js',
   'nuke-sim/', 'nuke-sim/data/cities.js', 'nuke-sim/data/targets.js', 'nuke-sim/content.js', 'nuke-sim/effects.js', 'nuke-sim/scenarios.js',
-  'nuke-sim/globe.js', 'nuke-sim/render.js', 'nuke-sim/camera.js', 'nuke-sim/custom.js', 'nuke-sim/app.js', 'nuke-sim/lib/globe-three.min.js'];
+  'nuke-sim/maplayer.js', 'nuke-sim/render.js', 'nuke-sim/camera.js', 'nuke-sim/custom.js', 'nuke-sim/app.js'];
 // Libraries and fonts from these sites never change for a given address, so a saved copy is fine
 const CDN = /^https:\/\/(cdn\.jsdelivr\.net|fonts\.googleapis\.com|fonts\.gstatic\.com|cdnjs\.cloudflare\.com)\//;
 

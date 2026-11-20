@@ -1,4 +1,4 @@
-// Nuke Sim: the controller. It builds the page from the other modules (scenarios, the 3D globe, renderer, camera,
+// Nuke Sim: the controller. It builds the page from the other modules (scenarios, map layers, renderer,
 // casualty model, build-your-own mode and the text in content.js), runs the simulation clock and keeps
 // the counters, the phase card, the side panel and the event log up to date.
 // Every module is optional: if one fails to load, the page still opens and simply does less.
@@ -18,10 +18,10 @@
   const GROUP_OVER = 3;         // more detonations than this at once are shown as one grouped log line
   const LOG_FLUSH_MS = 350;     // new detonations are collected for this long (real time) before they go in the log
   const TOP_COUNTRIES = 8;      // rows in "Fatalities by country"
-  const MIN_ALT = 0.02;         // how close (camera height in Earth radii) you can zoom in while watching a scenario
-  const MIN_ALT_CUSTOM = 0.0025;// …and in build-your-own mode, so the rings of small bombs are big enough to see
-  const IDLE_MS = 2600;         // while playing, the controls fade away after this long without the mouse moving
+  const MAX_ZOOM = 8;           // how far you can zoom in while watching a scenario
+  const MAX_ZOOM_CUSTOM = 12;   // …and in build-your-own mode, so the rings of small bombs are big enough to see
   const MAX_FRAME_S = 0.25;     // a long pause between frames (a hidden tab) never jumps the clock more than this
+  const IDLE_MS = 2600;         // while playing, the controls fade away after this long without the mouse moving
   const STORE = { intro: 'nuke-intro-seen', speed: 'nuke-speed', panel: 'nuke-panel-v2' };
 
   // The effect colors every module shares (see SPEC: renderer, custom rings and legend use the same ones)
@@ -92,35 +92,52 @@
   const countryName = cc => (NS.COUNTRIES && NS.COUNTRIES[cc]) || cc || 'Unknown';
   const detAt = s => (+s.launchAt || 0) + (+s.flight || 0);   // when a strike detonates (sim seconds)
 
-  // ---------------------------------------------------------------- the 3D globe library is required
+  // ---------------------------------------------------------------- the map library is required
 
-  function fatal(msg) {
+  if (typeof root.L === 'undefined') {
     const box = document.createElement('div');
     box.className = 'fatal-msg';
-    box.innerHTML = '<div>' + msg + '<br><button class="btn-ghost" type="button" onclick="location.reload()">Try again</button></div>';
+    box.innerHTML = '<div><b>The map could not load.</b><br>Nuke Sim needs an internet connection the first time it opens.<br>' +
+      '<button class="btn-ghost" type="button" onclick="location.reload()">Try again</button></div>';
     body.appendChild(box);
-  }
-  if (typeof root.Globe === 'undefined' || typeof root.THREE === 'undefined' || !NS.GlobeView) {
-    fatal('<b>The globe could not load.</b><br>Nuke Sim needs an internet connection the first time it opens.');
     return;
   }
+  const L = root.L;
   const CONTENT = Object.assign({}, FALLBACK_CONTENT, NS.CONTENT || {});
 
-  // ---------------------------------------------------------------- the globe and the modules
+  // ---------------------------------------------------------------- the map and the modules
 
-  let view = null;
-  try {
-    view = NS.GlobeView.create($('map'), { preserveDrawingBuffer: /[?&]shots\b/.test(location.search) });
-  } catch (e) {
-    console.warn('[Nuke Sim] globe failed:', e);
-    fatal('<b>Your browser could not draw the 3D globe.</b><br>Nuke Sim needs WebGL. Try another browser, or turn on hardware acceleration.');
-    return;
+  const map = L.map('map', {
+    zoomControl: false, worldCopyJump: true, minZoom: 2, maxZoom: MAX_ZOOM, keyboard: false,   // arrow keys seek the clock instead
+    zoomSnap: 0.5, zoomDelta: 0.5, wheelPxPerZoomLevel: 90, attributionControl: true
+  });
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
+  map.setView([35, 20], 2, { animate: false });
+
+  let maplayer = null;
+  if (NS.MapLayers && NS.MapLayers.init) maplayer = safe('MapLayers.init', () => NS.MapLayers.init(map), null);
+  if (!maplayer) {
+    // No map layer module: plain darkened satellite tiles so there is still a world to look at
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxNativeZoom: 8, maxZoom: MAX_ZOOM_CUSTOM, className: 'tiles-fallback', attribution: 'Imagery &copy; Esri, Maxar, Earthstar Geographics'
+    }).addTo(map);
   }
-  view.controls.minDistance = view.R * (1 + MIN_ALT);
+  // Credit the data: maplayer.js credits Esri and Natural Earth itself (the borders, once they load); we add the city data
+  safe('attribution', () => {
+    map.attributionControl.addAttribution('Cities: <a href="https://www.geonames.org/" target="_blank" rel="noopener">GeoNames</a>');
+  });
 
   const NOOP_RENDERER = { setStrikes() {}, addStrike() {}, setSites() {}, setCityDots() {}, setAircraft() {}, detonate() {}, frame() {}, reset() {}, options: {} };
-  const renderer = (NS.Renderer && safe('Renderer', () => new NS.Renderer(view), null)) || NOOP_RENDERER;
-  const director = NS.AutoCamera ? safe('AutoCamera', () => new NS.AutoCamera(view), null) : null;
+  const renderer = (NS.Renderer && safe('Renderer', () => new NS.Renderer(map), null)) || NOOP_RENDERER;
+  if (!renderer.setCityDots) renderer.setCityDots = () => {};
+  if (!renderer.setAircraft) renderer.setAircraft = () => {};
+
+  // The automatic camera follows the action like the videos (camera.js). It moves the map through this little
+  // adapter; dragging, scrolling or pinching the map hands the camera back to you.
+  const director = NS.AutoCamera ? safe('AutoCamera', () => new NS.AutoCamera({
+    flyTo(v, ms) { flyToView({ lat: v.lat, lon: v.lon, zoom: v.zoom }, !(ms > 0), ms); },
+    onUserMove(cb) { ['pointerdown', 'wheel', 'touchstart'].forEach(ev => map.getContainer().addEventListener(ev, () => cb(), { passive: true })); }
+  }), null) : null;
 
   const NO_RESULT = { deaths: 0, injuries: 0, place: '', cc: '', cities: [] };
   const casualties = (NS.Casualties && safe('Casualties', () => new NS.Casualties(NS.CITIES || []), null)) || (function () {
@@ -286,15 +303,17 @@
     ns = normalizeScenario(built, id);
     scenarioId = id || ns.id;
     if ($('scenario').value !== scenarioId) $('scenario').value = scenarioId;
-    safe('view.setSides', () => view.setSides(ns.sides || null));
-    safe('view.setLabels', () => view.setLabels(ns.labels));
+    if (maplayer) {
+      safe('maplayer.setSides', () => maplayer.setSides(ns.sides || null));
+      safe('maplayer.setLabels', () => maplayer.setLabels(ns.labels));
+    }
     safe('renderer.setSites', () => renderer.setSites(ns.sites));
     safe('renderer.setCityDots', () => renderer.setCityDots(sideCountries(ns)));
     safe('renderer.setAircraft', () => renderer.setAircraft(planAircraft(ns)));
     useStrikes(ns.strikes);
     phases = ns.phases;
     running = false;
-    if (director) safe('camera.plan', () => director.plan(ns, { altMul: innerWidth <= 640 ? 1.45 : 1 }));
+    if (director) safe('camera.plan', () => director.plan(ns, { width: Math.max(320, innerWidth - (body.classList.contains('panel-closed') ? 0 : 380)) }));
     resetTo(clamp(+opts.t || 0, 0, ns.end));
     if (!opts.keepView) flyToView(ns.view, opts.instant);
     const meta = SCENARIOS.find(s => s.id === scenarioId) || {};
@@ -308,13 +327,6 @@
     updatePlayUi();
   }
 
-  // Flies the camera to a scenario's view (scenarios give a flat-map zoom level: 2 = the world, 8 = a city)
-  function flyToView(v, instant) {
-    if (!v || !isFinite(v.lat) || !isFinite(v.lon)) return;
-    const alt = NS.GlobeView.altFromZoom(v.zoom) * (innerWidth <= 640 ? 1.45 : 1);
-    view.flyTo({ lat: v.lat, lon: v.lon, alt, tilt: isFinite(v.tilt) ? v.tilt : (alt < 1 ? 24 : 12) }, instant ? 0 : 1600);
-  }
-
   // Every country on either side (for the little city dots)
   function sideCountries(sc) {
     const sd = sc && sc.sides;
@@ -323,7 +335,7 @@
   }
 
   // When the first enemy missile is launched, bombers and command planes take off from their bases and fly away
-  // to survive (the white planes in the videos). Purely a picture: they don't change any numbers.
+  // to survive (the white planes in the videos). Only a picture: they don't change any numbers.
   function planAircraft(sc) {
     const out = [];
     if (!sc || !sc.sides || !Array.isArray(NS.TARGETS) || !sc.strikes.length) return out;
@@ -347,6 +359,21 @@
     return out;
   }
 
+  // Flies the camera to a scenario's view, keeping the target clear of the side panel
+  function flyToView(v, instant, ms) {
+    if (!v || !isFinite(v.lat) || !isFinite(v.lon)) return;
+    const phone = innerWidth <= 640;
+    const zoom = clamp((+v.zoom || 2) - (phone ? 1 : 0), map.getMinZoom(), map.getMaxZoom());
+    let center = L.latLng(v.lat, v.lon);
+    const panelOpen = !phone && !body.classList.contains('panel-closed');
+    if (panelOpen) {
+      const shift = ($('panel').offsetWidth + 24) / 2;
+      center = map.unproject(map.project(center, zoom).add([shift, 0]), zoom);
+    }
+    if (instant) map.setView(center, zoom, { animate: false });
+    else map.flyTo(center, zoom, { duration: (ms || 1400) / 1000 });
+  }
+
   // ---------------------------------------------------------------- build-your-own mode
 
   function setMode(m) {
@@ -358,14 +385,16 @@
       mode = 'custom';
       ended = false;
       body.classList.add('mode-custom');
-      view.controls.minDistance = view.R * (1 + MIN_ALT_CUSTOM);
-      if (director) director.setEnabled(false);
-      safe('view.setSides', () => view.setSides(null));
-      safe('view.setLabels', () => view.setLabels([]));
+      map.setMaxZoom(MAX_ZOOM_CUSTOM);
+      if (maplayer) {
+        safe('maplayer.setSides', () => maplayer.setSides(null));
+        safe('maplayer.setLabels', () => maplayer.setLabels([]));
+      }
       safe('renderer.setSites', () => renderer.setSites([]));
       safe('renderer.setCityDots', () => renderer.setCityDots([]));
       safe('renderer.setAircraft', () => renderer.setAircraft([]));
-      if (!body.classList.contains('phone')) setPanel(true, true);
+      if (director) director.setEnabled(false);
+      if (innerWidth > 640) setPanel(true, true);
       useStrikes([]);
       phases = [];
       resetTo(0);
@@ -380,9 +409,7 @@
       }
       mode = 'scenario';
       body.classList.remove('mode-custom');
-      view.controls.minDistance = view.R * (1 + MIN_ALT);
-      const v = view.getView();
-      if (v.alt < MIN_ALT) view.flyTo({ lat: v.lat, lon: v.lon, alt: 0.3 }, 900);   // zoom back out if you were closer than that
+      map.setMaxZoom(MAX_ZOOM);   // zooms back out if you were closer than that
       loadScenario(scenarioId, { keepView: true, t: savedScenarioT });
       if (load(STORE.panel) !== 'open') setPanel(false, true);
       if (director) director.setEnabled(true);
@@ -400,7 +427,7 @@
       return null;
     }
     custom = safe('CustomMode', () => new NS.CustomMode({
-      view, renderer, casualties, panel,
+      map, renderer, casualties, panel,
       launch: launchCustom,
       now: () => t,
       onDetonation(cb) {
@@ -683,7 +710,7 @@
     animateCounter(dt);
     updateClock();
     safe('renderer.frame', () => renderer.frame(t));
-    if (director && mode === 'scenario') safe('camera.update', () => director.update(t, false));
+    if (director && mode === 'scenario' && running) safe('camera.update', () => director.update(t, false));
     requestAnimationFrame(loop);
   }
 
@@ -774,21 +801,20 @@
     $('panel-toggle').setAttribute('aria-expanded', String(open));
     $('panel-toggle').setAttribute('aria-label', open ? 'Hide the details panel' : 'Show the details panel');
     if (!dontRemember) save(STORE.panel, open ? 'open' : 'closed');
-    // keep the globe centered in the space the panel leaves free
-    const shift = open && innerWidth > 640 ? -($('panel').offsetWidth + 24) / 2 : 0;
-    safe('globeOffset', () => view.globe.globeOffset([shift, 0]));
   }
 
-  // While playing, the controls fade away so the globe fills the screen like a video; moving the mouse brings them back
+  // While playing, the controls fade away so the map fills the screen like a video; moving the mouse brings them back
   let idleTimer = 0;
   function wake() {
     body.classList.remove('idle');
     clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => { if (running && !body.classList.contains('menu-open') && mode === 'scenario' && !document.querySelector('#bar :focus, #panel :focus')) body.classList.add('idle'); }, IDLE_MS);
+    idleTimer = setTimeout(() => {
+      if (running && mode === 'scenario' && !body.classList.contains('menu-open') && !document.querySelector('#bar :focus, #panel :focus')) body.classList.add('idle');
+    }, IDLE_MS);
   }
   function setCamButton(on) {
     $('cam-btn').setAttribute('aria-pressed', String(!!on));
-    $('cam-btn').title = on ? 'Camera follows the action (click to stop)' : 'Camera is yours: click to follow the action again';
+    $('cam-btn').title = on ? 'The camera follows the action (C to stop)' : 'The camera is yours: click (or press C) to follow the action again';
   }
   function setSheet(open) {
     body.classList.toggle('sheet-open', open);
@@ -829,6 +855,7 @@
     $('cam-btn').addEventListener('click', () => { if (director) director.setEnabled(!director.enabled); });
     if (director) director.onChange(on => { setCamButton(on); if (on && mode === 'scenario') director.update(t, true); });
     setCamButton(!!director);
+    if (!director) $('cam-btn').hidden = true;
     ['pointermove', 'pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(ev => addEventListener(ev, wake, { passive: true }));
     wake();
     $('phase').addEventListener('click', () => $('phase').classList.toggle('open'));   // phones: show the whole phase text
@@ -869,8 +896,7 @@
   fillIntro();
   fillLearn();
   wireUi();
-  body.classList.toggle('phone', innerWidth <= 640);
-  setPanel(load(STORE.panel) === 'open' && innerWidth > 640, true);
+  setPanel(load(STORE.panel) === 'open' && innerWidth > 640, true);   // closed by default: the map fills the screen like the videos
 
   const wanted = safe('url', () => new URLSearchParams(location.search).get('s'), null);
   if (wanted && SCENARIOS.some(s => s.id === wanted)) scenarioId = wanted;
@@ -900,7 +926,7 @@
     get mode() { return mode; },
     setMode,
     get scenario() { return ns; },
-    get view() { return view; },
+    get map() { return map; },
     get camera() { return director; },
     get renderer() { return renderer; }
   };
