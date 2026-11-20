@@ -398,7 +398,9 @@
       const zoomed = map.getZoom() >= LOOK.labelMinZoom;
       labelPane.classList.toggle('ns-lbl-zoomed', zoomed);
       if (!labels.length) return;
-      const size = map.getSize(), cLon = map.getCenter().lng, placed = [];
+      let cLon;
+      try { cLon = map.getCenter().lng; } catch (e) { return; }   // the map has no view yet: wait for its first moveend
+      const size = map.getSize(), placed = [];
       const free = b => !placed.some(o => b.x0 < o.x1 - 1 && b.x1 > o.x0 + 1 && b.y0 < o.y1 - 1 && b.y1 > o.y0 + 1);
       const fit = (p, lb) => SPOTS.find(s => free(textBox(p, lb, s)));
       labels.forEach(lb => {

@@ -18,6 +18,8 @@
   const GROUP_OVER = 3;         // more detonations than this at once are shown as one grouped log line
   const LOG_FLUSH_MS = 350;     // new detonations are collected for this long (real time) before they go in the log
   const TOP_COUNTRIES = 8;      // rows in "Fatalities by country"
+  const MAX_ZOOM = 8;           // how far you can zoom in while watching a scenario
+  const MAX_ZOOM_CUSTOM = 12;   // …and in build-your-own mode, so the rings of small bombs are big enough to see
   const MAX_FRAME_S = 0.25;     // a long pause between frames (a hidden tab) never jumps the clock more than this
   const STORE = { intro: 'nuke-intro-seen', speed: 'nuke-speed', panel: 'nuke-panel' };
 
@@ -105,7 +107,7 @@
   // ---------------------------------------------------------------- the map and the modules
 
   const map = L.map('map', {
-    zoomControl: false, worldCopyJump: true, minZoom: 2, maxZoom: 8, keyboard: false,   // arrow keys seek the clock instead
+    zoomControl: false, worldCopyJump: true, minZoom: 2, maxZoom: MAX_ZOOM, keyboard: false,   // arrow keys seek the clock instead
     zoomSnap: 0.5, zoomDelta: 0.5, wheelPxPerZoomLevel: 90, attributionControl: true
   });
   L.control.zoom({ position: 'bottomright' }).addTo(map);
@@ -116,7 +118,7 @@
   if (!maplayer) {
     // No map layer module: plain darkened satellite tiles so there is still a world to look at
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 8, className: 'tiles-fallback', attribution: 'Imagery &copy; Esri, Maxar, Earthstar Geographics'
+      maxNativeZoom: 8, maxZoom: MAX_ZOOM_CUSTOM, className: 'tiles-fallback', attribution: 'Imagery &copy; Esri, Maxar, Earthstar Geographics'
     }).addTo(map);
   }
   // Credit the data: maplayer.js credits Esri and Natural Earth itself (the borders, once they load); we add the city data
@@ -336,6 +338,7 @@
       mode = 'custom';
       ended = false;
       body.classList.add('mode-custom');
+      map.setMaxZoom(MAX_ZOOM_CUSTOM);
       if (maplayer) {
         safe('maplayer.setSides', () => maplayer.setSides(null));
         safe('maplayer.setLabels', () => maplayer.setLabels([]));
@@ -355,6 +358,7 @@
       }
       mode = 'scenario';
       body.classList.remove('mode-custom');
+      map.setMaxZoom(MAX_ZOOM);   // zooms back out if you were closer than that
       loadScenario(scenarioId, { keepView: true, t: savedScenarioT });
     }
     $('mode-scenario').setAttribute('aria-pressed', String(mode === 'scenario'));
@@ -706,7 +710,6 @@
   function openOverlay(id) {
     lastFocus = document.activeElement;
     $(id).hidden = false;
-    $(id).classList.remove('closing');
     const btn = $(id).querySelector('button');
     if (btn) btn.focus({ preventScroll: true });
   }
@@ -777,6 +780,7 @@
       if (b && e.detail > 0 && !b.closest('.overlay, #custom-panel')) b.blur();
     });
     $('panel-toggle').addEventListener('click', () => setPanel(body.classList.contains('panel-closed')));
+    $('phase').addEventListener('click', () => $('phase').classList.toggle('open'));   // phones: show the whole phase text
     $('sheet-head').addEventListener('click', () => setSheet(!body.classList.contains('sheet-open')));
 
     addEventListener('keydown', e => {

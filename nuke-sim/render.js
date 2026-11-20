@@ -696,15 +696,17 @@
       this._adapt(act.length);
       this.stats.lod = this._lod;
       if (!act.length) return;
-      const segPx = 22 + this._lod * 14;
+      const lod = this._lod, segPx = 22 + Math.max(0, lod - 1) * 14;
       for (const S of act) S.seg = clamp(Math.round((S.len * k + S.h) * T / BANDS / segPx), 1, 8);
-      ctx.globalCompositeOperation = 'lighter';   // light adds up: crowded corridors burn white-hot
+      // Light adds up ('lighter'), so crowded corridors burn white-hot. Software-drawn canvases are much slower
+      // at that, so on a struggling computer the trails switch to normal blending first.
+      ctx.globalCompositeOperation = lod > 0 ? 'source-over' : 'lighter';
       ctx.lineCap = 'butt';
       ctx.lineJoin = 'bevel';
 
       if (trails) {
         // the trail, band by band from the dim orange tail to the yellow head (one batch per band for all missiles)
-        for (let i = Math.min(this._lod, BANDS - 3); i < BANDS; i++) {
+        for (let i = clamp(lod - 1, 0, BANDS - 3); i < BANDS; i++) {
           ctx.lineWidth = BAND_WIDTH[i];
           ctx.strokeStyle = BAND_STYLE[i];
           ctx.beginPath();
@@ -716,6 +718,7 @@
         }
       }
       // soft glow dabs just behind each warhead
+      ctx.globalCompositeOperation = 'lighter';
       if (trails) {
         for (const g of LOOK.glowStamps) {
           const r = g[1];
@@ -743,8 +746,8 @@
     // If frames get slow (< ~30 fps) while lots of missiles fly, draw shorter faint tails; come back when it's fast again
     _adapt(drawn) {
       const t = this._lastFrameAt;
-      if (!LOOK.adaptive) { this._lod = 0; return; }
-      if (this._ema > 34 && drawn > 600 && this._lod < 3 && t - this._lodAt > 600) { this._lod++; this._lodAt = t; }
+      if (!LOOK.adaptive) return;
+      if (this._ema > 34 && drawn > 600 && this._lod < 4 && t - this._lodAt > 600) { this._lod++; this._lodAt = t; }
       else if ((this._ema < 22 || drawn < 300) && this._lod > 0 && t - this._lodAt > 1500) { this._lod--; this._lodAt = t; }
     }
 
