@@ -696,7 +696,7 @@
       this._adapt(act.length);
       this.stats.lod = this._lod;
       if (!act.length) return;
-      const lod = this._lod, segPx = 22 + Math.max(0, lod - 1) * 14;
+      const lod = this._lod, segPx = 22 + Math.max(0, lod - 2) * 14;
       for (const S of act) S.seg = clamp(Math.round((S.len * k + S.h) * T / BANDS / segPx), 1, 8);
       // Light adds up ('lighter'), so crowded corridors burn white-hot. Software-drawn canvases are much slower
       // at that, so on a struggling computer the trails switch to normal blending first.
@@ -706,7 +706,7 @@
 
       if (trails) {
         // the trail, band by band from the dim orange tail to the yellow head (one batch per band for all missiles)
-        for (let i = clamp(lod - 1, 0, BANDS - 3); i < BANDS; i++) {
+        for (let i = clamp(lod - 2, 0, BANDS - 3); i < BANDS; i++) {
           ctx.lineWidth = BAND_WIDTH[i];
           ctx.strokeStyle = BAND_STYLE[i];
           ctx.beginPath();
@@ -719,17 +719,16 @@
       }
       // soft glow dabs just behind each warhead
       ctx.globalCompositeOperation = 'lighter';
-      if (trails) {
-        for (const g of LOOK.glowStamps) {
-          const r = g[1];
-          ctx.globalAlpha = g[2];
-          for (const S of act) {
-            const f = S.p - g[0];
-            if (f < 0 || f > 1) continue;
-            pathPoint(S, f, S.sh, k, ox, oy, S.h);
-            if (OUT.x < -r || OUT.y < -r || OUT.x > W + r || OUT.y > H + r) continue;
-            ctx.drawImage(SPR.spark, OUT.x - r, OUT.y - r, r * 2, r * 2);
-          }
+      const nStamps = !trails ? 0 : lod === 0 ? LOOK.glowStamps.length : lod === 1 ? 1 : 0;
+      for (let si = 0; si < nStamps; si++) {
+        const g = LOOK.glowStamps[si], r = g[1];
+        ctx.globalAlpha = g[2];
+        for (const S of act) {
+          const f = S.p - g[0];
+          if (f < 0 || f > 1) continue;
+          pathPoint(S, f, S.sh, k, ox, oy, S.h);
+          if (OUT.x < -r || OUT.y < -r || OUT.x > W + r || OUT.y > H + r) continue;
+          ctx.drawImage(SPR.spark, OUT.x - r, OUT.y - r, r * 2, r * 2);
         }
       }
       // the warheads: a bright glowing dot each
@@ -743,7 +742,8 @@
       }
     }
 
-    // If frames get slow (< ~30 fps) while lots of missiles fly, draw shorter faint tails; come back when it's fast again
+    // If frames get slow (< ~30 fps) while lots of missiles fly, step down the quality: 1 = normal blending for the
+    // trails and fewer glow dabs, 2 = no glow dabs, 3–4 = shorter faint tails. Steps back up when it's fast again.
     _adapt(drawn) {
       const t = this._lastFrameAt;
       if (!LOOK.adaptive) return;
