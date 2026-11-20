@@ -39,7 +39,6 @@
 
   const SUB_RANGE_KM = 3000;   // a submarine launch area closer than this is used before a land silo field
   const MIN_LAUNCH_KM = 300;   // don't launch from a site right next to the target (unless nothing else is left)
-  const PANE = 'nsCustomRings';   // our own map pane, just above the renderer's glow (z 450) and below markers (600)
   let nextId = 1;
 
   // ---------- small helpers ----------
@@ -159,22 +158,16 @@ select.ns-cm-ctl option{background:#101318;color:#ecebe7}
 .ns-cm-list .ns-cm-what small{opacity:.65}
 .ns-cm-list .ns-cm-toll{flex:0 0 auto;text-align:right;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
 .ns-cm-list .is-flight .ns-cm-toll{color:#ffd23f;font-family:inherit}
-.leaflet-container.ns-cm-on,.leaflet-container.ns-cm-on .ns-cm-ring{cursor:crosshair}
-.ns-cm-target{pointer-events:auto}
+.ns-cm-on canvas{cursor:crosshair}
+.ns-cm-target{position:absolute;left:-16px;top:-16px;width:32px;height:32px;pointer-events:none}
 .ns-cm-target i{position:absolute;inset:0;border-radius:50%;box-sizing:border-box}
 .ns-cm-target .ns-cm-pulse{border:2px solid #ffd23f;animation:ns-cm-pulse 1.3s ease-out infinite}
 .ns-cm-target .ns-cm-cross{inset:9px;border:2px solid #ff5a00;background:rgba(255,90,0,.25);box-shadow:0 0 8px #ff5a00}
 .ns-cm-target .ns-cm-dot{inset:13px;background:#fff3b0}
+.ns-cm-target .ns-cm-tip{position:absolute;left:50%;bottom:36px;transform:translateX(-50%);width:max-content;max-width:240px;background:rgba(0,0,0,.78);color:#f3f4f6;font-size:11.5px;line-height:1.35;padding:5px 8px;white-space:normal}
+.ns-cm-gz{position:absolute;left:-4px;top:-4px;width:8px;height:8px;border-radius:50%;background:#fff;box-shadow:0 0 0 1.5px rgba(0,0,0,.5),0 0 6px #fff;pointer-events:none}
 @keyframes ns-cm-pulse{0%{transform:scale(.35);opacity:1}100%{transform:scale(1.25);opacity:0}}
 @media (prefers-reduced-motion:reduce){.ns-cm-target .ns-cm-pulse{animation:none;opacity:.7}}
-.leaflet-tooltip.ns-cm-tip,.ns-cm-popup .leaflet-popup-content-wrapper,.ns-cm-popup .leaflet-popup-tip{background:rgba(14,17,23,.94);color:#e8eaf0;border:1px solid rgba(255,255,255,.18);box-shadow:0 4px 18px rgba(0,0,0,.5)}
-.leaflet-tooltip.ns-cm-tip{width:max-content;max-width:260px;white-space:normal;line-height:1.35;font-size:12px}
-.leaflet-tooltip-top.ns-cm-tip::before{border-top-color:rgba(14,17,23,.94)}
-.leaflet-tooltip-bottom.ns-cm-tip::before{border-bottom-color:rgba(14,17,23,.94)}
-.leaflet-tooltip-left.ns-cm-tip::before{border-left-color:rgba(14,17,23,.94)}
-.leaflet-tooltip-right.ns-cm-tip::before{border-right-color:rgba(14,17,23,.94)}
-.ns-cm-popup .leaflet-popup-content{margin:10px 12px;font-size:12px;line-height:1.4}
-.ns-cm-popup a.leaflet-popup-close-button{color:#aab}
 .ns-cm-pop table{border-collapse:collapse;margin-top:6px;width:100%}
 .ns-cm-pop td{padding:2px 6px 2px 0;vertical-align:top}
 .ns-cm-pop td:nth-child(2){white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}
@@ -223,27 +216,22 @@ select.ns-cm-ctl option{background:#101318;color:#ecebe7}
 
   CustomMode.prototype.enable = function () {
     if (this.enabled) return;
-    const map = this.ctx.map, L = root.L;
+    const view = this.ctx.view;
     this.enabled = true;
     addStyles();
     this._buildPanel();
-    if (map && L) {
-      if (!map.getPane(PANE)) { const p = map.createPane(PANE); p.style.zIndex = 460; }
-      map.on('click', this._onClick);
-      // In this mode every click drops a warhead, so a double click shouldn't also zoom the map
-      this._hadDblZoom = !!(map.doubleClickZoom && map.doubleClickZoom.enabled());
-      if (this._hadDblZoom) map.doubleClickZoom.disable();
-      L.DomUtil.addClass(map.getContainer(), 'ns-cm-on');
+    if (view && view.onClick) {
+      this._offClick = view.onClick(this._onClick);   // a click (not a drag) on the globe drops a warhead
+      if (view.renderer && view.renderer.domElement && view.renderer.domElement.parentNode) view.renderer.domElement.parentNode.classList.add('ns-cm-on');
     }
     this._timer = setInterval(() => this._tick(), 250);
   };
 
   CustomMode.prototype.disable = function () {
-    const map = this.ctx.map, L = root.L;
-    if (this.enabled && map && L) {
-      map.off('click', this._onClick);
-      if (this._hadDblZoom && map.doubleClickZoom) map.doubleClickZoom.enable();
-      L.DomUtil.removeClass(map.getContainer(), 'ns-cm-on');
+    const view = this.ctx.view;
+    if (this.enabled && view) {
+      if (this._offClick) { this._offClick(); this._offClick = null; }
+      if (view.renderer && view.renderer.domElement && view.renderer.domElement.parentNode) view.renderer.domElement.parentNode.classList.remove('ns-cm-on');
     }
     this.enabled = false;
     clearInterval(this._timer);
@@ -308,13 +296,6 @@ select.ns-cm-ctl option{background:#101318;color:#ecebe7}
       if (li && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); this._show(this._entries.find(e => e.n === +li.dataset.n)); }
     });
     el.result.addEventListener('click', ev => { if (ev.target.closest('.ns-cm-zoom')) this._show(this._last); });
-    // If the app floats the panel over the map, clicks on it must not drop warheads
-    const map = this.ctx.map, L = root.L;
-    if (map && L && map.getContainer().contains(panel) && !panel._nsCmStopped) {
-      L.DomEvent.disableClickPropagation(panel);
-      L.DomEvent.disableScrollPropagation(panel);
-      panel._nsCmStopped = true;
-    }
     this._renderList();
     this._renderResult();
   };
@@ -382,23 +363,23 @@ ${hit.length ? `<p class="ns-cm-cities">Worst hit: ${hit.map(c => `${esc(c.name)
     }
   };
 
-  // Pan / zoom the map to one of your warheads
+  // Turn the globe to one of your warheads (and zoom so all its rings fit)
   CustomMode.prototype._show = function (e) {
-    const map = this.ctx.map;
-    if (!e || !map) return;
+    const view = this.ctx.view;
+    if (!e || !view) return;
+    const cur = view.getView();
     if (e.rings && e.radii.psi1 > 0) {
       const outer = Math.max(...RINGS.map(k => e.radii[k]));
-      map.flyToBounds(root.L.latLng(e.at.lat, e.at.lon).toBounds(outer * 2000 * 1.15), { padding: [30, 30], maxZoom: 13, duration: 1 });
+      view.flyTo({ lat: e.at.lat, lon: e.at.lon, alt: view.altForRadius(outer * 1.15), tilt: 0 }, 1100);
     } else {
-      map.panTo([e.at.lat, e.at.lon]);
+      view.flyTo({ lat: e.at.lat, lon: e.at.lon, alt: cur.alt, tilt: 0 }, 900);
     }
   };
 
   // ---------- placing a warhead ----------
-  CustomMode.prototype._onClick = function (ev) {
-    if (!this.enabled || !ev || !ev.latlng) return;
-    const w = ev.latlng.wrap ? ev.latlng.wrap() : ev.latlng;   // longitude in -180…180 (the map can show copies of the world)
-    this.place({ lat: w.lat, lon: w.lng });
+  CustomMode.prototype._onClick = function (at) {
+    if (!this.enabled || !at || !isFinite(at.lat) || !isFinite(at.lon)) return;
+    this.place({ lat: at.lat, lon: ((at.lon + 540) % 360) - 180 });
   };
 
   // Drop a warhead at { lat, lon } (the map click calls this; tests and app.js may too). Returns the strike.
@@ -459,12 +440,15 @@ ${hit.length ? `<p class="ns-cm-cities">Worst hit: ${hit.map(c => `${esc(c.name)
 
   // The small pulsing target marker that waits at the spot until the warhead arrives
   CustomMode.prototype._addTarget = function (e) {
-    const map = this.ctx.map, L = root.L;
-    if (!map || !L) return;
-    e.marker = L.marker([e.at.lat, e.at.lon], {
-      icon: L.divIcon({ className: 'ns-cm-target', html: '<i class="ns-cm-pulse"></i><i class="ns-cm-cross"></i><i class="ns-cm-dot"></i>', iconSize: [32, 32] }),
-      keyboard: false, zIndexOffset: 500
-    }).bindTooltip(this._targetTip(e), { className: 'ns-cm-tip', direction: 'top', offset: [0, -14] }).addTo(map);
+    const view = this.ctx.view;
+    if (!view || !view.addMarker) return;
+    const node = document.createElement('div');
+    node.className = 'ns-cm-target';
+    node.innerHTML = '<i class="ns-cm-pulse"></i><i class="ns-cm-cross"></i><i class="ns-cm-dot"></i><span class="ns-cm-tip"></span>';
+    const tip = node.lastChild;
+    tip.innerHTML = this._targetTip(e);
+    const m = view.addMarker(e.at.lat, e.at.lon, node);
+    e.marker = { remove: () => m.remove(), setTooltipContent: html => { tip.innerHTML = html; } };
   };
 
   CustomMode.prototype._targetTip = function (e) {
@@ -500,46 +484,25 @@ ${hit.length ? `<p class="ns-cm-cities">Worst hit: ${hit.map(c => `${esc(c.name)
   };
 
   CustomMode.prototype._drawRings = function (e) {
-    const map = this.ctx.map, L = root.L;
-    if (!map || !L) return;
-    const group = L.layerGroup();
-    const keys = RINGS.filter(k => e.radii[k] > 0).sort((a, b) => e.radii[b] - e.radii[a]);   // biggest first, so smaller rings stay on top
-    for (const k of keys) {
-      const info = ringInfo(k);
-      L.circle([e.at.lat, e.at.lon], {
-        pane: PANE, radius: e.radii[k] * 1000,
-        color: COLORS[k], weight: k === 'fireball' ? 1 : 1.5, opacity: 0.9,
-        fillColor: COLORS[k], fillOpacity: k === 'fireball' ? 0.35 : 0.08,
-        className: 'ns-cm-ring ns-cm-ring-' + k,
-        bubblingMouseEvents: true   // a click on a ring still drops the next warhead
-      }).bindTooltip(`<b>${esc(info.name)}</b> · ${fmtKm(e.radii[k])}<br>${esc(info.text)}`, { className: 'ns-cm-tip', sticky: true, direction: 'top', offset: [0, -8] })
-        .addTo(group);
-    }
-    // Ground zero: a small dot you can click for the whole summary
-    const r = e.result || {};
-    const rows = RINGS.slice().reverse().filter(k => e.radii[k] > 0).map(k => {
-      const info = ringInfo(k);
-      return `<tr><td><i class="ns-cm-sw" style="border-color:${COLORS[k]};background:${COLORS[k]}55"></i><b>${esc(info.name)}</b><small>${esc(info.text)}</small></td><td>${fmtKm(e.radii[k])}</td></tr>`;
-    }).join('');
-    L.circleMarker([e.at.lat, e.at.lon], {
-      pane: PANE, radius: 4, color: '#ffffff', weight: 1.5, fillColor: '#ffffff', fillOpacity: 1,
-      className: 'ns-cm-gz', bubblingMouseEvents: false
-    }).bindPopup(`<div class="ns-cm-pop"><b>${esc(e.place)}</b><br>${fmtYield(e.yieldKt)} ${burstName(e.burst)} · ${fmtClock(e.detAt)}<br>` +
-      `Estimated deaths: <b>${fmtInt(r.deaths)}</b> · injuries: <b>${fmtInt(r.injuries)}</b><table>${rows}</table></div>`,
-    { className: 'ns-cm-popup', maxWidth: 300 }).addTo(group);
-    e.rings = group.addTo(map);
+    const view = this.ctx.view;
+    if (!view || !view.addRings) return;
+    const rings = RINGS.filter(k => e.radii[k] > 0).map(k => ({ km: e.radii[k], color: COLORS[k], fill: k === 'fireball' ? 0.4 : 0.1 }));
+    const r = view.addRings(e.at.lat, e.at.lon, rings);
+    // ground zero: a small white dot
+    const gz = document.createElement('i');
+    gz.className = 'ns-cm-gz';
+    const m = view.addMarker(e.at.lat, e.at.lon, gz);
+    e.rings = { remove() { r.remove(); m.remove(); } };
   };
 
-  // If the blast is too small to see at this zoom and nothing else is in the air, fly in to it (after the flash)
+  // If the blast is too small to see from this far away and nothing else is in the air, fly in to it (after the flash)
   CustomMode.prototype._maybeZoom = function (e) {
-    const map = this.ctx.map, L = root.L;
-    if (!this.autoZoom || !map || !L || !e.rings) return;
+    const view = this.ctx.view;
+    if (!this.autoZoom || !view || !e.rings) return;
     const outer = Math.max(...RINGS.map(k => e.radii[k]));
     if (!(outer > 0)) return;
-    const c = L.latLng(e.at.lat, e.at.lon), b = c.toBounds(outer * 2000);
-    const px = map.latLngToContainerPoint(b.getNorthEast()).x - map.latLngToContainerPoint(b.getSouthWest()).x;
-    const zoomTo = Math.min(13, map.getBoundsZoom(b.pad(0.15), false, L.point(60, 60)));   // getBoundsZoom stays within the map's maxZoom
-    if (px >= 40 || zoomTo - map.getZoom() < 1 || this._entries.some(x => x.status !== 'done')) return;
+    const px = outer * 2 / Math.max(1e-6, view.kmPerPixel());
+    if (px >= 60 || this._entries.some(x => x.status !== 'done')) return;
     clearTimeout(this._zoomTimer);
     this._zoomTimer = setTimeout(() => {
       if (this.enabled && this._last === e && e.rings && !this._entries.some(x => x.status !== 'done')) this._show(e);

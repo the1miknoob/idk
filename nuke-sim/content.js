@@ -126,8 +126,9 @@
 <li>Damage rings are simple circles that depend on the yield. Real damage depends on the height of the burst, the terrain, the weather and the time of day.</li>
 <li>The scenarios, targets and timings are invented. Real war plans are secret, and a real war would not follow a script. Missile defenses, failed launches and last-minute decisions are not modeled.</li>
 <li>Arsenal sizes are rough public estimates. Missile silos are drawn as random dots around the real base areas, not at their real locations.</li>
+<li>Published studies of a war between Russia and NATO give very different numbers for the first hours, from tens of millions of deaths (Princeton's 2019 "Plan A") to hundreds of millions in studies that assume more attacks on cities. This model's totals fall inside that range, which shows how uncertain any single number is.</li>
 </ul>
-<p>Because so much is left out, the full toll of a real nuclear war would very likely be much higher than the counter shows. Treat the numbers as a rough sense of scale.</p>`
+<p>Because so much is left out, the full toll over the following months and years would very likely be much higher than the counter shows. Treat the numbers as a rough sense of scale.</p>`
     }
   ];
 
