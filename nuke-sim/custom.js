@@ -119,11 +119,16 @@
   // ---------- the look of our own bits (the rest of the panel uses the page's styles) ----------
   const CSS = `
 .ns-cm-hint{margin:0 0 10px;line-height:1.4}
-.ns-cm-field{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:6px 0}
-.ns-cm-field>span{opacity:.8;flex:0 0 auto}
-.ns-cm-field select{flex:1 1 auto;min-width:0;max-width:72%}
+.ns-cm-field{display:block;margin:0 0 8px}
+.ns-cm-field>span{display:block;font-size:.8em;opacity:.7;margin:0 0 3px}
+.ns-cm-field select{width:100%;min-width:0;box-sizing:border-box}
 .ns-cm-check{display:flex;gap:8px;align-items:flex-start;margin:10px 0 12px;cursor:pointer;line-height:1.35}
-.ns-cm-check input{margin:2px 0 0;flex:0 0 auto}
+.ns-cm-check input{margin:2px 0 0;flex:0 0 auto;accent-color:var(--accent,#ffb547)}
+.ns-cm-ctl{height:32px;border-radius:8px;border:1px solid var(--line-2,rgba(255,255,255,.2));background-color:rgba(255,255,255,.04);color:inherit;font:inherit;font-size:13px;padding:0 10px;cursor:pointer}
+.ns-cm-ctl:hover{background-color:rgba(255,255,255,.08)}
+.ns-cm-ctl:focus-visible{outline:2px solid var(--accent,#ffb547);outline-offset:1px}
+select.ns-cm-ctl{appearance:none;-webkit-appearance:none;padding-right:28px;text-overflow:ellipsis;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238d929b' stroke-width='1.6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
+select.ns-cm-ctl option{background:#101318;color:#ecebe7}
 .ns-cm-result{border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:10px 12px;background:rgba(255,255,255,.04);margin:0 0 12px}
 .ns-cm-muted{opacity:.65;margin:0;font-size:.92em;line-height:1.4}
 .ns-cm-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
@@ -143,7 +148,7 @@
 .ns-cm-sw{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:7px;vertical-align:-1px;border:2px solid;box-sizing:border-box}
 .ns-cm-note{margin:8px 0 0;font-size:.76em;opacity:.55}
 .ns-cm-listhead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 6px;font-size:.92em}
-.ns-cm-listhead button{font:inherit;font-size:.85em}
+.ns-cm-listhead button{height:28px;font-size:12px;white-space:nowrap;flex:0 0 auto}
 .ns-cm-list{list-style:none;margin:0;padding:0;max-height:240px;overflow:auto}
 .ns-cm-list:empty::before{content:'Nothing placed yet.';opacity:.55;font-size:.88em}
 .ns-cm-list li{display:flex;align-items:center;gap:8px;padding:6px 2px;border-top:1px solid rgba(255,255,255,.08);cursor:pointer;font-size:.88em;line-height:1.3}
@@ -163,7 +168,7 @@
 @keyframes ns-cm-pulse{0%{transform:scale(.35);opacity:1}100%{transform:scale(1.25);opacity:0}}
 @media (prefers-reduced-motion:reduce){.ns-cm-target .ns-cm-pulse{animation:none;opacity:.7}}
 .leaflet-tooltip.ns-cm-tip,.ns-cm-popup .leaflet-popup-content-wrapper,.ns-cm-popup .leaflet-popup-tip{background:rgba(14,17,23,.94);color:#e8eaf0;border:1px solid rgba(255,255,255,.18);box-shadow:0 4px 18px rgba(0,0,0,.5)}
-.leaflet-tooltip.ns-cm-tip{max-width:260px;white-space:normal;line-height:1.35;font-size:12px}
+.leaflet-tooltip.ns-cm-tip{width:max-content;max-width:260px;white-space:normal;line-height:1.35;font-size:12px}
 .leaflet-tooltip-top.ns-cm-tip::before{border-top-color:rgba(14,17,23,.94)}
 .leaflet-tooltip-bottom.ns-cm-tip::before{border-bottom-color:rgba(14,17,23,.94)}
 .leaflet-tooltip-left.ns-cm-tip::before{border-left-color:rgba(14,17,23,.94)}
@@ -278,13 +283,13 @@
     if (!panel) { this._el = null; return; }
     panel.innerHTML = `
 <p class="ns-cm-hint">Click anywhere on the map to drop a warhead.</p>
-<label class="ns-cm-field"><span>Yield</span><select id="yield">${YIELDS.map(y =>
-      `<option value="${y.kt}"${y.kt === this.yieldKt ? ' selected' : ''}>${esc(y.name)} (${fmtYield(y.kt)})</option>`).join('')}</select></label>
-<label class="ns-cm-field"><span>Burst</span><select id="burst">${BURSTS.map(b =>
+<label class="ns-cm-field"><span>Yield</span><select id="yield" class="ns-cm-ctl">${YIELDS.map(y =>
+      `<option value="${y.kt}"${y.kt === this.yieldKt ? ' selected' : ''}>${fmtYield(y.kt)} · ${esc(y.name)}</option>`).join('')}</select></label>
+<label class="ns-cm-field"><span>Burst</span><select id="burst" class="ns-cm-ctl">${BURSTS.map(b =>
       `<option value="${b.id}"${b.id === this.burst ? ' selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>
 <label class="ns-cm-check"><input type="checkbox" id="custom-launch"${this.fromSite ? ' checked' : ''}> <span>Launch a missile from the nearest launch site</span></label>
 <div id="custom-result" class="ns-cm-result" aria-live="polite"></div>
-<div class="ns-cm-listhead"><span id="custom-total">Your warheads</span><button type="button" id="custom-clear">Clear all</button></div>
+<div class="ns-cm-listhead"><span id="custom-total">Your warheads</span><button type="button" id="custom-clear" class="ns-cm-ctl">Clear all</button></div>
 <ul id="custom-list" class="ns-cm-list"></ul>`;
     const $ = sel => panel.querySelector(sel);
     this._el = { yield: $('#yield'), burst: $('#burst'), launch: $('#custom-launch'), result: $('#custom-result'),
@@ -392,11 +397,8 @@ ${hit.length ? `<p class="ns-cm-cities">Worst hit: ${hit.map(c => `${esc(c.name)
   // ---------- placing a warhead ----------
   CustomMode.prototype._onClick = function (ev) {
     if (!this.enabled || !ev || !ev.latlng) return;
-    const at = { lat: ev.latlng.lat, lon: ev.latlng.lng };                 // where you clicked (rings go here)
-    const w = ev.latlng.wrap ? ev.latlng.wrap() : ev.latlng;               // the same spot with longitude in -180…180
-    const to = { lat: w.lat, lon: w.lng };
-    const yieldKt = this.yieldKt, burst = this.burst;
-    this.place(to, { yieldKt, burst, at });
+    const w = ev.latlng.wrap ? ev.latlng.wrap() : ev.latlng;   // longitude in -180…180 (the map can show copies of the world)
+    this.place({ lat: w.lat, lon: w.lng });
   };
 
   // Drop a warhead at { lat, lon } (the map click calls this; tests and app.js may too). Returns the strike.
@@ -412,7 +414,8 @@ ${hit.length ? `<p class="ns-cm-cities">Worst hit: ${hit.map(c => `${esc(c.name)
     if (fromSite) {
       const l = nearestLauncher(to);
       if (l) {
-        from = { lat: +l.site.lat, lon: +l.site.lon, name: l.kind === 'sub' ? `Submarine, ${l.site.name}` : l.site.name, kind: l.kind };
+        const kind = l.kind === 'sub' ? 'sub' : l.site.type === 'mobile' ? 'mobile' : 'silo';
+        from = { lat: +l.site.lat, lon: +l.site.lon, name: kind === 'sub' ? `Submarine, ${l.site.name}` : l.site.name, kind };
         flight = flightSeconds(from, to);
       }
     }
@@ -429,6 +432,13 @@ ${hit.length ? `<p class="ns-cm-cities">Worst hit: ${hit.map(c => `${esc(c.name)
     this._renderList();
     if (!this._last) this._renderResult();
     try { if (typeof this.ctx.launch === 'function') this.ctx.launch(strike); } catch (err) { console.error(err); }
+    // the app may adjust the launch time or id; keep our arrival time in step
+    if (e.status !== 'done') {
+      e.detAt = (+strike.launchAt || 0) + (+strike.flight || 0);
+      if (e.marker) e.marker.setTooltipContent(this._targetTip(e));
+      this._renderList();
+      if (!this._last) this._renderResult();
+    }
     return strike;
   };
 
@@ -454,8 +464,13 @@ ${hit.length ? `<p class="ns-cm-cities">Worst hit: ${hit.map(c => `${esc(c.name)
     e.marker = L.marker([e.at.lat, e.at.lon], {
       icon: L.divIcon({ className: 'ns-cm-target', html: '<i class="ns-cm-pulse"></i><i class="ns-cm-cross"></i><i class="ns-cm-dot"></i>', iconSize: [32, 32] }),
       keyboard: false, zIndexOffset: 500
-    }).bindTooltip(`Incoming: ${fmtYield(e.yieldKt)} ${burstName(e.burst)} on ${esc(e.place)}<br>from ${esc(e.strike.from.name)} · arrives ${fmtClock(e.detAt)}`,
-      { className: 'ns-cm-tip', direction: 'top', offset: [0, -14] }).addTo(map);
+    }).bindTooltip(this._targetTip(e), { className: 'ns-cm-tip', direction: 'top', offset: [0, -14] }).addTo(map);
+  };
+
+  CustomMode.prototype._targetTip = function (e) {
+    const from = e.strike.from || {};
+    return `<b>Incoming: ${fmtYield(e.yieldKt)} ${burstName(e.burst)}</b><br>Target: ${esc(e.place)}<br>` +
+      (from.kind === 'tactical' ? '' : `Launched from: ${esc(from.name)}<br>`) + `Arrives: ${fmtClock(e.detAt)}`;
   };
 
   // ---------- a warhead goes off ----------
@@ -523,7 +538,8 @@ ${hit.length ? `<p class="ns-cm-cities">Worst hit: ${hit.map(c => `${esc(c.name)
     if (!(outer > 0)) return;
     const c = L.latLng(e.at.lat, e.at.lon), b = c.toBounds(outer * 2000);
     const px = map.latLngToContainerPoint(b.getNorthEast()).x - map.latLngToContainerPoint(b.getSouthWest()).x;
-    if (px >= 40 || this._entries.some(x => x.status !== 'done')) return;
+    const zoomTo = Math.min(13, map.getBoundsZoom(b.pad(0.15), false, L.point(60, 60)));   // getBoundsZoom stays within the map's maxZoom
+    if (px >= 40 || zoomTo - map.getZoom() < 1 || this._entries.some(x => x.status !== 'done')) return;
     clearTimeout(this._zoomTimer);
     this._zoomTimer = setTimeout(() => {
       if (this.enabled && this._last === e && e.rings && !this._entries.some(x => x.status !== 'done')) this._show(e);

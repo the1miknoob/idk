@@ -22,7 +22,8 @@
   const STORE = { intro: 'nuke-intro-seen', speed: 'nuke-speed', panel: 'nuke-panel' };
 
   // The effect colors every module shares (see SPEC: renderer, custom rings and legend use the same ones)
-  const EFFECT_COLORS = { fireball: '#fff4c2', psi20: '#ff2d2d', psi5: '#ff8a1f', thermal: '#ffd23f', psi1: '#9ca3af', fallout: '#a855f7' };
+  const EFFECT_COLORS = (NS.Effects && NS.Effects.COLORS) ||
+    { fireball: '#fff4c2', psi20: '#ff2d2d', psi5: '#ff8a1f', thermal: '#ffd23f', psi1: '#9ca3af', fallout: '#a855f7' };
   const NEUTRAL_BAR = '#9ca3af';
 
   // Used only if content.js did not load
@@ -222,9 +223,14 @@
     if (mode === 'scenario' && t >= ns.end) finish();
   }
 
-  // Jumps to any time: forget everything, then re-apply every detonation up to there in one go (no animations)
+  // Jumps to any time: forget everything, then re-apply every detonation up to there in one go (no animations).
+  // In build-your-own mode the clock only moves forward (the rings there belong to custom.js), so it just fast-forwards.
   function seek(nt) {
     nt = clamp(+nt || 0, 0, mode === 'scenario' ? ns.end : Infinity);
+    if (mode === 'custom') { if (nt > t) advanceTo(nt); updateClock(); return; }
+    resetTo(nt);
+  }
+  function resetTo(nt) {
     t = nt;
     ended = false;
     safe('casualties.reset', () => casualties.reset());
@@ -241,7 +247,7 @@
     refreshTotals(true);
     shown.deaths = totals.deaths; shown.injuries = totals.injuries;
     phaseIdx = -2;
-    if (mode === 'scenario' && t >= ns.end && ns.end > 0) finish();
+    if (mode === 'scenario' && t >= ns.end && ns.end > 0) finish(true);
     else syncPhase(true);
     updateCounterText();
     updateClock();
@@ -249,15 +255,15 @@
     safe('renderer.frame', () => renderer.frame(t));
   }
 
-  function finish() {
+  // The scenario reached its end: stop the clock and show the totals in the phase card
+  function finish(instant) {
     t = ns.end;
     if (ended) return;
     ended = true;
     running = false;
     flushLog();
     refreshTotals(true);
-    shown.deaths = totals.deaths; shown.injuries = totals.injuries;
-    showEndCard();
+    showEndCard(instant);
     updatePlayUi();
   }
 
@@ -269,7 +275,11 @@
   }
   function pause() { running = false; flushLog(); updatePlayUi(); }
   function toggle() { running ? pause() : play(); }
-  function restart() { seek(0); play(); }
+  function restart() {
+    if (mode === 'custom') { if (custom) safe('custom.clear', () => custom.clear()); useStrikes([]); resetTo(0); }
+    else seek(0);
+    play();
+  }
 
   // ---------------------------------------------------------------- scenarios
 
@@ -287,7 +297,7 @@
     useStrikes(ns.strikes);
     phases = ns.phases;
     running = false;
-    seek(opts.t || 0);
+    resetTo(clamp(+opts.t || 0, 0, ns.end));
     if (!opts.keepView) flyToView(ns.view, opts.instant);
     const meta = SCENARIOS.find(s => s.id === scenarioId) || {};
     $('scenario-name').textContent = ns.name || meta.name || '';
@@ -333,7 +343,7 @@
       safe('renderer.setSites', () => renderer.setSites([]));
       useStrikes([]);
       phases = [];
-      seek(0);
+      resetTo(0);
       ensureCustom();
       if (custom) safe('custom.enable', () => custom.enable());
       showCustomCard();
@@ -392,7 +402,7 @@
   // so after a clear the map, the list and the counters all start from nothing
   $('custom-panel').addEventListener('click', e => {
     if (mode !== 'custom' || !e.target.closest('#custom-clear')) return;
-    setTimeout(() => { useStrikes([]); seek(t); }, 0);
+    setTimeout(() => { useStrikes([]); resetTo(t); }, 0);
   });
 
   // ---------------------------------------------------------------- phase card
@@ -415,9 +425,8 @@
   // Shows whichever phase the clock is in (forward-only scan each frame; a seek recomputes from scratch)
   function syncPhase(instant) {
     if (mode !== 'scenario' || ended) return;
-    let i = phaseIdx < -1 ? -1 : phaseIdx;
-    if (phaseIdx < -1) { while (i + 1 < phases.length && phases[i + 1].at <= t) i++; }
-    else { while (i + 1 < phases.length && phases[i + 1].at <= t) i++; }
+    let i = Math.max(-1, phaseIdx);   // phaseIdx -2 means "not known yet" (after a seek): scan from the start
+    while (i + 1 < phases.length && phases[i + 1].at <= t) i++;
     if (i === phaseIdx) return;
     phaseIdx = i;
     if (i < 0) {
@@ -428,7 +437,7 @@
     }
   }
 
-  function showEndCard() {
+  function showEndCard(instant) {
     const n = detIdx;
     const hours = ns.end / 3600;
     const span = hours >= 1 ? (Math.round(hours * 10) / 10) + (hours === 1 ? ' hour' : ' hours') : Math.round(ns.end / 60) + ' minutes';
@@ -436,7 +445,7 @@
       'In ' + span + ', ' + fmtInt(n) + (n === 1 ? ' warhead' : ' warheads') + ' detonated (' + fmtYield(yieldKt) + ' in total). ' +
       'Estimated ' + fmtInt(totals.deaths) + ' deaths and ' + fmtInt(totals.injuries) + ' injuries from blast and heat alone. ' +
       'Fallout, fires, the collapse of hospitals, power and food supplies, and the cooling from smoke would kill many more in the weeks and years after.',
-      'end');
+      'end', instant);
   }
 
   function showCustomCard() {
@@ -481,7 +490,7 @@
   let lastStats = '';
   function updateStats() {
     const launched = launchIdx, det = detIdx;
-    const key = launched + '|' + det + '|' + yieldKt;
+    const key = launched + '|' + det + '|' + yieldKt + '|' + totals.deaths;
     if (key === lastStats) return;
     lastStats = key;
     $('stat-launched').textContent = fmtInt(launched);
@@ -489,6 +498,7 @@
     $('stat-detonated').textContent = fmtInt(det);
     $('stat-yield').textContent = fmtYield(yieldKt);
     $('sheet-stats').textContent = fmtInt(det) + ' detonated · ' + fmtCompact(totals.deaths) + ' deaths';
+    $('log-count').textContent = det ? fmtInt(det) + ' total' : '';
   }
 
   function sideColor(cc) {
@@ -525,7 +535,17 @@
 
   // ---------------------------------------------------------------- event log
 
-  const placeOf = rec => (rec.res && rec.res.place) || (rec.s.to && rec.s.to.name) || 'Unknown target';
+  // Where a warhead went off, for the log. The casualty model names the nearest big city ("Moscow, Russia"); when that is
+  // only "near X" or "a remote area", the target's own name ("Minot AFB, United States") says more.
+  function placeOf(rec) {
+    const place = rec.res && rec.res.place, to = rec.s.to || {};
+    if (place && !/^(near |a remote)/i.test(place)) return place;
+    if (to.name && to.kind !== 'custom') {
+      const country = to.cc ? countryName(to.cc) : '';
+      return to.name + (country && to.name.indexOf(country) < 0 ? ', ' + country : '');
+    }
+    return place || to.name || 'Unknown target';
+  }
 
   // Turns a batch of detonations into log lines: a few become one line each, many become one grouped line
   function groupRecords(recs) {
@@ -568,12 +588,11 @@
     }
     while (log.children.length > LOG_MAX) log.removeChild(log.lastChild);
     $('log-empty').hidden = log.children.length > 0;
-    $('log-count').textContent = detIdx ? fmtInt(detIdx) + ' total' : '';
   }
 
   function flushLog() {
     lastFlush = performance.now();
-    if (!pending.length) { $('log-count').textContent = detIdx ? fmtInt(detIdx) + ' total' : ''; return; }
+    if (!pending.length) return;
     const batch = pending; pending = [];
     addLogEntries(groupRecords(batch), true);
   }
@@ -823,6 +842,7 @@
     get mode() { return mode; },
     setMode,
     get scenario() { return ns; },
-    get map() { return map; }
+    get map() { return map; },
+    get renderer() { return renderer; }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

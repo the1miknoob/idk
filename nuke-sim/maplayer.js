@@ -76,9 +76,6 @@
     ['nsLabels', 620],     // target labels
   ];
 
-  // The world is drawn several times side by side so borders keep going when you scroll past the date line.
-  const COPIES = [-720, -360, 0, 360, 720];
-
   // ---------- small helpers ----------
 
   // Blend two #rrggbb colors (t = 0 → a, t = 1 → b)
@@ -136,15 +133,15 @@
     });
   }
 
-  // [lon, lat] → Leaflet [lat, lng], once for every copy of the world
-  const copyLines = lines => {
+  // [lon, lat] → Leaflet [lat, lng], once for every copy of the world (offsets in degrees: 0, 360, -360…)
+  const copyLines = (lines, offsets) => {
     const out = [];
-    COPIES.forEach(dx => lines.forEach(l => out.push(l.map(p => [p[1], p[0] + dx]))));
+    offsets.forEach(dx => lines.forEach(l => out.push(l.map(p => [p[1], p[0] + dx]))));
     return out;
   };
-  const copyPolys = polys => {
+  const copyPolys = (polys, offsets) => {
     const out = [];
-    COPIES.forEach(dx => polys.forEach(poly => out.push(poly.map(r => r.map(p => [p[1], p[0] + dx])))));
+    offsets.forEach(dx => polys.forEach(poly => out.push(poly.map(r => r.map(p => [p[1], p[0] + dx])))));
     return out;
   };
 
@@ -167,8 +164,10 @@
   text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 -1px 0 #000, 0 1px 0 #000, -1px 0 0 #000, 1px 0 0 #000,
     0 0 4px rgba(0, 0, 0, .95), 0 0 8px rgba(0, 0, 0, .6); }
 .ns-lbl-minor .ns-lbl-txt { font-size: 11px; color: #ffe08a; left: 6px; }
-.ns-lbl-left .ns-lbl-txt { left: auto; right: 7px; }
-.ns-lbl-minor.ns-lbl-left .ns-lbl-txt { right: 6px; }
+.ns-lbl-l .ns-lbl-txt { left: auto; right: 7px; }
+.ns-lbl-minor.ns-lbl-l .ns-lbl-txt { right: 6px; }
+.ns-lbl-u .ns-lbl-txt { top: 1px; transform: translateY(-100%); }
+.ns-lbl-d .ns-lbl-txt { top: -1px; transform: none; }
 .ns-lbl-notext .ns-lbl-txt, .ns-lbl-off { display: none !important; }
 .leaflet-nsLabels-pane:not(.ns-lbl-zoomed) .ns-lbl-minor { display: none; }
 `;
@@ -211,11 +210,54 @@
     }
 
     // ----- countries -----
-    const renderer = L.canvas({ pane: 'nsCountries', padding: 0.3 });
+    // A canvas that can also draw a glow under a line: lines with a `glow` option ([[width, opacity, color], …])
+    // are stroked wide and faint first, then normally on top. (Leaflet 1.9's canvas drawing step; if a
+    // different Leaflet version lacks it, lines are simply drawn without the glow.)
+    const GlowCanvas = L.Canvas.extend({
+      _fillStroke(ctx, layer) {
+        const glow = layer.options.glow;
+        if (glow && layer.options.stroke) {
+          ctx.save();
+          ctx.lineCap = ctx.lineJoin = 'round';
+          glow.forEach(([w, a, c]) => { ctx.globalAlpha = a; ctx.lineWidth = w; ctx.strokeStyle = c; ctx.stroke(); });
+          ctx.restore();
+        }
+        L.Canvas.prototype._fillStroke.call(this, ctx, layer);
+      },
+    });
+    const renderer = new GlowCanvas({ pane: 'nsCountries', padding: 0.3 });
     const vec = { pane: 'nsCountries', renderer, interactive: false, bubblingMouseEvents: true };
     const sideLayer = L.layerGroup().addTo(map);
     let shapes = null;   // { topo, geoms, polys: Map(id → polygons) } once loaded
     let sides = null;
+
+    // Borders and tints are drawn once for each copy of the world in view (two or three side by side when
+    // zoomed out), so they carry on when you scroll past the date line. Checked again whenever the view moves.
+    let copied = [];     // { layer, src, poly, group }
+    let offsets = [0];
+    function viewOffsets() {
+      let b;
+      try { b = map.getBounds(); } catch (e) { return [0]; }   // map has no view yet
+      const w = b.getWest(), e = b.getEast(), m = Math.max(20, (e - w) * 0.4), out = [];
+      // a copy at dx covers dx-180° … dx+190° (Russia's far east runs on past 180°)
+      for (let k = Math.max(-3, Math.ceil((w - m - 190) / 360)); k <= Math.min(3, Math.floor((e + m + 180) / 360)); k++) out.push(k * 360);
+      return out.length ? out : [0];
+    }
+    const latLngsOf = c => (c.poly ? copyPolys : copyLines)(c.src, offsets);
+    function addCopied(src, poly, style, group) {
+      const c = { src, poly, group };
+      c.layer = (poly ? L.polygon : L.polyline)(latLngsOf(c), Object.assign({}, vec, style)).addTo(group);
+      copied.push(c);
+      return c.layer;
+    }
+    function updateCopies() {
+      const next = viewOffsets();
+      if (next.join() === offsets.join()) return;
+      offsets = next;
+      copied.forEach(c => c.layer.setLatLngs(latLngsOf(c)));
+    }
+    offsets = viewOffsets();
+    map.on('moveend zoomend viewreset resize', updateCopies);
 
     async function loadShapes() {
       const tj = root.topojson;
@@ -242,8 +284,9 @@
 
       // every border once (shared borders aren't drawn twice), coasts fainter than land borders
       const mesh = filter => cutLines(tj.mesh(topo, obj, filter).coordinates);
-      L.polyline(copyLines(mesh((a, b) => a === b)), Object.assign({}, vec, LOOK.coasts, { smoothFactor: 1.2 })).addTo(map);
-      L.polyline(copyLines(mesh((a, b) => a !== b)), Object.assign({}, vec, LOOK.borders, { smoothFactor: 1.2, attribution: 'Borders © Natural Earth' })).addTo(map);
+      offsets = viewOffsets();
+      addCopied(mesh((a, b) => a === b), false, Object.assign({ smoothFactor: 1.2 }, LOOK.coasts), map);
+      addCopied(mesh((a, b) => a !== b), false, Object.assign({ smoothFactor: 1.2, attribution: 'Borders © Natural Earth' }, LOOK.borders), map);
       drawSides();
     }
 
@@ -251,6 +294,7 @@
     // Countries outside every side get slightly darker.
     function drawSides() {
       sideLayer.clearLayers();
+      copied = copied.filter(c => c.group !== sideLayer);
       if (!shapes || !sides) return;
       const tj = root.topojson;
       const taken = new Set();
@@ -269,22 +313,20 @@
         geoms.forEach(g => taken.add(g.id));
 
         const polys = [].concat(...geoms.map(g => shapes.polys.get(g.id)));
-        backs.push(L.polygon(copyPolys(polys), Object.assign({}, vec, { stroke: false, fillColor: color, fillOpacity: LOOK.fillOpacity })).addTo(sideLayer));
+        backs.push(addCopied(polys, true, { stroke: false, fillColor: color, fillOpacity: LOOK.fillOpacity }, sideLayer));
 
         const group = { type: 'GeometryCollection', geometries: geoms };
-        const outline = copyLines(cutLines(tj.mesh(shapes.topo, group, (a, b) => a === b).coordinates));
-        const inner = copyLines(cutLines(tj.mesh(shapes.topo, group, (a, b) => a !== b).coordinates));
+        const outline = cutLines(tj.mesh(shapes.topo, group, (a, b) => a === b).coordinates);
+        const inner = cutLines(tj.mesh(shapes.topo, group, (a, b) => a !== b).coordinates);
         const bright = mix(color, '#ffffff', 0.45);
-        if (inner.length) L.polyline(inner, Object.assign({}, vec, { color: bright, weight: 0.9, opacity: 0.45 })).addTo(sideLayer);
-        // the glow: a wide faint line, a narrower stronger one, then a crisp bright edge
-        L.polyline(outline, Object.assign({}, vec, { color, weight: 11, opacity: 0.09 })).addTo(sideLayer);
-        L.polyline(outline, Object.assign({}, vec, { color, weight: 5, opacity: 0.22 })).addTo(sideLayer);
-        L.polyline(outline, Object.assign({}, vec, { color: bright, weight: 1.4, opacity: 0.95 })).addTo(sideLayer);
+        if (inner.length) addCopied(inner, false, { color: bright, weight: 0.9, opacity: 0.45 }, sideLayer);
+        // the outline glows: a wide faint line, a narrower stronger one, then a crisp bright edge
+        addCopied(outline, false, { color: bright, weight: 1.4, opacity: 0.95, glow: [[11, 0.09, color], [5, 0.22, color]] }, sideLayer);
       });
       if (LOOK.dimOthers > 0 && taken.size) {
         const rest = [];
         shapes.polys.forEach((p, id) => { if (!taken.has(id)) rest.push(...p); });
-        backs.push(L.polygon(copyPolys(rest), Object.assign({}, vec, { stroke: false, fillColor: '#000308', fillOpacity: LOOK.dimOthers })).addTo(sideLayer));
+        backs.push(addCopied(rest, true, { stroke: false, fillColor: '#000308', fillOpacity: LOOK.dimOthers }, sideLayer));
       }
       backs.forEach(l => l.bringToBack());
     }
@@ -311,65 +353,88 @@
       return (text, px) => {
         if (!ctx) return text.length * px * 0.58;
         ctx.font = `700 ${px}px ${LOOK.labelFont}`;
-        return ctx.measureText(text).width + 1;
+        return ctx.measureText(text).width + text.length * 0.15 + 1;   // + the letter spacing
       };
     })();
 
+    // labels = [{ lat, lon, text, major, priority? }]. When labels crowd each other, major ones win, then the
+    // higher priority (optional number), then whichever comes first in the list.
     function setLabels(list) {
       labelGroup.clearLayers();
       labels = [];
-      (Array.isArray(list) ? list : []).forEach(d => {
-        if (!d || d.text == null || d.text === '' || !isFinite(d.lat) || !isFinite(d.lon)) return;
-        const major = !!d.major, text = String(d.text);
+      const items = (Array.isArray(list) ? list : [])
+        .map((d, i) => ({ d, i }))
+        .filter(({ d }) => d && d.text != null && d.text !== '' && isFinite(d.lat) && isFinite(d.lon))
+        .sort((a, b) => (!!b.d.major - !!a.d.major) || ((+b.d.priority || 0) - (+a.d.priority || 0)) || a.i - b.i);
+      items.forEach(({ d }) => {
+        const major = !!d.major, text = String(d.text), lat = +d.lat, lon = +d.lon;
+        // the same name twice in the same place (a target and a city, say): show it once
+        const key = text.trim().toLowerCase();
+        if (labels.some(o => o.key === key && Math.abs(o.lat - lat) < 0.6 && Math.abs(o.lon - lon) < 0.9)) return;
         const el = document.createElement('div');
         el.innerHTML = '<span class="ns-lbl-dot"></span><span class="ns-lbl-txt"></span>';
         el.lastChild.textContent = text;
-        const marker = L.marker([+d.lat, +d.lon], {
+        const marker = L.marker([lat, lon], {
           pane: 'nsLabels', interactive: false, keyboard: false, zIndexOffset: major ? 1000 : 0,
           icon: L.divIcon({ className: 'ns-lbl ' + (major ? 'ns-lbl-major' : 'ns-lbl-minor'), html: el, iconSize: null }),
         }).addTo(labelGroup);
-        labels.push({ lat: +d.lat, lon: +d.lon, at: +d.lon, major, marker, w: measure(text, major ? 13 : 11) });
+        labels.push({ key, lat, lon, at: lon, major, marker, w: measure(text, major ? 13 : 11), px: major ? 13 : 11 });
       });
-      // majors claim their space first, then the small ones fill the gaps
-      labels.sort((a, b) => b.major - a.major);
       layoutLabels();
     }
 
-    // Show/hide labels for the current view: small labels only when zoomed in, and none piled on top of another.
+    // Where the words can go around the dot, in order of preference: right, left, then above/below on either side
+    const SPOTS = ['r', 'l', 'ru', 'rd', 'lu', 'ld'];
+    function textBox(p, lb, spot) {
+      const gap = lb.major ? 7 : 6, h = lb.px;
+      const x0 = spot[0] === 'r' ? p.x + gap : p.x - gap - lb.w;
+      const y0 = spot[1] === 'u' ? p.y - h + 1 : spot[1] === 'd' ? p.y - 1 : p.y - h / 2;
+      return { x0, x1: x0 + lb.w, y0, y1: y0 + h };
+    }
+    const dotBox = p => ({ x0: p.x - 4, x1: p.x + 4, y0: p.y - 4, y1: p.y + 4 });
+
+    // Show/hide labels for the current view: small labels only when zoomed in, and no words on top of other words or dots.
     function layoutLabels() {
       const zoomed = map.getZoom() >= LOOK.labelMinZoom;
       labelPane.classList.toggle('ns-lbl-zoomed', zoomed);
       if (!labels.length) return;
       const size = map.getSize(), cLon = map.getCenter().lng, placed = [];
-      const free = b => !placed.some(o => b.x1 > o.x0 && b.x0 < o.x1 && b.y1 > o.y0 && b.y0 < o.y1);
+      const free = b => !placed.some(o => b.x0 < o.x1 - 1 && b.x1 > o.x0 + 1 && b.y0 < o.y1 - 1 && b.y1 > o.y0 + 1);
+      const fit = (p, lb) => SPOTS.find(s => free(textBox(p, lb, s)));
       labels.forEach(lb => {
         // use the copy of the world nearest the middle of the view
         const lon = lb.lon + 360 * Math.round((cLon - lb.lon) / 360);
         if (lon !== lb.at) { lb.at = lon; lb.marker.setLatLng([lb.lat, lon]); }
-        let state = 'off', left = false;
-        if (lb.major || zoomed) {
-          const p = map.latLngToContainerPoint([lb.lat, lon]);
-          const h = lb.major ? 16 : 13, gap = lb.major ? 7 : 6;
-          const onScreen = p.x > -300 && p.y > -50 && p.x < size.x + 300 && p.y < size.y + 50;
-          const right = { x0: p.x - 4, x1: p.x + gap + lb.w + 2, y0: p.y - h / 2, y1: p.y + h / 2 };
-          const leftBox = { x0: p.x - gap - lb.w - 2, x1: p.x + 4, y0: right.y0, y1: right.y1 };
-          if (!onScreen) state = 'on';
-          else if (free(right)) { state = 'on'; placed.push(right); }
-          else if (free(leftBox)) { state = 'on'; left = true; placed.push(leftBox); }
-          else if (lb.major) {
-            // no room for the words: keep a crowded major target as a dot (unless another dot is right there)
-            const dot = { x0: p.x - 5, x1: p.x + 5, y0: p.y - 5, y1: p.y + 5 };
-            if (free(dot)) { state = 'dot'; placed.push(dot); }
-          }
-        }
+        lb.p = map.latLngToContainerPoint([lb.lat, lon]);
+        lb.inView = lb.p.x > -220 && lb.p.y > -20 && lb.p.x < size.x + 20 && lb.p.y < size.y + 20;
+        lb.state = (lb.major || zoomed) && !lb.inView ? 'on' : 'off';
+        lb.spot = 'r';
+      });
+      // 1. the dots of the major targets, 2. their words, 3. the small labels (dot and words together)
+      labels.forEach(lb => {
+        if (lb.major && lb.inView && free(dotBox(lb.p))) { lb.state = 'dot'; placed.push(dotBox(lb.p)); }
+      });
+      labels.forEach(lb => {
+        if (lb.state !== 'dot') return;
+        const spot = fit(lb.p, lb);
+        if (spot) { lb.state = 'on'; lb.spot = spot; placed.push(textBox(lb.p, lb, spot)); }
+      });
+      if (zoomed) labels.forEach(lb => {
+        if (lb.major || !lb.inView || !free(dotBox(lb.p))) return;
+        const spot = fit(lb.p, lb);
+        if (spot) { lb.state = 'on'; lb.spot = spot; placed.push(dotBox(lb.p), textBox(lb.p, lb, spot)); }
+      });
+      labels.forEach(lb => {
         const el = lb.marker.getElement();
         if (!el) return;
-        el.classList.toggle('ns-lbl-off', state === 'off');
-        el.classList.toggle('ns-lbl-notext', state === 'dot');
-        el.classList.toggle('ns-lbl-left', left);
+        el.classList.toggle('ns-lbl-off', lb.state === 'off');
+        el.classList.toggle('ns-lbl-notext', lb.state === 'dot');
+        el.classList.toggle('ns-lbl-l', lb.spot[0] === 'l');
+        el.classList.toggle('ns-lbl-u', lb.spot[1] === 'u');
+        el.classList.toggle('ns-lbl-d', lb.spot[1] === 'd');
       });
     }
-    map.on('zoomend moveend resize', layoutLabels);
+    map.on('moveend resize', layoutLabels);   // (moveend also follows every zoom)
     layoutLabels();
 
     return {

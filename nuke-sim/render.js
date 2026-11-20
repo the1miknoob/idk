@@ -14,7 +14,8 @@
 //   r.setSites(scenario.sites);       // launch sites: silo dots, little submarines, bases
 //   r.frame(simTime);                 // every animation frame (also while paused, so flashes finish and the map stays right)
 //   r.detonate(strike);               // when a strike reaches its target (sim time ≥ launchAt + flight)
-//   r.detonate(strike, { flash: false })   // same, but without the flash — e.g. when catching up after a seek
+//   r.detonate(strike, { instant: true })  // same, but without the flash — e.g. when catching up after a seek
+//                                         // ({ flash: false } works too)
 //   r.addStrike(strike);              // custom mode: one more missile
 //   r.reset();                        // forget all detonations and flashes (strikes and sites stay)
 //   r.options = { trails: true, damage: true, fallout: true }   // can be changed at any time
@@ -301,7 +302,7 @@
       };
       this._dets.push(d);
       this._pending.push(d);
-      if (!opts || opts.flash !== false) this._flashes.push({ d, t0: now() });
+      if (!opts || (opts.flash !== false && !opts.instant)) this._flashes.push({ d, t0: now() });
       return d;
     }
 
@@ -691,14 +692,16 @@
 
       if (trails) {
         // a soft wide glow under the bright front of every trail, in one batch
-        ctx.lineWidth = LOOK.glowWidth;
-        ctx.strokeStyle = LOOK.glowColor;
-        ctx.beginPath();
-        for (const S of act) {
-          const a = Math.max(0, S.p - T * 0.45), b = Math.min(1, S.p);
-          if (b > a) tracePath(ctx, S, a, b, S.seg * 3, S.sh, k, ox, oy, S.h);
+        if (LOOK.glowWidth > 0) {
+          ctx.lineWidth = LOOK.glowWidth;
+          ctx.strokeStyle = LOOK.glowColor;
+          ctx.beginPath();
+          for (const S of act) {
+            const a = Math.max(0, S.p - T * 0.45), b = Math.min(1, S.p);
+            if (b > a) tracePath(ctx, S, a, b, S.seg * 3, S.sh, k, ox, oy, S.h);
+          }
+          ctx.stroke();
         }
-        ctx.stroke();
         // then the trail itself, band by band from the dim orange tail to the yellow head (one batch per band)
         for (let i = 0; i < BANDS; i++) {
           ctx.lineWidth = BAND_WIDTH[i];
