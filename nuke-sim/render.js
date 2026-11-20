@@ -33,10 +33,11 @@
     trail: 0.35,                  // share of the flight path that stays lit behind each missile
     trailFrom: '#ff5a00',         // tail end of a trail (deep orange)…
     trailTo: '#ffd000',           // …fading up to yellow near the warhead
-    trailWidth: [0.7, 1.9],       // line width at the tail and at the head
+    trailWidth: [0.6, 1.0],       // line width at the tail and at the head (≤ 1 px lines are by far the fastest to draw)
     trailAlpha: [0.10, 0.95],     // how strong the tail and the head end are
-    glowWidth: 5,                 // soft glow under the bright front part of each trail
-    glowColor: 'rgba(255, 96, 0, 0.11)',
+    // Soft glow dabs just behind each warhead: [how far back (share of the whole path), radius px, strength]
+    glowStamps: [[0.012, 4.5, 0.55], [0.035, 3.6, 0.32], [0.07, 3, 0.18]],
+    adaptive: true,               // on a slow computer, shorten the faint tail ends when thousands of missiles fly at once
     headColor: '#fff3b0',         // the bright warhead dot
     headSize: 7,                  // radius of the warhead's glow
     // How tall the arc is, as a share of its length on screen (ICBMs climb high, submarine and short-range missiles less,
@@ -105,7 +106,7 @@
   const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
   // Trail colour bands, from the tail (0) to the head. All trails are drawn band by band in a few big batches.
-  const BANDS = 7;
+  const BANDS = 6;
   const BAND_STYLE = [], BAND_WIDTH = [];
   (function () {
     const a = hexRgb(LOOK.trailFrom), b = hexRgb(LOOK.trailTo);
@@ -134,6 +135,7 @@
   function makeSprites() {
     const head = hexRgb(LOOK.headColor);
     const S = {
+      spark: radial(32, [[0, 'rgba(255,190,60,0.9)'], [0.35, 'rgba(255,120,0,0.45)'], [1, 'rgba(255,90,0,0)']]),
       head: radial(64, [[0, 'rgba(255,255,248,1)'], [0.1, rgba(head, 1)], [0.2, 'rgba(255,208,0,0.8)'],
         [0.42, 'rgba(255,120,0,0.3)'], [0.7, 'rgba(255,90,0,0.08)'], [1, 'rgba(255,90,0,0)']]),
       flash: radial(128, [[0, 'rgba(255,255,255,1)'], [0.22, 'rgba(255,255,255,0.95)'], [0.45, 'rgba(255,248,230,0.55)'],
@@ -233,6 +235,10 @@
       this._lastStatic = 0;
       this._lastStaticT = NaN;
       this._sig = -1;
+      this._lod = 0;            // 0 = full trails; higher = shorter faint tails (only when the computer can't keep up)
+      this._lodAt = 0;
+      this._ema = 0;            // smoothed time between frames (ms)
+      this._lastFrameAt = 0;
 
       // Projection: everything is pre-computed in "zoom 0" map pixels; one multiply turns that into any zoom.
       const crs = map.options.crs;
@@ -331,6 +337,9 @@
       if (!map || !map._loaded) return;
       const t0 = now();
       if (isFinite(simTime)) this._t = +simTime;
+      const dt = t0 - this._lastFrameAt;
+      if (this._lastFrameAt && dt > 0 && dt < 250) this._ema = this._ema ? this._ema * 0.92 + dt * 0.08 : dt;
+      this._lastFrameAt = t0;
       const o = this.options || {};
       const sig = (o.damage !== false ? 1 : 0) | (o.fallout !== false ? 2 : 0);
       if (sig !== this._sig) { this._sig = sig; this._dirty = true; }
@@ -680,30 +689,22 @@
         if ((S.maxX + sh) * k - ox < -M || (S.minX + sh) * k - ox > W + M ||
           S.maxY * k - oy < -M || S.minY * k - oy - h > H + M) continue;
         S.p = p; S.sh = sh; S.h = h;
-        S.seg = clamp(Math.round((L + h) * T / BANDS / 22), 1, 8);
         act.push(S);
       }
       this.stats.inFlight = inFlight;
       this.stats.drawn = act.length;
+      this._adapt(act.length);
+      this.stats.lod = this._lod;
       if (!act.length) return;
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
+      const segPx = 22 + this._lod * 14;
+      for (const S of act) S.seg = clamp(Math.round((S.len * k + S.h) * T / BANDS / segPx), 1, 8);
+      ctx.globalCompositeOperation = 'lighter';   // light adds up: crowded corridors burn white-hot
+      ctx.lineCap = 'butt';
+      ctx.lineJoin = 'bevel';
 
       if (trails) {
-        // a soft wide glow under the bright front of every trail, in one batch
-        if (LOOK.glowWidth > 0) {
-          ctx.lineWidth = LOOK.glowWidth;
-          ctx.strokeStyle = LOOK.glowColor;
-          ctx.beginPath();
-          for (const S of act) {
-            const a = Math.max(0, S.p - T * 0.45), b = Math.min(1, S.p);
-            if (b > a) tracePath(ctx, S, a, b, S.seg * 3, S.sh, k, ox, oy, S.h);
-          }
-          ctx.stroke();
-        }
-        // then the trail itself, band by band from the dim orange tail to the yellow head (one batch per band)
-        for (let i = 0; i < BANDS; i++) {
+        // the trail, band by band from the dim orange tail to the yellow head (one batch per band for all missiles)
+        for (let i = Math.min(this._lod, BANDS - 3); i < BANDS; i++) {
           ctx.lineWidth = BAND_WIDTH[i];
           ctx.strokeStyle = BAND_STYLE[i];
           ctx.beginPath();
@@ -712,6 +713,20 @@
             if (b > a) tracePath(ctx, S, a, b, S.seg, S.sh, k, ox, oy, S.h);
           }
           ctx.stroke();
+        }
+      }
+      // soft glow dabs just behind each warhead
+      if (trails) {
+        for (const g of LOOK.glowStamps) {
+          const r = g[1];
+          ctx.globalAlpha = g[2];
+          for (const S of act) {
+            const f = S.p - g[0];
+            if (f < 0 || f > 1) continue;
+            pathPoint(S, f, S.sh, k, ox, oy, S.h);
+            if (OUT.x < -r || OUT.y < -r || OUT.x > W + r || OUT.y > H + r) continue;
+            ctx.drawImage(SPR.spark, OUT.x - r, OUT.y - r, r * 2, r * 2);
+          }
         }
       }
       // the warheads: a bright glowing dot each
@@ -723,6 +738,14 @@
         if (OUT.x < -hr || OUT.y < -hr || OUT.x > W + hr || OUT.y > H + hr) continue;
         ctx.drawImage(img, OUT.x - hr, OUT.y - hr, hr * 2, hr * 2);
       }
+    }
+
+    // If frames get slow (< ~30 fps) while lots of missiles fly, draw shorter faint tails; come back when it's fast again
+    _adapt(drawn) {
+      const t = this._lastFrameAt;
+      if (!LOOK.adaptive) { this._lod = 0; return; }
+      if (this._ema > 34 && drawn > 600 && this._lod < 3 && t - this._lodAt > 600) { this._lod++; this._lodAt = t; }
+      else if ((this._ema < 22 || drawn < 300) && this._lod > 0 && t - this._lodAt > 1500) { this._lod--; this._lodAt = t; }
     }
 
     _drawFlashes(ctx, v, tNow) {
