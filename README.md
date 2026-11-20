@@ -24,4 +24,6 @@ The Browser includes Scramjet 1.1.0 (`browser/scramjet/`), Ultraviolet 3.2.10 (`
 
 Word Hunt checks guesses against the 5-letter words from [an-array-of-english-words](https://github.com/words/an-array-of-english-words) (MIT License).
 
+Nuke Sim uses city populations from [GeoNames](https://www.geonames.org/) (CC BY 4.0, via the [all-the-cities](https://github.com/zeke/all-the-cities) package, MIT License), country shapes from Natural Earth (via world-atlas), Esri World Imagery map tiles, and public figures on arsenals and blast effects (the FAS Nuclear Notebook, Glasstone and Dolan's *The Effects of Nuclear Weapons*, and Wikipedia). Its missile silo dots are an illustrative random scatter, not real silo locations.
+
 World Watch uses free public data: Wikipedia (Current events and the list of ongoing armed conflicts, CC BY-SA), the GDELT Project, USGS, NASA EONET, Where the ISS at?, RainViewer, OpenSky Network, Hacker News, Spaceflight News API, CoinGecko, Frankfurter, OpenStreetMap/Nominatim, Open-Meteo and Natural Earth (via world-atlas). Map tiles by CARTO, Esri and OpenStreetMap, drawn with [Leaflet](https://leafletjs.com/).
