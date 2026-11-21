@@ -73,6 +73,7 @@
     body.idle .phase:not(.flash) { opacity: 0; }
     body.idle { cursor: none; }
     .clock-wrap, .leaflet-control-container { transition: opacity .5s ease; }
+    .bar-main #cam-btn .btn-text { display: none; }
     #cam-btn[aria-pressed="true"] { border-color: rgba(255, 181, 71, .45); color: #ffd69a; background: rgba(255, 181, 71, .1); }
     .back { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); text-decoration: none; font-size: 13px; white-space: nowrap; padding: 6px 4px; }
     .back:hover { color: var(--text); }
@@ -165,9 +166,9 @@
     .p-kicker { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-bottom: 9px; display: flex; justify-content: space-between; gap: 8px; }
     #scenario-name { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
     #scenario-blurb { color: #c5c7cb; font-size: 13px; line-height: 1.5; }
-    #sec-custom { display: none; }
-    body.mode-custom #sec-custom { display: block; }
-    body.mode-custom #sec-about { display: none; }
+    #sec-custom, #sec-sandbox { display: none; }
+    body.mode-custom #sec-custom, body.mode-sandbox #sec-sandbox { display: block; }
+    body.mode-custom #sec-about, body.mode-sandbox #sec-about { display: none; }
     .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .stat { background: rgba(255, 255, 255, .035); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; }
     .stat span { display: block; font-size: 11px; color: var(--muted); }
@@ -382,6 +383,7 @@
       <div class="seg" role="group" aria-label="Mode">
         <button id="mode-scenario" type="button" aria-pressed="true">Scenario</button>
         <button id="mode-custom" type="button" aria-pressed="false"><span class="long">Build your own</span><span class="short">Custom</span></button>
+        <button id="mode-sandbox" type="button" aria-pressed="false">Sandbox</button>
       </div>
       <button id="learn" class="ctl" type="button" title="How it works, sources and limits">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 1.8a8.2 8.2 0 1 1 0 16.4 8.2 8.2 0 0 1 0-16.4zM11 10.5h2V17h-2zm0-3.5h2v2h-2z"/></svg>
@@ -426,6 +428,10 @@
         <div class="p-kicker">Scenario</div>
         <div id="scenario-name"></div>
         <p id="scenario-blurb"></p>
+      </section>
+      <section class="p-sec" id="sec-sandbox">
+        <div class="p-kicker">Sandbox</div>
+        <div id="sandbox-panel"></div>
       </section>
       <section class="p-sec" id="sec-custom">
         <div class="p-kicker">Build your own</div>
@@ -498,6 +504,7 @@
   <script src="render.js"></script>
   <script src="camera.js"></script>
   <script src="custom.js"></script>
+  <script src="sandbox.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
