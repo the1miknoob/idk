@@ -150,7 +150,7 @@
   const SCENARIOS = Array.isArray(NS.SCENARIOS) ? NS.SCENARIOS.filter(s => s && s.id) : [];
   let scenarioId = SCENARIOS.length ? SCENARIOS[0].id : '';
   let ns = emptyScenario();     // the built scenario (strikes, phases, view…)
-  let mode = 'scenario';        // 'scenario' or 'custom'
+  let mode = 'scenario';        // 'scenario', 'custom' (build your own) or 'sandbox'
   let t = 0;                    // sim time, seconds since T+0
   let running = false;
   let ended = false;
@@ -170,6 +170,8 @@
   let lastFlush = 0, lastCountries = 0;
   let customSeq = 0;
   let custom = null;                          // the NS.CustomMode instance (made the first time it is needed)
+  let sandbox = null;                         // the NS.SandboxMode instance (likewise)
+  const live = () => mode !== 'scenario';     // build your own and sandbox: the clock runs on and you launch the missiles
   let savedScenarioT = 0;                     // where the scenario was when we switched to build-your-own
   const detonationListeners = [];
 
@@ -239,7 +241,7 @@
   // In build-your-own mode the clock only moves forward (the rings there belong to custom.js), so it just fast-forwards.
   function seek(nt) {
     nt = clamp(+nt || 0, 0, mode === 'scenario' ? ns.end : Infinity);
-    if (mode === 'custom') { if (nt > t) advanceTo(nt); updateClock(); return; }
+    if (live()) { if (nt > t) advanceTo(nt); updateClock(); return; }
     resetTo(nt);
   }
   function resetTo(nt) {
@@ -290,7 +292,11 @@
   function pause() { running = false; flushLog(); updatePlayUi(); }
   function toggle() { running ? pause() : play(); }
   function restart() {
-    if (mode === 'custom') { if (custom) safe('custom.clear', () => custom.clear()); useStrikes([]); resetTo(0); }
+    if (live()) {
+      if (mode === 'custom' && custom) safe('custom.clear', () => custom.clear());
+      if (mode === 'sandbox' && sandbox) safe('sandbox.clear', () => sandbox.clear());
+      useStrikes([]); resetTo(0);
+    }
     else seek(0);
     play();
   }
@@ -379,13 +385,17 @@
   function setMode(m) {
     if (m === mode) return;
     closeMenu();
-    if (m === 'custom') {
-      savedScenarioT = t;
-      flushLog();
-      mode = 'custom';
+    const wasLive = live();
+    // leave the mode we were in
+    if (mode === 'custom' && custom) { safe('custom.clear', () => custom.clear()); safe('custom.disable', () => custom.disable()); }
+    if (mode === 'sandbox' && sandbox) { safe('sandbox.clear', () => sandbox.clear()); safe('sandbox.disable', () => sandbox.disable()); }
+    if (m === 'custom' || m === 'sandbox') {
+      if (!wasLive) { savedScenarioT = t; flushLog(); }
+      mode = m;
       ended = false;
-      body.classList.add('mode-custom');
-      map.setMaxZoom(MAX_ZOOM_CUSTOM);
+      body.classList.toggle('mode-custom', m === 'custom');
+      body.classList.toggle('mode-sandbox', m === 'sandbox');
+      map.setMaxZoom(m === 'custom' ? MAX_ZOOM_CUSTOM : MAX_ZOOM);
       if (maplayer) {
         safe('maplayer.setSides', () => maplayer.setSides(null));
         safe('maplayer.setLabels', () => maplayer.setLabels([]));
@@ -398,25 +408,54 @@
       useStrikes([]);
       phases = [];
       resetTo(0);
-      ensureCustom();
-      if (custom) safe('custom.enable', () => custom.enable());
-      showCustomCard();
+      if (m === 'custom') {
+        ensureCustom();
+        if (custom) safe('custom.enable', () => custom.enable());
+        showCustomCard();
+      } else {
+        ensureSandbox();
+        if (sandbox) safe('sandbox.enable', () => sandbox.enable());
+        showSandboxCard();
+        if (!wasLive) flyToView({ lat: 50, lon: 20, zoom: 2.5 }, false, 1200);
+      }
       running = true;          // the clock keeps going so launched missiles fly
     } else {
-      if (custom) {
-        safe('custom.clear', () => custom.clear());
-        safe('custom.disable', () => custom.disable());
-      }
       mode = 'scenario';
-      body.classList.remove('mode-custom');
+      body.classList.remove('mode-custom', 'mode-sandbox');
       map.setMaxZoom(MAX_ZOOM);   // zooms back out if you were closer than that
       loadScenario(scenarioId, { keepView: true, t: savedScenarioT });
       if (load(STORE.panel) !== 'open') setPanel(false, true);
       if (director) director.setEnabled(true);
     }
-    $('mode-scenario').setAttribute('aria-pressed', String(mode === 'scenario'));
-    $('mode-custom').setAttribute('aria-pressed', String(mode === 'custom'));
+    ['scenario', 'custom', 'sandbox'].forEach(k => { const b = $('mode-' + k); if (b) b.setAttribute('aria-pressed', String(mode === k)); });
     updatePlayUi();
+  }
+
+  const detonationHook = cb => {
+    if (typeof cb !== 'function') return () => {};
+    detonationListeners.push(cb);
+    return () => { const i = detonationListeners.indexOf(cb); if (i >= 0) detonationListeners.splice(i, 1); };
+  };
+
+  function ensureSandbox() {
+    if (sandbox) return sandbox;
+    const panel = $('sandbox-panel');
+    if (!NS.SandboxMode) {
+      panel.innerHTML = '<p class="custom-missing">The sandbox did not load. Try reloading the page.</p>';
+      return null;
+    }
+    sandbox = safe('SandboxMode', () => new NS.SandboxMode({
+      map, renderer, casualties, panel,
+      launch: launchCustom,
+      now: () => t,
+      onDetonation: detonationHook,
+      setSides: s => { if (maplayer) maplayer.setSides(s); safe('renderer.setCityDots', () => renderer.setCityDots(s ? [].concat((s.blue && s.blue.countries) || [], (s.red && s.red.countries) || []) : [])); },
+      setLabels: l => { if (maplayer) maplayer.setLabels(l); },
+      flyTo: v => flyToView(v, false, 1400),
+      clearAll: () => { useStrikes([]); resetTo(t); }
+    }), null);
+    if (!sandbox) panel.innerHTML = '<p class="custom-missing">The sandbox could not start. Try reloading the page.</p>';
+    return sandbox;
   }
 
   function ensureCustom() {
@@ -430,11 +469,7 @@
       map, renderer, casualties, panel,
       launch: launchCustom,
       now: () => t,
-      onDetonation(cb) {
-        if (typeof cb !== 'function') return () => {};
-        detonationListeners.push(cb);
-        return () => { const i = detonationListeners.indexOf(cb); if (i >= 0) detonationListeners.splice(i, 1); };
-      }
+      onDetonation: detonationHook
     }), null);
     if (!custom) panel.innerHTML = '<p class="custom-missing">The build-your-own tools could not start. Try reloading the page.</p>';
     return custom;
@@ -443,7 +478,7 @@
   // A strike from build-your-own mode: it launches now and joins the clock like any other
   function launchCustom(s) {
     if (!s || !s.to || !isFinite(s.to.lat) || !isFinite(s.to.lon)) return null;
-    s.launchAt = t;
+    s.launchAt = isFinite(s.launchAt) && s.launchAt > t ? +s.launchAt : t;   // a salvo may stagger its launches a little
     if (!isFinite(s.flight) || s.flight < 0) s.flight = 0;
     if (s.id == null) s.id = 'c' + (++customSeq);
     if (!s.side) s.side = 'red';
@@ -507,6 +542,12 @@
       'Estimated ' + fmtInt(totals.deaths) + ' deaths and ' + fmtInt(totals.injuries) + ' injuries from blast and heat alone. ' +
       'Fallout, fires, the collapse of hospitals, power and food supplies, and the cooling from smoke would kill many more in the weeks and years after.',
       'end', instant);
+  }
+
+  function showSandboxCard() {
+    setCard('Sandbox', 'You decide who fires',
+      sandbox ? 'Choose a country and its missiles in the panel, then click the map to launch, or strike a whole country. With "fire back" on, watch how one strike escalates.'
+        : 'The sandbox did not load.', '', true);
   }
 
   function showCustomCard() {
@@ -680,7 +721,7 @@
     const txt = fmtClock(t);
     if (txt !== lastClock) { lastClock = txt; $('clock').textContent = txt; }
     const label = (SPEEDS.find(s => s[0] === speed) || [0, speed + ' s/s'])[1];
-    const state = mode === 'custom' ? (running ? 'Build your own · ' + label : 'Paused') :
+    const state = live() ? (running ? (mode === 'sandbox' ? 'Sandbox · ' : 'Build your own · ') + label : 'Paused') :
       ended ? 'Simulation ended' : running ? 'Running · ' + label : (t > 0 ? 'Paused' : 'Ready · press Play');
     if (updateClock.state !== state) { updateClock.state = state; $('clock-sub').textContent = state; }
   }
@@ -825,7 +866,7 @@
     $('scenario').addEventListener('change', e => {
       const id = e.target.value;
       e.target.blur();
-      if (mode === 'custom') { savedScenarioT = 0; scenarioId = id; setMode('scenario'); flyToView(ns.view); }
+      if (live()) { savedScenarioT = 0; scenarioId = id; setMode('scenario'); flyToView(ns.view); }
       else loadScenario(id);
     });
     $('play').addEventListener('click', toggle);
@@ -838,6 +879,7 @@
     });
     $('mode-scenario').addEventListener('click', () => setMode('scenario'));
     $('mode-custom').addEventListener('click', () => setMode('custom'));
+    $('mode-sandbox').addEventListener('click', () => setMode('sandbox'));
     $('learn').addEventListener('click', openLearn);
     $('note-learn').addEventListener('click', openLearn);
     $('intro-learn').addEventListener('click', () => { startFromIntro(); openLearn(); });
@@ -928,6 +970,7 @@
     get scenario() { return ns; },
     get map() { return map; },
     get camera() { return director; },
+    get sandbox() { return sandbox; },
     get renderer() { return renderer; }
   };
 })(typeof window !== 'undefined' ? window : globalThis);
