@@ -32,7 +32,9 @@
   ];
   const CHECK_URL = load('check-url', '') || 'https://example.com/';   // the tiny page every server has to load to count as working
   // ✏️ EDIT: search engines (%s is what was typed)
+  const SEEK = new URL('../search/', location.href).href;   // Seek, the site's own search engine (opens as a page of this site)
   const ENGINES = {
+    seek: ['Seek', SEEK + '?q=%s'],
     ddg: ['DuckDuckGo', 'https://duckduckgo.com/?q=%s'],
     google: ['Google', 'https://www.google.com/search?q=%s'],
     bing: ['Bing', 'https://www.bing.com/search?q=%s'],
@@ -82,7 +84,10 @@
   const COLORS = ['#5b5bd6', '#e0457b', '#0e9f9e', '#d97706', '#16a34a', '#3b82f6', '#c026d3', '#dc2626', '#64748b'];
 
   const LOOK = { theme: 'auto', accent: '#2563eb', tabs: 'classic', density: 'comfy', font: 'system', homeBtn: true, bmbar: 'ntp', bg: 'none', clock: true, shortcuts: true, lists: true };
-  const prefs = Object.assign({ server: 'auto', custom: '', engine: 'ddg', restore: true, core: 'sj', yt: 'auto' }, LOOK, load('prefs', {}));
+  const prefs = Object.assign({ server: 'auto', custom: '', engine: 'seek', restore: true, core: 'sj', yt: 'auto' }, LOOK, load('prefs', {}));
+  // Seek became the default search engine: people still on the old default (DuckDuckGo) are switched once
+  if (!load('seek-default', false)) { if (prefs.engine === 'ddg') { prefs.engine = 'seek'; save('prefs', prefs); } save('seek-default', true); }
+  const isSeek = u => typeof u === 'string' && u.startsWith(SEEK);   // Seek's pages are part of this site: they open directly, not through the proxy
   if (!CORES[prefs.core]) prefs.core = 'sj';
   let bookmarks = load('bookmarks', []), visits = load('history', []);
   let quick = load('quick', null) || QUICK.map(([n, u]) => ({ n, u }));
@@ -185,7 +190,7 @@
         try { return new URL((local ? 'http://' : 'https://') + s).href; } catch (e) {}
       }
     }
-    const eng = ENGINES[prefs.engine] || ENGINES.ddg;
+    const eng = ENGINES[prefs.engine] || ENGINES.seek;
     return eng[1].replace('%s', encodeURIComponent(s));
   }
   // A web address → its address through the proxy (Scramjet keeps the #part separate, like it does itself)
@@ -199,6 +204,7 @@
   function realOf(href) {
     try {
       const u = new URL(href, location.href);
+      if (isSeek(u.href)) return u.href;
       if (u.origin !== location.origin || !u.pathname.startsWith(PREFIX)) return null;
       let r;
       if (u.pathname.startsWith(SJ_PREFIX)) {
@@ -634,6 +640,11 @@
     try { await engine(); if (!server.ok) await reconnect(); }
     catch (e) { t.loading = false; t.err = { kind: e.kind === 'support' ? 'support' : 'engine', msg: e.message }; paint(t); return; }
     if (t.url !== url) return;   // something else was opened while waiting
+    if (isSeek(url)) {   // Seek opens as itself (it searches through the tunnel on its own, and says so if there's no server)
+      if (!t.frame) { makeFrame(t).src = url; return; }
+      try { t.frame.contentWindow.location.replace(url); } catch (e) { t.frame.src = url; }
+      return;
+    }
     if (!server.ok) {
       t.loading = false;
       t.err = noServer();
@@ -776,6 +787,7 @@
     const target = (a.getAttribute('target') || '').toLowerCase();
     if (extra) { e.preventDefault(); e.stopPropagation(); newTab(real, { after: t, background: !e.shiftKey }); if (!e.shiftKey) toast('Opened in a new tab'); return; }
     if (e.type !== 'click' || e.button !== 0) return;
+    if (isSeek(t.url) && !isSeek(real)) { e.preventDefault(); go(t, real); return; }   // a result in Seek: open it through the proxy
     if (target === '_top' || target === '_parent') { e.preventDefault(); go(t, real); return; }
     if (target && target !== '_self') {
       let named = false;
@@ -867,7 +879,7 @@
   const linkRow = (x, rm) => `<div class="link" role="button" tabindex="0" data-open="${esc(x.u)}">${siteIcon(x.u, 18)}
     <span class="lt"><b>${esc(x.t || host(x.u))}</b><small>${esc(host(x.u))}</small></span>${rm ? `<button class="rm" data-rm="${rm}" data-u="${esc(x.u)}" aria-label="Remove" title="Remove">${icon('x')}</button>` : ''}</div>`;
   function renderNtp() {
-    $('#ntp-q').placeholder = 'Search with ' + (ENGINES[prefs.engine] || ENGINES.ddg)[0] + ' or type a web address';
+    $('#ntp-q').placeholder = 'Search with ' + (ENGINES[prefs.engine] || ENGINES.seek)[0] + ' or type a web address';
     $('#clockbox').hidden = !prefs.clock;
     if (prefs.clock) tick();
     $('#quickbox').hidden = !prefs.shortcuts;
@@ -922,7 +934,7 @@
     const box = $('#sugg');
     if (!q || document.activeElement !== $('#addr')) { box.hidden = true; sugg = []; return; }
     const seen = new Set(), list = [];
-    const eng = ENGINES[prefs.engine] || ENGINES.ddg, first = toUrl(raw);
+    const eng = ENGINES[prefs.engine] || ENGINES.seek, first = toUrl(raw);
     const isSearch = first === eng[1].replace('%s', encodeURIComponent(raw));
     list.push({ u: first, t: isSearch ? `${raw} – Search with ${eng[0]}` : first, ic: isSearch ? 'search' : 'globe' });
     for (const x of bookmarks.concat(visits)) {
