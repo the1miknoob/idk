@@ -75,7 +75,7 @@
       try { const r = await timeout(fetch(url), 4000); if (r.ok) return o.json ? r.json() : r.text(); } catch (e) { /* through the tunnel instead */ }
     }
     await tunnel();
-    const r = await client.fetch(url, { headers: o.headers || {} });
+    const r = await client.fetch(url, { method: o.method || 'GET', body: o.body, headers: o.headers || {} });
     if (r.status >= 400) throw new Error(new URL(url).hostname + ' answered ' + r.status);
     const t = await r.text();
     return o.json ? JSON.parse(t) : t;
@@ -246,7 +246,7 @@
   }
   function ago(when) {
     const t = Date.parse(when);
-    if (!t) return '';
+    if (!t) return /^[\w .]{1,24}$/.test(when || '') ? when : '';   // already short, like Bing's 2h
     const m = Math.round((Date.now() - t) / 60000);
     return m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : m < 43200 ? Math.round(m / 1440) + ' days ago' : new Date(t).toLocaleDateString();
   }

@@ -44,7 +44,7 @@
   // A search engine's "you look like a robot" page instead of results
   function blocked(doc, html) {
     return !!(doc.querySelector('#challenge-form, .anomaly-modal, form[action*="captcha" i], #captcha, .g-recaptcha, iframe[src*="captcha" i]') ||
-      /unusual traffic|are you a robot|anomaly-modal|verify you are human|bots use duckduckgo/i.test(html.slice(0, 20000)));
+      /unusual traffic|are you a robot|anomaly-modal|verify you are human|bots use duckduckgo|altcha/i.test(html.slice(0, 20000)));
   }
   // When an engine changes its page layout: take any outside links with real-looking titles
   function anyLinks(doc, base, skipHost) {
@@ -65,12 +65,28 @@
     bing: { strict: 'strict', moderate: 'moderate', off: 'off' },
     mojeek: { strict: '1', moderate: '1', off: '0' },
   };
+  // Each source: request(q, page, safe, state) → { url, method, body, headers }, and parse(html, url, state) → results.
+  // `state` is kept between the pages of one search (DuckDuckGo needs a code from page 1 to give page 2).
+  // (These follow how SearXNG, the big open-source meta search engine, reads the same pages.)
   const SOURCES = {
     ddg: {
-      url: (q, page, safe) => `https://html.duckduckgo.com/html/?q=${enc(q)}&kl=us-en&kp=${SAFE.ddg[safe]}` + (page > 1 ? `&s=${(page - 1) * 30 - 5}&dc=${(page - 1) * 30 - 4}` : ''),
-      parse(html, base) {
+      // DuckDuckGo's no-JavaScript page, asked the way its own search form does (a POST)
+      request(q, page, safe, state) {
+        const kp = SAFE.ddg[safe];
+        const headers = { 'Content-Type': 'application/x-www-form-urlencoded', Referer: 'https://html.duckduckgo.com/', Cookie: `kl=us-en; kp=${kp}` };
+        let body;
+        if (page > 1 && state.next) { body = new URLSearchParams(state.next); body.set('kp', kp); }
+        else if (page > 1) throw new Error('DuckDuckGo has no more pages');
+        else body = new URLSearchParams({ q, b: '', kl: 'us-en', kp });
+        return { url: 'https://html.duckduckgo.com/html/', method: 'POST', body: body.toString(), headers };
+      },
+      parse(html, base, state) {
         const doc = parseHTML(html);
         if (blocked(doc, html)) throw new Error('DuckDuckGo asked for a robot check');
+        // the "Next" button's form holds everything needed for the next page (including the vqd code)
+        const vqd = doc.querySelector('input[name="vqd"]');
+        const form = vqd && vqd.closest('form');
+        state.next = form ? [...form.querySelectorAll('input[name]')].filter(i => i.type !== 'submit').map(i => [i.name, i.value]) : null;
         const out = [];
         for (const r of doc.querySelectorAll('.result, .web-result')) {
           if (/result--ad/.test(r.className) || r.querySelector('.badge--ad')) continue;
@@ -85,7 +101,8 @@
       }
     },
     bing: {
-      url: (q, page, safe) => `https://www.bing.com/search?q=${enc(q)}&setlang=en-US&cc=US&adlt=${SAFE.bing[safe]}` + (page > 1 ? `&first=${(page - 1) * 10 + 1}` : ''),
+      // (no cc=US: Bing sends junk results for it)
+      request: (q, page, safe) => ({ url: `https://www.bing.com/search?q=${enc(q)}&setlang=en&adlt=${SAFE.bing[safe]}` + (page > 1 ? `&first=${(page - 1) * 10 + 1}` : '') }),
       parse(html, base) {
         const doc = parseHTML(html);
         if (blocked(doc, html)) throw new Error('Bing asked for a robot check');
@@ -106,15 +123,17 @@
       }
     },
     mojeek: {
-      url: (q, page, safe) => `https://www.mojeek.com/search?q=${enc(q)}&safe=${SAFE.mojeek[safe]}` + (page > 1 ? `&s=${(page - 1) * 10 + 1}` : ''),
+      // (s=0 on the first page sets off Mojeek's rate limit, so it's only sent for later pages)
+      request: (q, page, safe) => ({ url: `https://www.mojeek.com/search?q=${enc(q)}&safe=${SAFE.mojeek[safe]}` + (page > 1 ? `&s=${(page - 1) * 10}` : '') }),
       parse(html, base) {
         const doc = parseHTML(html);
         if (blocked(doc, html)) throw new Error('Mojeek asked for a robot check');
         const out = [];
         for (const li of doc.querySelectorAll('ul.results-standard > li, .results-standard li')) {
-          const a = li.querySelector('a.title') || li.querySelector('h2 a');
+          const a = li.querySelector('h2 a') || li.querySelector('a.title');
           if (!a) continue;
-          const u = absUrl(a.getAttribute('href'), base);
+          const ob = li.querySelector('a.ob');
+          const u = absUrl((ob || a).getAttribute('href'), base);
           if (!okUrl(u)) continue;
           out.push({ url: u, title: text(a), snippet: text(li.querySelector('p.s')) });
         }
@@ -202,10 +221,12 @@
   }
 
   // ---------- the engine ----------
-  // get(url, { headers, json, xml }) → Promise of the page's text (or JSON); `direct` fetches from sites that allow it
+  // get(url, { method, body, headers, json, xml, direct }) → Promise of the page's text (or JSON);
+  // `direct` means the site allows being read straight from the page (Wikipedia), so the proxy isn't needed
   function Engine(get, opts) {
     this.get = get;
     this.opts = Object.assign({ safe: 'strict' }, opts || {});
+    this.state = { q: null };   // what each source needs to remember between pages of the same search
   }
   Engine.WEB = WEB;
   Engine.SOURCES = SOURCES;
@@ -223,11 +244,14 @@
   Engine.prototype.web = async function (q, page) {
     const t0 = Date.now();
     page = page || 1;
+    const key = q + '\n' + this.opts.safe;
+    if (this.state.q !== key) this.state = { q: key };   // a new search starts from scratch
     const runs = WEB.map(async s => {
-      const src = SOURCES[s.id], url = src.url(q, page, this.opts.safe);
+      const src = SOURCES[s.id], st = this.state[s.id] || (this.state[s.id] = {});
       try {
-        const html = await this.fetchText(url, { headers: { 'Accept-Language': 'en-US,en;q=0.9' } });
-        const items = src.parse(String(html), url).filter(x => okUrl(x.url) && x.title);
+        const req = src.request(q, page, this.opts.safe, st);
+        const html = await this.fetchText(req.url, { method: req.method, body: req.body, headers: Object.assign({ 'Accept-Language': 'en-US,en;q=0.9' }, req.headers) });
+        const items = src.parse(String(html), req.url, st).filter(x => okUrl(x.url) && x.title);
         return { id: s.id, name: s.name, ok: true, count: items.length, items };
       } catch (e) { return { id: s.id, name: s.name, ok: false, count: 0, items: [], error: String(e && e.message || e) }; }
     });
@@ -241,14 +265,17 @@
     page = page || 1;
     const safe = SAFE.bing[this.opts.safe];
     try {
-      const url = `https://www.bing.com/images/search?q=${enc(q)}&form=HDRSC2&adlt=${safe}&first=${(page - 1) * 35 + 1}`;
-      const doc = parseHTML(String(await this.fetchText(url)));
+      const url = `https://www.bing.com/images/async?q=${enc(q)}&mmasync=1&first=${(page - 1) * 35 + 1}&count=35&setlang=en&adlt=${safe}`;
+      const doc = parseHTML(String(await this.fetchText(url, { headers: { Cookie: 'SRCHHPGUSR=ADLT=' + safe.toUpperCase() } })));
       const out = [];
       for (const a of doc.querySelectorAll('a.iusc')) {
         let m = null;
         try { m = JSON.parse(a.getAttribute('m') || ''); } catch (e) {}
         if (!m || !okUrl(m.turl || m.murl)) continue;
-        out.push({ thumb: m.turl || m.murl, full: m.murl || m.turl, title: clean(m.t || m.desc || ''), page: okUrl(m.purl) ? m.purl : m.murl });
+        const li = a.closest('li') || a.parentElement;
+        const cap = li && li.querySelector('.infnmpt a');
+        const title = clean((cap && (cap.textContent || cap.getAttribute('title'))) || m.t || m.desc || '');
+        out.push({ thumb: m.turl || m.murl, full: m.murl || m.turl, title, page: okUrl(m.purl) ? m.purl : m.murl });
       }
       if (out.length) return out;
     } catch (e) { /* try Wikimedia Commons */ }
@@ -265,7 +292,7 @@
   Engine.prototype.videos = async function (q) {
     const url = `https://www.youtube.com/results?search_query=${enc(q)}&sp=EgIQAQ%253D%253D&hl=en&gl=US`;
     const headers = { 'Accept-Language': 'en-US,en;q=0.9' };
-    if (this.opts.safe === 'strict') headers.Cookie = 'PREF=f2=8000000';   // YouTube's Restricted Mode
+    headers.Cookie = 'CONSENT=YES+' + (this.opts.safe === 'strict' ? '; PREF=f2=8000000' : '');   // (Europe's cookie question; PREF is YouTube's Restricted Mode)
     const html = String(await this.fetchText(url, { headers }));
     const m = html.match(/ytInitialData\s*=\s*(\{.+?\});\s*<\/script>/s);
     if (!m) throw new Error('YouTube sent no results');
@@ -301,7 +328,19 @@
       }).filter(x => okUrl(x.url) && x.title);
     };
     try {
-      const xml = await this.fetchText(`https://www.bing.com/news/search?q=${enc(q)}&format=rss&setlang=en-US&cc=US`, { xml: true });
+      const doc = parseHTML(String(await this.fetchText(`https://www.bing.com/news/infinitescrollajax?q=${enc(q)}&InfiniteScroll=1&first=1&SFX=0&form=PTFTNR&setlang=en`)));
+      const out = [];
+      for (const it of doc.querySelectorAll('div.newsitem, div.news-card')) {
+        const a = it.querySelector('a.title');
+        if (!a || !okUrl(a.getAttribute('href'))) continue;
+        const src = it.querySelector('.source');
+        const age = src && src.querySelector('span[aria-label]');
+        out.push({ url: a.getAttribute('href'), title: text(a), snippet: text(it.querySelector('.snippet')), source: clean(a.getAttribute('data-author') || it.getAttribute('data-author') || (src && src.querySelector('a') ? text(src.querySelector('a')) : '')), when: age ? clean(age.getAttribute('aria-label')) : '' });
+      }
+      if (out.length) return out;
+    } catch (e) { /* try the RSS feed */ }
+    try {
+      const xml = await this.fetchText(`https://www.bing.com/news/search?q=${enc(q)}&format=rss&setlang=en`, { xml: true });
       const out = items(xml, l => { try { const x = new URL(l); return x.searchParams.get('url') || l; } catch (e) { return l; } });
       if (out.length) return out;
     } catch (e) { /* try Google News */ }
