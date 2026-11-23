@@ -645,7 +645,12 @@
   function toEntry(t, i) {
     t.pos = i;
     const url = t.hist[i];
-    if (!url) { t.url = ''; t.err = null; t.loading = false; t.title = 'New tab'; paint(t); saveTabs(); return; }
+    if (!url) {
+      // back to the new tab page: forget the page that was still loading, or it would take this place when it arrives
+      t.url = ''; t.err = null; t.loading = false; t.expect = null; t.from = null; t.title = 'New tab';
+      try { win(t).stop(); } catch (e) {}
+      paint(t); saveTabs(); return;
+    }
     go(t, url, true);
   }
   const back = (t = active) => { if (t.pos > 0) toEntry(t, t.pos - 1); };
