@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Seek</title>
+  <meta name="description" content="Seek, Mikaeel's own search engine: web results from several search engines at once with its own ranking, plus images, videos, news, definitions, a calculator and Wikipedia answers.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='13.5' cy='13.5' r='8.5' fill='none' stroke='%232563eb' stroke-width='4'/><path d='M20 20l7.5 7.5' stroke='%232563eb' stroke-width='4' stroke-linecap='round'/></svg>">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <link rel="apple-touch-icon" href="../apple-touch-icon.png">
+  <style>
+    /* ---------- Colors (the Browser's theme and accent color are used when they're set) ---------- */
+    :root {
+      --accent: #2563eb;
+      --bg: #ffffff; --panel: #ffffff; --soft: #f3f5f8; --field: #f1f3f6; --line: #e3e6eb; --hover: rgba(15, 23, 42, .05);
+      --text: #1b1f27; --muted: #5f6672; --faint: #8a919c; --link: var(--accent); --visited: #6d3fc0; --good: #15803d; --bad: #b91c1c;
+      --shadow: 0 6px 24px rgba(15, 23, 42, .08);
+      color-scheme: light;
+    }
+    :root[data-theme="dark"] {
+      --bg: #15171b; --panel: #1c1f25; --soft: #1f232a; --field: #23272f; --line: #2e333c; --hover: rgba(255, 255, 255, .06);
+      --text: #e7e9ed; --muted: #a2a9b4; --faint: #7d848f; --link: color-mix(in srgb, var(--accent) 62%, #fff); --visited: #b69cf0; --good: #4ade80; --bad: #f87171;
+      --shadow: 0 6px 24px rgba(0, 0, 0, .35);
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body { background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; min-height: 100vh; }
+    a { color: var(--link); text-decoration: none; }
+    button, input, select { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    svg { display: block; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+    /* ---------- The search box ---------- */
+    .box { position: relative; display: flex; align-items: center; height: 46px; border: 1px solid var(--line); background: var(--field); border-radius: 23px; padding: 0 6px 0 16px; transition: box-shadow .15s, border-color .15s, background .15s; }
+    .box:focus-within { background: var(--panel); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); box-shadow: var(--shadow); }
+    .box svg.mag { width: 18px; height: 18px; flex: none; color: var(--faint); }
+    .box input { flex: 1; min-width: 0; border: 0; background: none; outline: none; padding: 0 10px; height: 100%; font-size: 16px; }
+    .box input::-webkit-search-cancel-button { display: none; }
+    .box .clear { width: 32px; height: 32px; border: 0; background: none; border-radius: 50%; color: var(--faint); display: none; place-items: center; }
+    .box.has-text .clear { display: grid; }
+    .box .clear:hover { background: var(--hover); color: var(--text); }
+    .box .go { height: 34px; padding: 0 16px; border: 0; border-radius: 17px; background: var(--accent); color: #fff; font-weight: 600; font-size: 14px; }
+    .sugg { position: absolute; left: 0; right: 0; top: calc(100% + 6px); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 6px; z-index: 20; }
+    .sugg button { display: flex; align-items: center; gap: 12px; width: 100%; border: 0; background: none; text-align: left; padding: 8px 12px; border-radius: 9px; }
+    .sugg button svg { width: 15px; height: 15px; color: var(--faint); flex: none; }
+    .sugg button.on, .sugg button:hover { background: var(--hover); }
+
+    /* ---------- Home ---------- */
+    .home { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 92vh; padding: 24px 16px 60px; }
+    .brand { display: flex; align-items: center; gap: 12px; font-size: 52px; font-weight: 750; letter-spacing: -.03em; margin: 0 0 26px; }
+    .brand .mark { width: 50px; height: 50px; color: var(--accent); }
+    .home .box { width: min(620px, 100%); height: 52px; border-radius: 26px; }
+    .home .tag { color: var(--muted); font-size: 13.5px; margin: 18px 0 0; text-align: center; max-width: 520px; }
+    .home .kinds { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; justify-content: center; }
+    .home .kinds button { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 6px 14px; font-size: 13.5px; color: var(--muted); }
+    .home .kinds button:hover { color: var(--text); background: var(--soft); }
+    body.searching .home { display: none; }
+
+    /* ---------- Results ---------- */
+    .top { display: none; position: sticky; top: 0; z-index: 10; background: var(--bg); border-bottom: 1px solid var(--line); }
+    body.searching .top { display: block; }
+    .top-row { display: flex; align-items: center; gap: 18px; padding: 14px 24px 10px; max-width: 1180px; }
+    .logo { display: flex; align-items: center; gap: 7px; font-size: 22px; font-weight: 750; letter-spacing: -.03em; color: var(--text); flex: none; }
+    .logo .mark { width: 24px; height: 24px; color: var(--accent); }
+    .top .box { flex: 1; min-width: 0; max-width: 640px; }
+    .icon-btn { width: 38px; height: 38px; border: 0; background: none; border-radius: 50%; display: grid; place-items: center; color: var(--muted); flex: none; }
+    .icon-btn:hover { background: var(--hover); color: var(--text); }
+    .icon-btn svg { width: 20px; height: 20px; }
+    .tabs { display: flex; gap: 4px; padding: 0 24px 0 calc(24px + 102px); max-width: 1180px; overflow-x: auto; scrollbar-width: none; }
+    .tabs button { border: 0; background: none; padding: 9px 12px 11px; font-size: 14px; color: var(--muted); border-bottom: 3px solid transparent; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+    .tabs button svg { width: 16px; height: 16px; }
+    .tabs button:hover { color: var(--text); }
+    .tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+    main.res { display: none; padding: 14px 24px 60px calc(24px + 120px); max-width: 1180px; }
+    body.searching main.res { display: block; }
+    .status { color: var(--faint); font-size: 13px; margin: 2px 0 16px; min-height: 20px; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+    .status .src { display: inline-flex; align-items: center; gap: 4px; }
+    .status .src i { width: 7px; height: 7px; border-radius: 50%; background: var(--good); display: inline-block; }
+    .status .src.no i { background: var(--bad); }
+    .cols { display: grid; grid-template-columns: minmax(0, 640px) minmax(0, 340px); gap: 40px; align-items: start; }
+    .cols.wide { grid-template-columns: minmax(0, 1fr); }
+    .list { min-width: 0; }
+    .r { margin: 0 0 26px; }
+    .r .site { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; min-width: 0; }
+    .fav { width: 26px; height: 26px; border-radius: 50%; background: var(--soft); border: 1px solid var(--line); display: grid; place-items: center; flex: none; overflow: hidden; font-size: 12px; font-weight: 700; color: #fff; }
+    .fav img { width: 16px; height: 16px; }
+    .site .name { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+    .site .name b { font-weight: 500; font-size: 14px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .site .name small { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .r h3 { margin: 0; font-size: 19px; font-weight: 450; line-height: 1.3; }
+    .r h3 a:hover { text-decoration: underline; }
+    .r h3 a:visited { color: var(--visited); }
+    .r p { margin: 4px 0 0; color: var(--muted); font-size: 14.5px; line-height: 1.55; overflow-wrap: anywhere; }
+    .r .by { margin-top: 5px; font-size: 12px; color: var(--faint); }
+    .more { display: block; margin: 8px 0 0; border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 10px 22px; font-weight: 600; color: var(--text); }
+    .more:hover { background: var(--soft); }
+    .more[hidden] { display: none; }
+    .card { border: 1px solid var(--line); border-radius: 16px; background: var(--panel); padding: 18px 20px; margin-bottom: 22px; }
+    .card h2 { margin: 0 0 2px; font-size: 22px; font-weight: 600; }
+    .card .sub { color: var(--muted); font-size: 13.5px; margin-bottom: 10px; }
+    .card p { margin: 8px 0 0; font-size: 14.5px; line-height: 1.6; }
+    .card .wimg { width: 100%; max-height: 220px; object-fit: cover; border-radius: 10px; margin-bottom: 12px; background: var(--soft); }
+    .card .src-link { display: inline-block; margin-top: 10px; font-size: 13.5px; }
+    .calc .expr { color: var(--muted); font-size: 15px; }
+    .calc .val { font-size: 34px; font-weight: 600; letter-spacing: -.01em; overflow-wrap: anywhere; }
+    .def .part { font-style: italic; color: var(--muted); margin-top: 10px; }
+    .def ol { margin: 4px 0 0; padding-left: 20px; }
+    .def li { margin: 3px 0; }
+    .msg { border: 1px solid var(--line); border-radius: 14px; padding: 22px; background: var(--soft); }
+    .msg h2 { margin: 0 0 6px; font-size: 18px; }
+    .msg p { margin: 0 0 12px; color: var(--muted); }
+    .btn { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 8px 16px; font-weight: 600; }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .skeleton .bar { height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--soft), var(--line), var(--soft)); background-size: 200% 100%; animation: shimmer 1.2s infinite; margin: 8px 0; }
+    @keyframes shimmer { to { background-position: -200% 0; } }
+    /* images */
+    .imgs { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+    .imgs a { display: block; color: inherit; border-radius: 12px; overflow: hidden; background: var(--soft); border: 1px solid var(--line); }
+    .imgs img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--soft); }
+    .imgs span { display: block; padding: 6px 9px 8px; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .imgs a:hover span { color: var(--text); }
+    /* videos */
+    .vid { display: flex; gap: 16px; margin-bottom: 20px; color: inherit; }
+    .vid .th { position: relative; width: 246px; flex: none; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden; background: var(--soft); }
+    .vid .th img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .vid .len { position: absolute; right: 6px; bottom: 6px; background: rgba(0, 0, 0, .8); color: #fff; font-size: 12px; font-weight: 600; padding: 1px 5px; border-radius: 4px; }
+    .vid b { display: block; font-size: 16.5px; font-weight: 500; line-height: 1.35; color: var(--text); }
+    .vid:hover b { color: var(--link); }
+    .vid small { display: block; color: var(--muted); font-size: 13px; margin-top: 4px; }
+    /* news */
+    .news { display: block; margin-bottom: 22px; color: inherit; }
+    .news small { color: var(--muted); font-size: 12.5px; }
+    .news b { display: block; font-size: 17.5px; font-weight: 500; line-height: 1.35; color: var(--link); margin: 2px 0; }
+    .news:hover b { text-decoration: underline; }
+    .news p { margin: 0; color: var(--muted); font-size: 14px; }
+
+    /* ---------- Settings ---------- */
+    .settings { position: fixed; right: 16px; top: 64px; width: min(330px, calc(100vw - 32px)); background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); padding: 16px 18px; z-index: 30; }
+    .settings[hidden] { display: none; }
+    .settings h3 { margin: 0 0 12px; font-size: 15px; }
+    .settings label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 5px; }
+    .seg { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .seg button { flex: 1; border: 0; background: none; padding: 7px 6px; font-size: 13px; color: var(--muted); }
+    .seg button + button { border-left: 1px solid var(--line); }
+    .seg button.on { background: var(--soft); color: var(--text); font-weight: 600; }
+    .settings p { font-size: 12.5px; color: var(--faint); margin: 12px 0 0; line-height: 1.45; }
+    .home-set { position: fixed; top: 14px; right: 16px; }
+    body.searching .home-set { display: none; }
+
+    @media (max-width: 900px) {
+      main.res { padding: 12px 16px 50px; }
+      .tabs { padding: 0 12px; }
+      .top-row { padding: 12px 16px 8px; gap: 12px; }
+      .cols { grid-template-columns: minmax(0, 1fr); gap: 0; }
+      .cols aside { order: -1; }
+    }
+    @media (max-width: 560px) {
+      .logo span { display: none; }
+      .top .box { height: 42px; }
+      .box .go { display: none; }
+      .brand { font-size: 42px; }
+      .brand .mark { width: 40px; height: 40px; }
+      .r h3 { font-size: 17.5px; }
+      .vid .th { width: 150px; }
+      .vid b { font-size: 15px; }
+      .imgs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (prefers-reduced-motion: reduce) { .skeleton .bar { animation: none; } }
+  </style>
+</head>
+<body>
+  <!-- Home -->
+  <section class="home" id="home">
+    <h1 class="brand"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="13.5" cy="13.5" r="8.5" fill="none" stroke="currentColor" stroke-width="3.6"/><path d="M20 20l7.5 7.5" stroke="currentColor" stroke-width="3.6" stroke-linecap="round"/></svg>Seek</h1>
+    <form class="box" id="home-form" role="search" autocomplete="off">
+      <svg class="mag" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15.5 15.5 20 20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <input id="home-q" type="search" name="q" enterkeyhint="search" placeholder="Search the web" aria-label="Search the web" autofocus>
+      <button type="button" class="clear" aria-label="Clear"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M17 7 7 17M7 7l10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+      <button type="submit" class="go">Search</button>
+    </form>
+    <div class="kinds" id="home-kinds">
+      <button type="button" data-kind="images">Images</button><button type="button" data-kind="videos">Videos</button><button type="button" data-kind="news">News</button>
+    </div>
+    <p class="tag">Mikaeel's own search engine. It asks DuckDuckGo, Bing and Mojeek at the same time through an encrypted proxy and ranks what they find in one list.</p>
+  </section>
+  <button class="icon-btn home-set" id="home-set" type="button" aria-label="Search settings" title="Search settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
+
+  <!-- Results -->
+  <header class="top" id="top">
+    <div class="top-row">
+      <a class="logo" href="./" id="logo"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="13.5" cy="13.5" r="8.5" fill="none" stroke="currentColor" stroke-width="3.6"/><path d="M20 20l7.5 7.5" stroke="currentColor" stroke-width="3.6" stroke-linecap="round"/></svg><span>Seek</span></a>
+      <form class="box" id="form" role="search" autocomplete="off">
+        <input id="q" type="search" name="q" enterkeyhint="search" aria-label="Search the web">
+        <button type="button" class="clear" aria-label="Clear"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M17 7 7 17M7 7l10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+        <button type="submit" class="icon-btn" aria-label="Search" style="width:34px;height:34px;color:var(--accent)"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5 20 20" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>
+      </form>
+      <button class="icon-btn" id="set-btn" type="button" aria-label="Search settings" title="Search settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="16" cy="7" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="10" cy="17" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button>
+    </div>
+    <nav class="tabs" id="tabs" role="tablist" aria-label="What to search for">
+      <button type="button" role="tab" data-kind="web" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15.5 15.5 20 20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>All</button>
+      <button type="button" role="tab" data-kind="images" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="10" r="1.6" fill="currentColor"/><path d="m4 17 5-5 4 4 2.5-2.5L20 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>Images</button>
+      <button type="button" role="tab" data-kind="videos" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m16 10.5 5-3v9l-5-3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>Videos</button>
+      <button type="button" role="tab" data-kind="news" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h11v14H6a1 1 0 0 1-1-1zM16 9h3v9a1 1 0 0 1-1 1h-2M8 9h5M8 12.5h5M8 16h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>News</button>
+    </nav>
+  </header>
+  <main class="res" id="res">
+    <div class="status" id="status" aria-live="polite"></div>
+    <div class="cols" id="cols">
+      <div class="list" id="list"></div>
+      <aside id="side"></aside>
+    </div>
+    <button type="button" class="more" id="more" hidden>More results</button>
+  </main>
+
+  <!-- Settings -->
+  <div class="settings" id="settings" hidden role="dialog" aria-label="Search settings">
+    <h3>Search settings</h3>
+    <label>Safe search</label>
+    <div class="seg" data-pref="safe"><button type="button" data-v="strict">Strict</button><button type="button" data-v="moderate">Moderate</button><button type="button" data-v="off">Off</button></div>
+    <div id="open-set">
+      <label>Open results</label>
+      <div class="seg" data-pref="open"><button type="button" data-v="browser">In the Browser</button><button type="button" data-v="direct">Directly</button></div>
+    </div>
+    <p>"In the Browser" opens results through the Browser's proxy, so they open even where the website is blocked. Searches always go through the proxy, so the search engines see the proxy server instead of you.</p>
+  </div>
+
+  <script src="../browser/baremux/index.js"></script>
+  <script src="engine.js"></script>
+  <script src="seek.js"></script>
+</body>
+</html>
