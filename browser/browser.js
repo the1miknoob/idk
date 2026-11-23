@@ -140,6 +140,7 @@
   const iconQueue = new Map(), iconTried = new Map();   // site → [address, from the page itself?] / what was tried
   let iconBusy = false;
   function siteIcon(url, size = 16) {
+    if (isSeek(url)) return `<svg viewBox="0 0 32 32" width="${size}" height="${size}" aria-hidden="true" style="color:var(--accent)"><circle cx="13.5" cy="13.5" r="8.5" fill="none" stroke="currentColor" stroke-width="4"/><path d="M20 20l7.5 7.5" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>`;   // Seek's own icon
     const h = host(url), src = icons[h];
     if (src) return `<img src="${esc(src)}" alt="" width="${size}" height="${size}" loading="lazy">`;
     if (h && /^https?:/i.test(url)) { try { queueIcon(h, new URL(url).origin + '/favicon.ico'); } catch (e) {} }
@@ -798,7 +799,7 @@
 
   // A page's own icon (from its <link rel="icon">) is used for its site when there's none yet
   function favicon(t, doc) {
-    if (t.icon || !t.url) return;
+    if (t.icon || !t.url || isSeek(t.url)) return;   // (Seek's icon isn't the icon of the whole site it's on)
     const h = host(t.url);
     if (icons[h] || iconTried.get(h) === 'page') return;
     let href = '';
