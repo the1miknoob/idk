@@ -111,6 +111,21 @@
     @keyframes slide { from { left: -30%; } to { left: 100%; } }
 
     /* bookmarks bar */
+    /* the YouTube helper bar */
+    .vbar { display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 12px; background: var(--bar); border-bottom: 1px solid var(--line); font-size: 12.5px; min-height: 36px; }
+    .vbar.warn { background: color-mix(in srgb, #f59e0b 14%, var(--bar)); }
+    .vb-body { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 1; min-width: 0; }
+    .vb-ic { display: inline-flex; color: var(--accent); }
+    .vbar.warn .vb-ic { color: #d97706; }
+    .vb-ic svg { width: 16px; height: 16px; }
+    .vb-text { color: var(--text); }
+    .vb-btns { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+    .vb-b { border: 1px solid var(--line); background: var(--bg, transparent); color: var(--text); border-radius: 999px; padding: 3px 11px; font-size: 12.5px; }
+    .vb-b:hover { background: var(--hover); }
+    .vb-b.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .vb-x { flex: none; width: 26px; height: 26px; border: 0; background: none; border-radius: 6px; color: var(--muted, inherit); font-size: 16px; line-height: 1; }
+    .vb-x::before { content: "×"; }
+    .vb-x:hover { background: var(--hover); }
     .bmbar { display: flex; align-items: center; gap: 2px; padding: 3px 8px; background: var(--bar); border-bottom: 1px solid var(--line); overflow: hidden; min-height: 32px; }
     .bmbar button { display: flex; align-items: center; gap: 7px; max-width: 170px; flex: none; border: 0; background: none; border-radius: 999px; padding: 4px 10px 4px 7px; font-size: 12.5px; color: var(--text); }
     .bmbar button:hover { background: var(--hover); }
@@ -306,6 +321,7 @@
         <button class="ib" id="menu-btn" title="Menu" aria-label="Menu" aria-haspopup="menu" aria-expanded="false" data-icon="more"></button>
       </div>
       <nav class="bmbar" id="bmbar" aria-label="Bookmarks bar" hidden></nav>
+      <div class="vbar" id="vbar" role="status" hidden><span class="vb-body" id="vbar-body"></span><button type="button" class="vb-x" data-v="hide" title="Hide this bar" aria-label="Hide this bar"></button></div>
       <div class="progress" id="progress" hidden><i></i></div>
       <div class="menu" id="menu" role="menu" hidden>
         <button data-act="newtab" role="menuitem"><span data-icon="plus"></span>New tab <kbd>Alt+T</kbd></button>

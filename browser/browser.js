@@ -59,7 +59,7 @@
   // Simple line icons (drawn on a 24×24 grid)
   const ICONS = {
     back: 'M19 12H5M11 18l-6-6 6-6', forward: 'M5 12h14M13 6l6 6-6 6', reload: 'M20 12a8 8 0 1 1-2.34-5.66L20 8.5M20 3.5v5h-5',
-    x: 'M17 7 7 17M7 7l10 10', plus: 'M12 5v14M5 12h14', minus: 'M5 12h14',
+    x: 'M17 7 7 17M7 7l10 10', play: 'M8.5 5.8v12.4L18.5 12z', plus: 'M12 5v14M5 12h14', minus: 'M5 12h14',
     home: 'M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z',
     star: 'M12 3.8l2.5 5.1 5.6.8-4 3.9.9 5.6-5-2.6-5 2.6.9-5.6-4-3.9 5.6-.8z',
     more: 'M12 5.5v.01M12 12v.01M12 18.5v.01', lock: 'M7 11V8a5 5 0 0 1 10 0v3M5.5 11h13v9.5h-13z',
@@ -82,7 +82,7 @@
   const COLORS = ['#5b5bd6', '#e0457b', '#0e9f9e', '#d97706', '#16a34a', '#3b82f6', '#c026d3', '#dc2626', '#64748b'];
 
   const LOOK = { theme: 'auto', accent: '#2563eb', tabs: 'classic', density: 'comfy', font: 'system', homeBtn: true, bmbar: 'ntp', bg: 'none', clock: true, shortcuts: true, lists: true };
-  const prefs = Object.assign({ server: 'auto', custom: '', engine: 'ddg', restore: true, core: 'sj' }, LOOK, load('prefs', {}));
+  const prefs = Object.assign({ server: 'auto', custom: '', engine: 'ddg', restore: true, core: 'sj', yt: 'auto' }, LOOK, load('prefs', {}));
   if (!CORES[prefs.core]) prefs.core = 'sj';
   let bookmarks = load('bookmarks', []), visits = load('history', []);
   let quick = load('quick', null) || QUICK.map(([n, u]) => ({ n, u }));
@@ -319,7 +319,8 @@
   }
   // The encrypted tunnel (epoxy) runs in one background worker shared by every tab; this points it at a proxy server
   // (Swapping a tunnel that's already connected can upset it, so that only happens when the server really changes.)
-  const EPOXY = BASE + 'epoxy/index.js';
+  // (tunnel.js is epoxy with a fix: it only ever starts once, even when lots of things are asked for at the same moment)
+  const EPOXY = BASE + 'tunnel.js';
   async function useServer(url) {
     conn = conn || new BareMux.BareMuxConnection(BASE + 'baremux/worker.js');
     let name = '';
@@ -450,6 +451,117 @@
     toast(ok ? 'Now using ' + serverName(server.url) : 'No other server is working right now');
     go(t, t.url, true);
   }
+  // ---------- YouTube videos ----------
+  // Videos play fine through the proxy, but YouTube's full page often refuses to play them for a proxy server (its
+  // bot checks catch the free servers: "Sign in to confirm you're not a bot"). YouTube's simple player (the one other
+  // websites embed) usually still works. So on a YouTube video the Browser watches the player, and if the video won't
+  // play it switches to the simple player at the same moment. A bar under the toolbar offers the other fixes.
+  const INVIDIOUS = ['inv.nadeko.net', 'yewtu.be', 'invidious.nerdvpn.de', 'invidious.f5.si', 'inv.tux.pizza'];   // ✏️ EDIT: Invidious sites to try
+  const YT_STUCK_MS = 15000;   // a video that says it's playing but hasn't moved for this long counts as stuck
+  const ytTime = s => { s = String(s || ''); if (/^\d+$/.test(s)) return +s; const m = s.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/); return m ? (+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (+m[3] || 0) : 0; };
+  // A YouTube video address → { id, kind: 'page' | 'simple' | 'invidious', start } (or null for anything else)
+  function ytVideo(url) {
+    let u; try { u = new URL(url); } catch (e) { return null; }
+    const h = u.hostname.replace(/^(www|m|music)\./, '');
+    let id = null, kind = 'page';
+    if (h === 'youtu.be') id = u.pathname.split('/')[1];
+    else if (h === 'youtube.com' || h === 'youtube-nocookie.com') {
+      if (u.pathname === '/watch') id = u.searchParams.get('v');
+      else { const m = u.pathname.match(/^\/(shorts|live|embed|v)\/([^/?#]+)/); if (m) { id = m[2]; if (m[1] === 'embed') kind = 'simple'; } }
+    } else if (INVIDIOUS.includes(u.hostname) && u.pathname === '/watch') { id = u.searchParams.get('v'); kind = 'invidious'; }
+    if (!id || !/^[\w-]{6,20}$/.test(id)) return null;
+    return { id, kind, start: ytTime(u.searchParams.get('t') || u.searchParams.get('start')) };
+  }
+  // (they keep the scheme and port of the page they come from: always https on the real YouTube)
+  const ytBase = (from, hostName) => { try { const u = new URL(from); return u.protocol + '//' + hostName + (u.port ? ':' + u.port : ''); } catch (e) { return 'https://' + hostName; } };
+  const ytSimple = (id, start, from) => ytBase(from, 'www.youtube-nocookie.com') + '/embed/' + id + '?autoplay=1&playsinline=1&rel=0' + (start >= 1 ? '&start=' + Math.floor(start) : '');
+  const ytPage = (id, start, from) => ytBase(from, 'www.youtube.com') + '/watch?v=' + id + (start >= 1 ? '&t=' + Math.floor(start) + 's' : '');
+  // How the video in a tab is doing: { time, fail: '' | 'bot' | 'error' | 'stuck', text }
+  function ytState(t) {
+    let d;
+    try { d = win(t).document; } catch (e) { return {}; }
+    if (!d || !d.body) return {};
+    const v = d.querySelector('video'), now = Date.now(), vid = t.vid;
+    const time = v ? v.currentTime || 0 : 0;
+    if (v && time > vid.last + 0.2) { vid.last = time; vid.lastAt = now; vid.played = true; }
+    if (v && v.paused) vid.lastAt = now;   // paused on purpose (or waiting for a click): not stuck
+    const shown = e => !!(e && (e.offsetWidth || e.offsetHeight) && getComputedStyle(e).display !== 'none' && getComputedStyle(e).visibility !== 'hidden');
+    const err = [...d.querySelectorAll('.ytp-error, yt-playability-error-supported-renderers, ytd-enforcement-message-view-model, .ytp-error-content-wrap')].find(shown);
+    const text = err ? (err.textContent || '').replace(/\s+/g, ' ').trim() : '';
+    if (/not a bot|confirm (that )?you|sign in to confirm/i.test(text)) return { time, fail: 'bot', text };
+    if (err && text) return { time, fail: 'error', text };
+    if (v && v.error) return { time, fail: 'error', text: 'The video stopped with an error.' };
+    if (v && !v.paused && now - vid.lastAt > YT_STUCK_MS && now - vid.at > YT_STUCK_MS) return { time, fail: 'stuck' };   // trying to play, not moving
+    return { time };
+  }
+  function toSimple(t, why) {
+    const vid = t.vid; if (!vid) return;
+    const at = Math.max(vid.last || 0, vid.start || 0);
+    t.vnote = { id: vid.id, why };
+    go(t, ytSimple(vid.id, at > 3 ? at : 0, t.url));
+  }
+  // Every second and a half: check the video in the open tab, switch to the simple player if it won't play
+  function ytCheck() {
+    const t = active;
+    const yt = t && t.url && !t.err ? ytVideo(t.url) : null;
+    if (!yt) { if (t && t.vid) { t.vid = null; } renderVideoBar(); return; }
+    if (!t.vid || t.vid.id !== yt.id || t.vid.kind !== yt.kind || t.vid.url !== t.url) {
+      t.vid = { id: yt.id, kind: yt.kind, start: yt.start, url: t.url, at: Date.now(), last: 0, lastAt: Date.now(), played: false, fail: '' };
+    }
+    // (the page itself must be there: checked directly, because a tab can still look busy after an earlier page failed)
+    let ready = false;
+    try { const w = win(t), r = realOf(w.location.href); ready = !!r && same(r, t.url) && w.document.readyState !== 'loading'; } catch (e) {}
+    if (ready) {
+      if (yt.kind === 'page' && prefs.yt === 'simple' && t.vforce !== yt.id) { toSimple(t, 'pref'); return; }
+      const st = ytState(t);
+      if (st.fail && !t.vid.fail) {
+        t.vid.fail = st.fail; t.vid.text = st.text || '';
+        if (yt.kind === 'page' && prefs.yt !== 'page' && t.vforce !== yt.id) { toSimple(t, st.fail); return; }
+      }
+    }
+    renderVideoBar();
+  }
+  function renderVideoBar() {
+    const bar = $('#vbar'), t = active, vid = t && t.url && !t.err ? t.vid : null;
+    if (!vid || t.vhide === vid.id) { bar.hidden = true; return; }
+    const b = (act, label, primary) => `<button type="button" class="vb-b${primary ? ' primary' : ''}" data-v="${act}">${label}</button>`;
+    const other = core() === 'sj' ? 'uv' : 'sj';
+    const fixes = (prefs.server === 'auto' ? b('server', 'Another server') : '') + b('engine', 'Try ' + CORES[other]) + b('invidious', 'Invidious');
+    let text, btns, warn = !!vid.fail;
+    const why = vid.fail === 'bot' ? 'YouTube is asking this proxy server to prove it isn\'t a bot.' : vid.fail === 'stuck' ? 'The video isn\'t loading.' : vid.fail ? 'YouTube showed an error.' : '';
+    if (vid.kind === 'page') {
+      text = vid.fail ? why + ' Try:' : 'Video not playing?';
+      btns = b('simple', 'Simple player', vid.fail) + fixes;
+    } else if (vid.kind === 'simple') {
+      const note = t.vnote && t.vnote.id === vid.id ? t.vnote.why : '';
+      text = vid.fail ? 'It won\'t play in the simple player either. ' + why + ' Try:'
+        : note === 'pref' ? 'Playing in YouTube\'s simple player (you can change this in Settings).'
+          : note ? 'YouTube\'s full page wouldn\'t play this video through the proxy, so it\'s in the simple player.' : 'YouTube\'s simple player';
+      btns = (vid.fail ? fixes : '') + b('page', 'Full YouTube page');
+    } else {
+      text = vid.fail ? 'This Invidious site isn\'t working. Try:' : 'Watching on Invidious, a different website for YouTube videos.';
+      btns = b('invidious', 'Another Invidious site', vid.fail) + b('simple', 'Simple player') + b('page', 'YouTube page');
+    }
+    const html = `<span class="vb-ic">${icon(warn ? 'warn' : 'play')}</span><span class="vb-text">${esc(text)}</span><span class="vb-btns">${btns}</span>`;
+    if (bar.dataset.html !== html) { bar.dataset.html = html; $('#vbar-body').innerHTML = html; }
+    bar.classList.toggle('warn', warn);
+    bar.hidden = false;
+  }
+  function videoAction(a) {
+    const t = active, vid = t && t.vid;
+    if (!vid) return;
+    const at = Math.max(vid.last || 0, vid.start || 0);
+    if (a === 'simple') { t.vforce = null; toSimple(t, 'button'); }
+    else if (a === 'page') { t.vforce = vid.id; t.vnote = null; go(t, ytPage(vid.id, at > 3 ? at : 0, t.url)); }
+    else if (a === 'server') nextServer(t);
+    else if (a === 'engine') useCore(core() === 'sj' ? 'uv' : 'sj');
+    else if (a === 'invidious') {
+      t.inv = ((t.inv == null ? -1 : t.inv) + 1) % INVIDIOUS.length;
+      go(t, 'https://' + INVIDIOUS[t.inv] + '/watch?v=' + vid.id + '&local=true' + (at > 3 ? '&t=' + Math.floor(at) : ''));
+      toast('Opening the video on ' + INVIDIOUS[t.inv] + '…');
+    } else if (a === 'hide') { t.vhide = vid.id; renderVideoBar(); }
+  }
+
   function setStatus(kind, text) {
     $('#status-dot').className = 'dot' + (kind === 'ok' ? ' ok' : kind === 'bad' ? ' bad' : '');
     $('#status-text').textContent = text;
@@ -709,7 +821,7 @@
       $('#err-settings').hidden = err.kind === 'support';
     }
     document.title = ntp ? 'New tab' : t.title || host(t.url);
-    setAddr(); renderBar(); renderBookmarksBar();
+    setAddr(); renderBar(); renderBookmarksBar(); renderVideoBar();
   }
   function setAddr() {
     const input = $('#addr');
@@ -880,6 +992,8 @@
         <div class="row" style="margin-top:10px"><button class="btn" id="test" type="button">Test servers</button></div>
         <div class="group" style="margin-top:12px"><div class="set"><label for="core" class="lab">Engine<small>Scramjet handles big sites like YouTube best</small></label>
           <select id="core" style="width:auto;flex:none"><option value="sj" ${prefs.core === 'sj' ? 'selected' : ''}>Scramjet</option><option value="uv" ${prefs.core === 'uv' ? 'selected' : ''}>Ultraviolet</option></select></div></div>
+        <div class="group" style="margin-top:12px"><div class="set"><label for="yt" class="lab">YouTube videos<small>The simple player works through more proxy servers</small></label>
+          <select id="yt" style="width:auto;flex:none">${[['auto', 'Automatic'], ['simple', 'Simple player'], ['page', 'Full YouTube page']].map(([v, n]) => `<option value="${v}" ${prefs.yt === v ? 'selected' : ''}>${n}</option>`).join('')}</select></div></div>
         <p style="margin-top:10px">If nothing works, your network (at school or work, for example) may block proxy servers.</p>
 
         <h3>Privacy</h3>
@@ -1177,6 +1291,10 @@
         if (v) { await reconnect(); drawNow(); toast(server.ok ? 'Connected to your server' : 'Your server didn\'t answer'); }
       } else if (el.id === 'core') {
         useCore(el.value);
+      } else if (el.id === 'yt') {
+        prefs.yt = el.value; save('prefs', prefs);
+        toast({ auto: 'YouTube: the simple player when a video won\'t play', simple: 'YouTube: always the simple player', page: 'YouTube: always the full page' }[el.value]);
+        if (active) { active.vforce = null; active.vid = null; }
       } else if (el.id === 'engine') { prefs.engine = el.value; save('prefs', prefs); renderNtp(); toast('Search engine: ' + ENGINES[el.value][0]); }
       else if (el.id === 'restore') { prefs.restore = el.checked; save('prefs', prefs); }
       else if (el.matches('input[type=checkbox][data-pref]')) setPref(el.dataset.pref, el.checked);
@@ -1198,6 +1316,8 @@
 
     // keep the address, title and icon up to date (pages can change them at any time)
     setInterval(() => { tabs.forEach(t => { if (t.frame && (t === active || t.loading || t.expect)) { sync(t); hook(t); } }); renderBar(); }, 400);
+    setInterval(ytCheck, 1500);
+    $('#vbar').addEventListener('click', e => { const b = e.target.closest('button[data-v]'); if (b) videoAction(b.dataset.v); });
     addEventListener('pagehide', saveTabs);
   }
   // Switch proxy engines (Settings, or the button on the error screen) and reopen the page with it
