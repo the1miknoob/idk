@@ -52,8 +52,10 @@
     ready = (async () => {
       if (!window.BareMux) throw Object.assign(new Error('The proxy files didn\'t load.'), { kind: 'tunnel' });
       const conn = new BareMux.BareMuxConnection(BROWSER.pathname + 'baremux/worker.js');
-      let name = '';
-      try { name = await Promise.race([conn.getTransport(), new Promise(r => setTimeout(() => r(''), 4000))]); } catch (e) {}
+      const transport = () => Promise.race([conn.getTransport(), new Promise(r => setTimeout(() => r(''), 3000))]).catch(() => '');
+      let name = await transport();
+      // inside the Browser, it may still be finding a server: give it a little while
+      for (let i = 0; !name && inBrowser && i < 6; i++) { await new Promise(r => setTimeout(r, 1500)); name = await transport(); }
       if (!name) {
         if (inBrowser) throw Object.assign(new Error('The Browser\'s proxy isn\'t connected yet.'), { kind: 'tunnel' });
         const wisp = await findServer();
@@ -66,11 +68,62 @@
     ready.catch(() => { ready = null; });
     return ready;
   }
+  // A second tunnel, through a different free proxy server, for when the search engines don't answer through the first
+  // one (they often block a busy free server for a while, and some servers block them). It runs in this page only, so
+  // the Browser's own connection isn't touched.
+  let spare = null, spareFinding = null;
+  const badSpares = new Set();
+  const mainWisp = () => { const bp = read('browser-prefs', {}) || {}; return bp.server === 'custom' ? bp.custom : (bp.server && bp.server !== 'auto' ? bp.server : read('browser-wisp', '')); };
+  function spareReady() {
+    if (window.__seekFetch) return Promise.resolve(!!window.__seekSpareOk);   // automated tests
+    if (spare) return Promise.resolve(true);
+    if (!spareFinding) {
+      spareFinding = (async () => {
+        const used = mainWisp();
+        const list = (read('browser-servers', null) || []).map(x => x && x.url).concat(SERVERS).filter((u, i, a) => u && a.indexOf(u) === i && u !== used && !badSpares.has(u));
+        if (!list.length) return false;
+        const url = await new Promise(res => { let left = list.length; list.forEach(u => ping(u, 5000).then(ok => { if (ok) res(u); else if (--left === 0) res(''); })); });
+        if (!url) return false;
+        const { default: Tunnel } = await import(BROWSER.pathname + 'tunnel.js');
+        const t = new Tunnel({ wisp: url });
+        await t.init();
+        spare = { wisp: url, t };
+        return true;
+      })().catch(() => false).finally(() => { spareFinding = null; });
+    }
+    return spareFinding;
+  }
+  async function spareFetch(url, o) {
+    const sp = spare;
+    if (!sp) throw new Error('No other proxy server answered');
+    let u = url, method = o.method || 'GET', body = o.body;
+    try {
+      for (let hop = 0; hop < 6; hop++) {
+        const r = await sp.t.request(new URL(u), method, body, o.headers || {}, undefined);
+        const h = r.headers || {};
+        let loc = h.location || h.Location || '';
+        if (Array.isArray(loc)) loc = loc[0];
+        if (r.status >= 300 && r.status < 400 && loc) {
+          u = new URL(loc, u).href;
+          if (r.status === 303 || ((r.status === 301 || r.status === 302) && method === 'POST')) { method = 'GET'; body = undefined; }
+          continue;
+        }
+        const txt = r.body ? await new Response(r.body).text() : '';
+        if (r.status >= 400) return Promise.reject(Object.assign(new Error(new URL(u).hostname + ' answered ' + r.status), { answered: true }));
+        return o.json ? JSON.parse(txt) : txt;
+      }
+    } catch (e) {
+      if (!e.answered && spare === sp) { badSpares.add(sp.wisp); spare = null; }   // that server stopped working: find another next time
+      throw e;
+    }
+    throw new Error('Too many redirects');
+  }
   const timeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timed out')), ms))]);
   // Fetch a page's text (or JSON) for the engine: through the tunnel; sites that allow it (Wikipedia) are tried directly first
   async function get(url, o) {
     o = o || {};
     if (window.__seekFetch) return window.__seekFetch(url, o);   // automated tests
+    if (o.spare) { if (!(await spareReady())) throw new Error('No other proxy server answered'); return spareFetch(url, o); }
     if (o.direct) {
       try { const r = await timeout(fetch(url), 4000); if (r.ok) return o.json ? r.json() : r.text(); } catch (e) { /* through the tunnel instead */ }
     }
@@ -87,7 +140,7 @@
     return r.blob();
   }
 
-  const engine = new Engine(get, { safe: prefs.safe });
+  const engine = new Engine(get, { safe: prefs.safe, spare: spareReady, onStatus: t => { if (q) $('#status').textContent = t; } });
 
   // ---------- links, icons and pictures ----------
   // Where a result opens: in the Browser (through its proxy), or the address itself
@@ -139,7 +192,7 @@
     hideSugg();
     if (!q) { setTimeout(() => $('#home-q').focus(), 0); return; }
     page = 1; shown = new Set();
-    $('#list').innerHTML = skeleton(); $('#side').innerHTML = ''; $('#more').hidden = true;
+    $('#list').innerHTML = skeleton(); $('#side').innerHTML = ''; $('#more').hidden = true; $('#after').innerHTML = '';
     $('#cols').classList.toggle('wide', kind === 'images');
     $('#status').textContent = 'Searching…';
     window.scrollTo(0, 0);
@@ -147,13 +200,17 @@
     ({ web: searchWeb, images: searchImages, videos: searchVideos, news: searchNews })[kind](mine);
   }
   const skeleton = () => '<div class="skeleton">' + '<div class="r"><div class="bar" style="width:30%"></div><div class="bar" style="width:70%;height:16px"></div><div class="bar" style="width:95%"></div><div class="bar" style="width:80%"></div></div>'.repeat(4) + '</div>';
+  // Links to search the same thing on other search engines (they open in the Browser, through its proxy)
+  // ✏️ EDIT: the other search engines offered
+  const ELSEWHERE = [['Bing', 'https://www.bing.com/search?q='], ['DuckDuckGo', 'https://duckduckgo.com/?q='], ['Google', 'https://www.google.com/search?q='], ['Brave', 'https://search.brave.com/search?q=']];
+  const elsewhere = () => `<div class="elsewhere"><span>Search for <b>${esc(q)}</b> on</span>` + ELSEWHERE.map(([n, u]) => `<a class="btn" href="${esc(linkFor(u + enc(q)))}" data-url="${esc(u + enc(q))}">${esc(n)}</a>`).join('') + '</div>';
   function fail(mine, e, what) {
     if (mine !== run) return;
     const tunnelProblem = e && e.kind === 'tunnel';
     $('#status').textContent = '';
     $('#list').innerHTML = `<div class="msg"><h2>${tunnelProblem ? 'Seek couldn\'t connect to the proxy' : esc(what || 'Nothing came back')}</h2>
       <p>${tunnelProblem ? (inBrowser ? 'The Browser is still connecting to a proxy server. Wait a moment, then try again.' : 'Seek searches through the Browser\'s proxy servers, and none of them answered. Open the Browser once (it finds a server that works), then search again.') : esc(String(e && e.message || e || 'Try again in a moment.'))}</p>
-      <button class="btn primary" type="button" data-act="retry">Try again</button>${tunnelProblem && !inBrowser ? ` <a class="btn" href="${esc(BROWSER.href)}">Open the Browser</a>` : ''}</div>`;
+      <button class="btn primary" type="button" data-act="retry">Try again</button>${tunnelProblem && !inBrowser ? ` <a class="btn" href="${esc(BROWSER.href)}">Open the Browser</a>` : ''}</div>` + elsewhere();
   }
 
   // All: web results, a calculator or dictionary answer, and a Wikipedia card
@@ -163,31 +220,31 @@
     const word = Engine.wantsDefinition(q);
     if (word) engine.define(word).then(d => { if (mine === run && d) $('#side').insertAdjacentHTML('afterbegin', defCard(d)); }).catch(() => {});
     engine.wiki(q).then(w => { if (mine === run && w) $('#side').insertAdjacentHTML('beforeend', wikiCard(w)); }).catch(() => {});
-    tunnel().then(() => engine.web(q, 1)).then(async res => {
+    $('#after').innerHTML = '';
+    // (no need to wait for the tunnel first: if it can't connect, the engine tries another proxy server by itself)
+    engine.web(q, 1).then(async res => {
       if (mine !== run) return;
       let list = res.results, note = '';
       if (!list.length) {
+        // nothing from any search engine: Wikipedia's own search (which also fixes spelling mistakes)
         const why = res.sources.map(s => s.name + ': ' + (s.error || 'nothing found')).join('; ');
+        // every engine answered, with nothing: Strict safe search hides whole searches when it thinks they may not be for kids
+        const strict = prefs.safe === 'strict' && res.sources.every(s => s.ok);
+        const hint = strict ? `<p>Safe search is on <b>Strict</b>, which can hide all the results for some searches. <button class="btn" type="button" data-act="moderate">Search with Moderate safe search</button></p>` : '';
         try { list = await engine.wikiList(q); } catch (e) { list = []; }
-        note = list.length ? `<div class="msg" style="margin-bottom:22px"><p style="margin:0">The search engines didn't answer through the proxy server this time (${esc(why)}). Here are Wikipedia's results instead. <button class="btn" type="button" data-act="retry" style="margin-left:6px">Try again</button></p></div>` : '';
-        if (!list.length) return fail(mine, new Error('The search engines didn\'t answer through the proxy server (' + why + '). Try again in a moment.'), 'No results');
+        if (mine !== run) return;
+        if (!list.length && sum) { $('#list').innerHTML = calcCard(sum); $('#status').textContent = ''; $('#after').innerHTML = elsewhere(); return; }
+        if (!list.length) { fail(mine, new Error(strict ? 'None of the search engines found anything (' + why + ').' : 'The search engines didn\'t give any results through the proxy servers (' + why + '). Try again in a moment, or search on one of these:'), 'No results'); if (hint) $('#list .msg h2').insertAdjacentHTML('afterend', hint); return; }
+        note = `<div class="msg note"><p>${list.fixed ? `No results for <b>${esc(q)}</b>. Showing results for <b>${esc(list.fixed)}</b> from Wikipedia.` : (res.sources.every(s => s.ok) ? 'The search engines didn\'t find anything, so these are Wikipedia\'s results.' : 'The search engines didn\'t answer through the proxy servers this time, so these are Wikipedia\'s results.')}</p>
+          ${hint}<p class="why">${esc(why)}</p><button class="btn" type="button" data-act="retry">Try again</button></div>`;
       }
-      if (mine !== run) return;
       $('#list').innerHTML = (sum ? calcCard(sum) : '') + note + list.slice(0, 10).map(resultHtml).join('');
       list.slice(0, 10).forEach(r => shown.add(Engine.keyOf(r.url)));
       more = list.slice(10);
       $('#more').hidden = !res.results.length;
+      $('#after').innerHTML = elsewhere();
       status(res, list.length, performance.now() - t0);
-    }).catch(e => {
-      if (mine !== run) return;
-      if (sum) { $('#list').innerHTML = calcCard(sum); $('#status').textContent = ''; return; }
-      engine.wikiList(q).then(list => {
-        if (mine !== run) return;
-        if (!list.length) throw e;
-        $('#list').innerHTML = `<div class="msg" style="margin-bottom:22px"><p style="margin:0">${esc(e.kind === 'tunnel' ? 'Seek couldn\'t reach the proxy, so these are Wikipedia\'s results.' : 'The search engines didn\'t answer, so these are Wikipedia\'s results.')} <button class="btn" type="button" data-act="retry" style="margin-left:6px">Try again</button></p></div>` + list.map(resultHtml).join('');
-        $('#status').textContent = '';
-      }).catch(() => fail(mine, e));
-    });
+    }).catch(e => fail(mine, e));
   }
   let more = [];
   async function moreWeb() {
@@ -211,8 +268,8 @@
     if (!next.length) $('#more').hidden = true;
   }
   function status(res, n, ms) {
-    const src = res.sources.map(s => `<span class="src${s.ok && s.count ? '' : ' no'}" title="${esc(s.ok ? s.count + ' results' : s.error || '')}"><i></i>${esc(s.name)}</span>`).join('');
-    $('#status').innerHTML = `<span>${n} results in ${(ms / 1000).toFixed(1)} s</span>${src}`;
+    const src = res.sources.map(s => `<span class="src${s.ok && s.count ? '' : ' no'}" title="${esc((s.ok ? s.count + ' results' : s.error || '') + (s.spare ? ' (through another proxy server)' : ''))}"><i></i>${esc(s.name)}</span>`).join('');
+    $('#status').innerHTML = `<span>${n} result${n === 1 ? '' : 's'} in ${(ms / 1000).toFixed(1)} s</span>${src}`;
   }
   const NAMES = { ddg: 'DuckDuckGo', bing: 'Bing', mojeek: 'Mojeek', wikipedia: 'Wikipedia' };
   function resultHtml(r) {
@@ -315,6 +372,7 @@
   $('#more').addEventListener('click', moreWeb);
   document.addEventListener('click', e => {
     if (e.target.closest('[data-act=retry]')) { ready = null; go(q, kind, false); }
+    if (e.target.closest('[data-act=moderate]')) { prefs.safe = 'moderate'; write('seek-prefs', prefs); engine.opts.safe = 'moderate'; go(q, kind, false); }
     const set = $('#settings');
     if (e.target.closest('#set-btn, #home-set')) { set.hidden = !set.hidden; paintSettings(); }
     else if (!set.hidden && !e.target.closest('#settings')) set.hidden = true;
@@ -338,5 +396,5 @@
   kind = start.kind;
   go(start.q, start.kind, false);
   tunnel().catch(() => {});   // get the tunnel ready while you type
-  window.Seek = { get q() { return q; }, get kind() { return kind; }, go, engine, inBrowser };   // for the automated tests
+  window.Seek = { get q() { return q; }, get kind() { return kind; }, go, engine, inBrowser, get, spareServer: () => spare && spare.wisp };   // for the automated tests
 })();

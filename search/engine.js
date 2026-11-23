@@ -59,6 +59,16 @@
     return out;
   }
 
+  // What a real browser sends when you open a page. Search engines check these to tell people from robots, and a
+  // request without them (the tunnel only adds a few by itself) is much more likely to get a robot check.
+  const HTML_HEADERS = {
+    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Sec-Fetch-Dest': 'document', 'Sec-Fetch-Mode': 'navigate', 'Sec-Fetch-Site': 'none', 'Sec-Fetch-User': '?1',
+    'Upgrade-Insecure-Requests': '1',
+  };
+  const DATA_HEADERS = { Accept: '*/*', 'Accept-Language': 'en-US,en;q=0.9', 'Sec-Fetch-Dest': 'empty', 'Sec-Fetch-Mode': 'cors', 'Sec-Fetch-Site': 'same-origin' };
+
   // ---------- web results from each engine ----------
   const SAFE = {   // safe search settings in each engine's own words
     ddg: { strict: '1', moderate: '-1', off: '-2' },
@@ -73,7 +83,7 @@
       // DuckDuckGo's no-JavaScript page, asked the way its own search form does (a POST)
       request(q, page, safe, state) {
         const kp = SAFE.ddg[safe];
-        const headers = { 'Content-Type': 'application/x-www-form-urlencoded', Referer: 'https://html.duckduckgo.com/', Cookie: `kl=us-en; kp=${kp}` };
+        const headers = { 'Content-Type': 'application/x-www-form-urlencoded', Origin: 'https://html.duckduckgo.com', Referer: 'https://html.duckduckgo.com/', 'Sec-Fetch-Site': 'same-origin', Cookie: `kl=us-en; kp=${kp}` };
         let body;
         if (page > 1 && state.next) { body = new URLSearchParams(state.next); body.set('kp', kp); }
         else if (page > 1) throw new Error('DuckDuckGo has no more pages');
@@ -223,6 +233,8 @@
   // ---------- the engine ----------
   // get(url, { method, body, headers, json, xml, direct }) → Promise of the page's text (or JSON);
   // `direct` means the site allows being read straight from the page (Wikipedia), so the proxy isn't needed
+  // opts.spare: async () => true when a second tunnel through another proxy server is ready (then `spare: true` in a
+  // get() call goes through it); opts.onStatus(text): tells the page what's happening
   function Engine(get, opts) {
     this.get = get;
     this.opts = Object.assign({ safe: 'strict' }, opts || {});
@@ -237,7 +249,29 @@
   Engine.hostOf = hostOf;
 
   Engine.prototype.fetchText = function (url, o) {
-    return withTimeout(Promise.resolve(this.get(url, o || {})), TIMEOUT_MS, hostOf(url));
+    o = Object.assign({}, o);
+    if (!o.direct) o.headers = Object.assign({}, o.json || o.xml ? DATA_HEADERS : HTML_HEADERS, o.headers);
+    return withTimeout(Promise.resolve(this.get(url, o)), TIMEOUT_MS, hostOf(url));
+  };
+  Engine.prototype.status = function (t) { if (this.opts.onStatus) try { this.opts.onStatus(t); } catch (e) {} };
+  // Is there a second way through (another proxy server)? Search engines often block a busy free proxy server for a
+  // while, or the server blocks them, so a search that finds nothing is tried once more through a different one.
+  Engine.prototype.canSpare = async function () {
+    if (!this.opts.spare) return false;
+    try { return !!(await withTimeout(Promise.resolve(this.opts.spare()), 12000, 'Finding another proxy server')); } catch (e) { return false; }
+  };
+  // Tries each way of getting a list in turn (each one is given `spare`); the first that finds something wins.
+  // When none does, they're all tried again through another proxy server.
+  Engine.prototype.firstOf = async function (ways) {
+    let err = null;
+    for (const spare of [false, true]) {
+      if (spare) { if (!(await this.canSpare())) break; this.status('Trying another proxy server…'); }
+      for (const way of ways) {
+        try { const out = await way(spare); if (out && out.length) return out; } catch (e) { err = err || e; }
+      }
+    }
+    if (err) throw err;
+    return [];
   };
 
   // Web results: { results, sources: [{ id, name, ok, count, error }], ms }
@@ -246,16 +280,25 @@
     page = page || 1;
     const key = q + '\n' + this.opts.safe;
     if (this.state.q !== key) this.state = { q: key };   // a new search starts from scratch
-    const runs = WEB.map(async s => {
+    const one = async (s, spare) => {
       const src = SOURCES[s.id], st = this.state[s.id] || (this.state[s.id] = {});
       try {
         const req = src.request(q, page, this.opts.safe, st);
-        const html = await this.fetchText(req.url, { method: req.method, body: req.body, headers: Object.assign({ 'Accept-Language': 'en-US,en;q=0.9' }, req.headers) });
+        const html = await this.fetchText(req.url, { method: req.method, body: req.body, headers: req.headers, spare });
         const items = src.parse(String(html), req.url, st).filter(x => okUrl(x.url) && x.title);
         return { id: s.id, name: s.name, ok: true, count: items.length, items };
       } catch (e) { return { id: s.id, name: s.name, ok: false, count: 0, items: [], error: String(e && e.message || e) }; }
-    });
-    const done = await Promise.all(runs);
+    };
+    const done = await Promise.all(WEB.map(s => one(s, false)));
+    // Nothing at all, and some engines failed: they may be blocking this proxy server (or it them). Ask again through another one.
+    if (!done.some(d => d.count) && done.some(d => !d.ok) && await this.canSpare()) {
+      this.status('Trying another proxy server…');
+      const again = await Promise.all(WEB.map(s => one(s, true)));
+      again.forEach((d, i) => {
+        if (d.count || (d.ok && !done[i].ok)) done[i] = Object.assign(d, { spare: true });
+        else if (!d.ok && !done[i].ok && d.error !== done[i].error) done[i].error += ' (through another server: ' + d.error + ')';
+      });
+    }
     const results = rank(done.filter(d => d.ok).map(d => ({ src: d.id, items: d.items })), q);
     return { results, sources: done.map(({ items, ...d }) => d), ms: Date.now() - t0 };
   };
@@ -264,9 +307,9 @@
   Engine.prototype.images = async function (q, page) {
     page = page || 1;
     const safe = SAFE.bing[this.opts.safe];
-    try {
+    const bing = async spare => {
       const url = `https://www.bing.com/images/async?q=${enc(q)}&mmasync=1&first=${(page - 1) * 35 + 1}&count=35&setlang=en&adlt=${safe}`;
-      const doc = parseHTML(String(await this.fetchText(url, { headers: { Cookie: 'SRCHHPGUSR=ADLT=' + safe.toUpperCase() } })));
+      const doc = parseHTML(String(await this.fetchText(url, { headers: Object.assign({}, DATA_HEADERS, { Cookie: 'SRCHHPGUSR=ADLT=' + safe.toUpperCase() }), spare })));
       const out = [];
       for (const a of doc.querySelectorAll('a.iusc')) {
         let m = null;
@@ -277,8 +320,9 @@
         const title = clean((cap && (cap.textContent || cap.getAttribute('title'))) || m.t || m.desc || '');
         out.push({ thumb: m.turl || m.murl, full: m.murl || m.turl, title, page: okUrl(m.purl) ? m.purl : m.murl });
       }
-      if (out.length) return out;
-    } catch (e) { /* try Wikimedia Commons */ }
+      return out;
+    };
+    try { const out = await this.firstOf([bing]); if (out.length) return out; } catch (e) { /* try Wikimedia Commons */ }
     const api = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrnamespace=6&gsrlimit=40&gsroffset=${(page - 1) * 40}&gsrsearch=${enc(q)}&prop=imageinfo&iiprop=url&iiurlwidth=320&format=json&origin=*`;
     const j = await this.fetchText(api, { json: true, direct: true });
     const pages = (j && j.query && j.query.pages) ? Object.values(j.query.pages) : [];
@@ -289,11 +333,11 @@
   };
 
   // Videos (YouTube's own search results page): [{ id, url, title, channel, length, views, when, thumb }]
-  Engine.prototype.videos = async function (q) {
+  Engine.prototype.videos = function (q) { return this.firstOf([spare => this.youtube(q, spare)]); };
+  Engine.prototype.youtube = async function (q, spare) {
     const url = `https://www.youtube.com/results?search_query=${enc(q)}&sp=EgIQAQ%253D%253D&hl=en&gl=US`;
-    const headers = { 'Accept-Language': 'en-US,en;q=0.9' };
-    headers.Cookie = 'CONSENT=YES+' + (this.opts.safe === 'strict' ? '; PREF=f2=8000000' : '');   // (Europe's cookie question; PREF is YouTube's Restricted Mode)
-    const html = String(await this.fetchText(url, { headers }));
+    const headers = { Cookie: 'CONSENT=YES+' + (this.opts.safe === 'strict' ? '; PREF=f2=8000000' : '') };   // (Europe's cookie question; PREF is YouTube's Restricted Mode)
+    const html = String(await this.fetchText(url, { headers, spare }));
     const m = html.match(/ytInitialData\s*=\s*(\{.+?\});\s*<\/script>/s);
     if (!m) throw new Error('YouTube sent no results');
     let data;
@@ -327,8 +371,8 @@
         return { url: linkOf(g('link')), title: g('title'), snippet: desc, source: src ? clean(src.textContent) : '', when: g('pubDate') };
       }).filter(x => okUrl(x.url) && x.title);
     };
-    try {
-      const doc = parseHTML(String(await this.fetchText(`https://www.bing.com/news/infinitescrollajax?q=${enc(q)}&InfiniteScroll=1&first=1&SFX=0&form=PTFTNR&setlang=en`)));
+    const bingPage = async spare => {
+      const doc = parseHTML(String(await this.fetchText(`https://www.bing.com/news/infinitescrollajax?q=${enc(q)}&InfiniteScroll=1&first=1&SFX=0&form=PTFTNR&setlang=en`, { headers: DATA_HEADERS, spare })));
       const out = [];
       for (const it of doc.querySelectorAll('div.newsitem, div.news-card')) {
         const a = it.querySelector('a.title');
@@ -337,15 +381,12 @@
         const age = src && src.querySelector('span[aria-label]');
         out.push({ url: a.getAttribute('href'), title: text(a), snippet: text(it.querySelector('.snippet')), source: clean(a.getAttribute('data-author') || it.getAttribute('data-author') || (src && src.querySelector('a') ? text(src.querySelector('a')) : '')), when: age ? clean(age.getAttribute('aria-label')) : '' });
       }
-      if (out.length) return out;
-    } catch (e) { /* try the RSS feed */ }
-    try {
-      const xml = await this.fetchText(`https://www.bing.com/news/search?q=${enc(q)}&format=rss&setlang=en`, { xml: true });
-      const out = items(xml, l => { try { const x = new URL(l); return x.searchParams.get('url') || l; } catch (e) { return l; } });
-      if (out.length) return out;
-    } catch (e) { /* try Google News */ }
-    const xml = await this.fetchText(`https://news.google.com/rss/search?q=${enc(q)}&hl=en-US&gl=US&ceid=US:en`, { xml: true });
-    return items(xml, l => l).map(x => Object.assign(x, { title: x.source ? x.title.replace(new RegExp('\\s+-\\s+' + x.source.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$'), '') : x.title }));
+      return out;
+    };
+    const bingRss = async spare => items(await this.fetchText(`https://www.bing.com/news/search?q=${enc(q)}&format=rss&setlang=en`, { xml: true, spare }), l => { try { const x = new URL(l); return x.searchParams.get('url') || l; } catch (e) { return l; } });
+    const google = async spare => items(await this.fetchText(`https://news.google.com/rss/search?q=${enc(q)}&hl=en-US&gl=US&ceid=US:en`, { xml: true, spare }), l => l)
+      .map(x => Object.assign(x, { title: x.source ? x.title.replace(new RegExp('\\s+-\\s+' + x.source.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$'), '') : x.title }));
+    return this.firstOf([bingPage, bingRss, google]);
   };
 
   // A Wikipedia summary when an article clearly matches: { title, text, thumb, url, description }
@@ -362,9 +403,16 @@
   };
 
   // Plain Wikipedia search results (used when the web search engines can't be reached)
-  Engine.prototype.wikiList = async function (q) {
-    const s = await this.fetchText(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${enc(q)}&srlimit=10&format=json&origin=*`, { json: true, direct: true });
-    return ((s && s.query && s.query.search) || []).map(h => ({
+  Engine.prototype.wikiList = async function (q, fixed) {
+    const s = await this.fetchText(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${enc(q)}&srlimit=10&srinfo=suggestion&format=json&origin=*`, { json: true, direct: true });
+    const hits = (s && s.query && s.query.search) || [];
+    const sug = s && s.query && s.query.searchinfo && s.query.searchinfo.suggestion;
+    if (!hits.length && sug && !fixed && sug.toLowerCase() !== q.toLowerCase()) {   // a spelling mistake? search for Wikipedia's suggestion
+      const list = await this.wikiList(sug, true);
+      list.fixed = sug;
+      return list;
+    }
+    return hits.map(h => ({
       url: 'https://en.wikipedia.org/wiki/' + enc(h.title.replace(/ /g, '_')), title: h.title, host: 'en.wikipedia.org', from: ['wikipedia'],
       snippet: clean(String(h.snippet || '').replace(/<[^>]+>/g, '').replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#039;/g, "'"))
     }));
