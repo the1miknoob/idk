@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Radar · Mikaeel</title>
+  <meta name="description" content="A radar screen for an Arduino radar you build yourself, plus live real planes flying near you.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../games/shared.css">
+  <style>
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
+    @media (max-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+    .scope { position: relative; background: #020d07; border-radius: 18px; border: 1px solid #0d3a1f; overflow: hidden; box-shadow: inset 0 0 60px rgba(0,0,0,.8); }
+    .scope canvas { display: block; width: 100%; cursor: crosshair; touch-action: manipulation; }
+    .scope .msg {
+      position: absolute; inset: 0; display: none; place-items: center; text-align: center; padding: 20px;
+      color: #7dffb0; font-family: "JetBrains Mono", monospace; font-size: 14px; background: rgba(2,13,7,.7);
+    }
+    .scope .msg.show { display: grid; }
+    .scope .msg div { max-width: 380px; }
+    .scope .msg .btn { margin-top: 12px; }
+    .readouts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+    .readouts .chip { min-width: 0; }
+    .readouts .chip b { font-size: 18px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .side h2 { font-size: 15px; margin: 16px 0 8px; }
+    .side h2:first-child { margin-top: 0; }
+    .side p { font-size: 14px; }
+    .side input[type=text] { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); }
+    .side input[type=range] { width: 100%; accent-color: var(--accent); }
+    .side select { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); }
+    .status { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-top: 8px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+    .dot.ok { background: var(--good); box-shadow: 0 0 8px var(--good); }
+    .dot.wait { background: var(--warn); }
+    .dot.bad { background: var(--bad); }
+    .contacts { list-style: none; display: flex; flex-direction: column; gap: 4px; max-height: 320px; overflow: auto; margin-top: 4px; }
+    .contacts li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 10px; cursor: pointer; font-size: 14px; border: 1px solid transparent; }
+    .contacts li:hover { background: var(--surface-2); }
+    .contacts li.on { border-color: var(--accent); background: var(--accent-soft); }
+    .contacts li .ic { font-size: 18px; text-align: center; }
+    .contacts li b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .contacts li small { color: var(--muted); font-size: 12px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .contacts li .d { font-family: "JetBrains Mono", monospace; font-size: 13px; text-align: right; }
+    .detail { margin-top: 10px; padding: 12px; border-radius: 12px; background: var(--surface-2); font-size: 14px; display: none; }
+    .detail.show { display: block; }
+    .detail h3 { font-size: 16px; margin-bottom: 4px; }
+    .detail dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; }
+    .detail dt { color: var(--muted); }
+    .log { font-family: "JetBrains Mono", monospace; font-size: 12px; background: #020d07; color: #7dffb0; border-radius: 10px; padding: 8px 10px; height: 110px; overflow: auto; white-space: pre-wrap; margin-top: 6px; }
+    .note { font-size: 13px; color: var(--muted); margin-top: 8px; }
+    [hidden] { display: none !important; }
+
+    /* Build guide */
+    .guide { margin-top: 28px; }
+    .guide > h2 { font-size: 22px; margin-bottom: 4px; }
+    .guide > p { color: var(--muted); margin-bottom: 12px; }
+    details.panel { margin-top: 10px; padding: 0; }
+    details.panel > summary { cursor: pointer; padding: 14px 16px; font-weight: 700; list-style: none; display: flex; justify-content: space-between; gap: 8px; }
+    details.panel > summary::-webkit-details-marker { display: none; }
+    details.panel > summary::after { content: "＋"; color: var(--muted); }
+    details.panel[open] > summary::after { content: "－"; }
+    details.panel > div { padding: 0 16px 16px; }
+    details.panel p, details.panel li { font-size: 15px; }
+    details.panel ul, details.panel ol { padding-left: 22px; display: flex; flex-direction: column; gap: 6px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-weight: 500; }
+    .tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+    .tag.have { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); }
+    .tag.buy { background: color-mix(in srgb, var(--warn) 20%, transparent); color: color-mix(in srgb, var(--warn) 70%, var(--text)); }
+    .table-wrap { overflow-x: auto; }
+    pre.code { font-family: "JetBrains Mono", monospace; font-size: 12.5px; line-height: 1.5; background: #0b0f0c; color: #d7f5e2; border-radius: 12px; padding: 12px 14px; overflow: auto; max-height: 420px; margin-top: 8px; }
+    .callout { border-left: 4px solid var(--accent); background: var(--accent-soft); padding: 10px 12px; border-radius: 8px; margin: 10px 0; font-size: 14px; }
+    svg.wiring { width: 100%; height: auto; max-width: 640px; display: block; margin: 8px auto; }
+  </style>
+  <meta name="theme-color" content="#5b6cff">
+  <meta property="og:title" content="Radar · Mikaeel">
+  <meta property="og:description" content="A radar screen for an Arduino radar you build yourself, plus live real planes flying near you.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://the1miknoob.github.io/idk/icon-512.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <link rel="apple-touch-icon" href="../apple-touch-icon.png">
+  <script src="../site.js" defer></script>
+</head>
+<body>
+  <div class="wrap wide">
+    <nav class="g-nav">
+      <a href="../">← Back to Mikaeel's site</a>
+      <div class="right">
+        <button class="icon-btn" data-mute-toggle aria-label="Sound">🔊</button>
+        <button class="icon-btn" data-theme-toggle aria-label="Light or dark">🌙</button>
+      </div>
+    </nav>
+    <div class="g-title">
+      <h1>📡 Radar</h1>
+      <div class="seg" id="modes" role="tablist">
+        <button data-mode="demo">🧪 Demo</button>
+        <button data-mode="arduino">🔌 My Arduino</button>
+        <button data-mode="sky">✈️ Real planes</button>
+      </div>
+    </div>
+
+    <div class="layout">
+      <div>
+        <div class="scope">
+          <canvas id="cv" aria-label="Radar screen"></canvas>
+          <div class="msg" id="msg"><div id="msgText"></div></div>
+        </div>
+        <div class="readouts">
+          <div class="chip"><small id="r1l">Angle</small><b id="r1">–</b></div>
+          <div class="chip"><small id="r2l">Closest</small><b id="r2">–</b></div>
+          <div class="chip"><small id="r3l">Echoes</small><b id="r3">–</b></div>
+        </div>
+      </div>
+
+      <aside class="panel side">
+        <!-- Demo + Arduino -->
+        <div id="pnl-near">
+          <div id="pnl-demo">
+            <h2>🧪 Demo</h2>
+            <p class="muted">A pretend Arduino radar, so you can see how it works before you build one. Things fly past: paper planes, a toy drone, a ball… The sensor only sees what's right in front of it, just like the real one.</p>
+            <div class="row" style="margin-top:8px"><button class="btn" id="demoAdd">✈️ Throw a paper plane</button></div>
+          </div>
+          <div id="pnl-arduino">
+            <h2>🔌 Connect your Arduino</h2>
+            <p class="muted">Upload the radar code (it's in the guide below), plug the Arduino into this computer with its USB cable, then press Connect.</p>
+            <div class="row" style="margin-top:8px">
+              <button class="btn primary" id="connect">Connect</button>
+              <select id="baud" aria-label="Speed (baud)"><option value="115200" selected>115200 baud</option><option value="9600">9600 baud</option></select>
+            </div>
+            <div class="status"><span class="dot" id="serDot"></span><span id="serText">Not connected</span></div>
+            <p class="note" id="noSerial" hidden>⚠️ This browser can't talk to an Arduino. Use <b>Chrome or Edge on a computer</b> (Windows, Mac, Linux or a Chromebook). iPhones and iPads can't do it. Try the Demo here meanwhile.</p>
+          </div>
+          <h2>Range</h2>
+          <div class="seg" id="nearRange"><button data-v="50">50 cm</button><button data-v="100">1 m</button><button data-v="200">2 m</button><button data-v="400">4 m</button></div>
+          <h2>Alarm when closer than <span id="alarmVal">50</span> cm</h2>
+          <input type="range" id="alarm" min="5" max="200" step="5" value="50" aria-label="Alarm distance">
+          <label class="row" style="margin-top:6px;font-size:14px"><input type="checkbox" id="beep" checked> Beep (here and on the Arduino's buzzer)</label>
+          <h2>Tracks <span class="muted" id="trackCount" style="font-weight:400"></span></h2>
+          <ul class="contacts" id="tracks"></ul>
+          <p class="note">Each thing the radar keeps seeing gets a track number (T01, T02…). It works out whether it's coming closer (<b>CLOSING</b>) or moving away, and marks it <b style="color:var(--bad)">THREAT</b> when it's closing in or inside the alarm ring.</p>
+          <div id="logBox" hidden>
+            <h2>What the Arduino is sending</h2>
+            <div class="log" id="log"></div>
+          </div>
+        </div>
+
+        <!-- Real planes -->
+        <div id="pnl-sky">
+          <h2>✈️ Real planes near you</h2>
+          <p class="muted">Planes send out their position by radio (it's called ADS-B). Volunteers' receivers pick it up for the OpenSky Network, and this radar shows the ones near you, live.</p>
+          <div class="row" style="margin-top:8px"><button class="btn primary" id="locate">📍 Use my location</button></div>
+          <form class="row" id="placeForm" style="margin-top:8px">
+            <input type="text" id="place" placeholder="…or type a city or airport" aria-label="City or airport">
+            <button class="btn" type="submit">Go</button>
+          </form>
+          <div class="status"><span class="dot" id="skyDot"></span><span id="skyText">Pick where you are</span></div>
+          <h2>Range</h2>
+          <div class="seg" id="skyRange"><button data-v="10">10</button><button data-v="25">25</button><button data-v="50">50</button><button data-v="100">100</button></div>
+          <div class="row" style="margin-top:8px;justify-content:space-between">
+            <div class="seg" id="units"><button data-v="mi">miles</button><button data-v="km">km</button></div>
+            <button class="btn" id="refresh" title="Update now">↻</button>
+          </div>
+          <label class="row" style="margin-top:8px;font-size:14px"><input type="checkbox" id="ping" checked> Ping when a new plane shows up</label>
+          <h2>Contacts <span class="muted" id="contactCount" style="font-weight:400"></span></h2>
+          <ul class="contacts" id="contacts"></ul>
+          <div class="detail" id="detail"></div>
+          <p class="note">Updates every 30 seconds; in between, planes keep moving on their last known course and speed. Tap a plane to see more. OpenSky's free data has a daily limit, so if it stops, try again later.</p>
+        </div>
+      </aside>
+    </div>
+
+    <!-- ===================== Build guide ===================== -->
+    <section class="guide" id="build">
+      <h2>🛠️ Build your own Arduino radar</h2>
+      <p>A servo motor swings an ultrasonic sensor back and forth like a radar dish. The sensor sends out a "ping" of sound (too high to hear) and times the echo to work out how far away things are.</p>
+
+      <details class="panel" open>
+        <summary>1. What you need</summary>
+        <div>
+          <div class="table-wrap"><table>
+            <tr><th>Part</th><th></th><th>Price</th></tr>
+            <tr><td>UNO R3 board + USB cable</td><td><span class="tag have">In your ELEGOO kit</span></td><td></td></tr>
+            <tr><td>Breadboard + jumper wires</td><td><span class="tag have">In your kit</span></td><td></td></tr>
+            <tr><td>Buzzer, red LED, 220 Ω resistor <span class="muted">(for the alarm, optional)</span></td><td><span class="tag have">In your kit</span></td><td></td></tr>
+            <tr><td><b>HC-SR04 ultrasonic sensor</b></td><td><span class="tag buy">Buy</span></td><td>~$2 each, or a 5-pack for ~$9</td></tr>
+            <tr><td><b>SG90 micro servo</b></td><td><span class="tag buy">Buy</span></td><td>~$3 each, or a pack for ~$10</td></tr>
+            <tr><td>Tape, hot glue or a rubber band <span class="muted">(to stick the sensor on the servo)</span></td><td></td><td></td></tr>
+            <tr><td><span class="muted">Handheld version: ELEGOO 2.8" TFT screen + Arduino stacking headers</span></td><td><span class="tag buy">Optional</span></td><td>~$16 + ~$5</td></tr>
+          </table></div>
+          <p class="note">On Amazon, search "HC-SR04" and "SG90 servo". ELEGOO's bigger kits (Super Starter, Most Complete) come with both.</p>
+        </div>
+      </details>
+
+      <details class="panel">
+        <summary>2. Wire it up</summary>
+        <div>
+          <svg class="wiring" viewBox="0 0 640 300" role="img" aria-label="Wiring diagram">
+            <rect x="0" y="0" width="640" height="300" rx="14" fill="var(--surface-2)"/>
+            <!-- Arduino -->
+            <rect x="230" y="70" width="180" height="160" rx="10" fill="#1d5fa8"/>
+            <text x="320" y="160" text-anchor="middle" fill="#fff" font-size="20" font-weight="700">UNO R3</text>
+            <g font-size="12" fill="#fff" font-family="JetBrains Mono, monospace">
+              <text x="238" y="92">5V</text><text x="238" y="112">GND</text>
+              <text x="402" y="92" text-anchor="end">D12</text><text x="402" y="112" text-anchor="end">D11</text><text x="402" y="132" text-anchor="end">D10</text>
+              <text x="402" y="200" text-anchor="end">D8</text><text x="402" y="220" text-anchor="end">D7</text>
+            </g>
+            <!-- Sensor -->
+            <rect x="470" y="20" width="150" height="70" rx="8" fill="#3a8ad6"/>
+            <circle cx="510" cy="48" r="17" fill="#ccc" stroke="#888"/><circle cx="580" cy="48" r="17" fill="#ccc" stroke="#888"/>
+            <text x="545" y="84" text-anchor="middle" font-size="11" fill="#fff">HC-SR04: VCC Trig Echo GND</text>
+            <!-- Servo -->
+            <rect x="470" y="120" width="150" height="56" rx="8" fill="#2b2b33"/>
+            <text x="545" y="152" text-anchor="middle" font-size="14" fill="#fff">SG90 servo</text>
+            <!-- Buzzer + LED -->
+            <circle cx="520" cy="230" r="20" fill="#222"/><text x="520" y="268" text-anchor="middle" font-size="12" fill="var(--text)">Buzzer</text>
+            <circle cx="590" cy="230" r="10" fill="#e5484d"/><text x="590" y="268" text-anchor="middle" font-size="12" fill="var(--text)">LED + 220Ω</text>
+            <!-- wires -->
+            <g fill="none" stroke-width="3" stroke-linecap="round">
+              <path d="M410 128 C 450 128, 450 70, 470 70" stroke="#16a34a"/>
+              <path d="M410 108 C 455 108, 455 78, 470 78" stroke="#a855f7"/>
+              <path d="M410 88 C 440 88, 440 140, 470 140" stroke="#f97316"/>
+              <path d="M410 196 C 450 196, 470 225, 500 228" stroke="#eab308"/>
+              <path d="M410 216 C 460 216, 540 250, 580 236" stroke="#ef4444"/>
+              <path d="M232 88 C 150 88, 120 20, 300 12 S 500 10, 480 30" stroke="#dc2626"/>
+              <path d="M232 108 C 120 108, 90 290, 330 290 S 600 290, 610 70" stroke="#111" stroke-dasharray="2 0"/>
+            </g>
+            <g font-size="12" fill="var(--muted)">
+              <text x="20" y="40">Red = 5V to sensor VCC + servo red</text>
+              <text x="20" y="58">Black = GND to everything's GND</text>
+            </g>
+          </svg>
+          <div class="table-wrap"><table>
+            <tr><th>Part</th><th>Pin on the part</th><th>Goes to the Arduino</th></tr>
+            <tr><td rowspan="4">HC-SR04 sensor</td><td>VCC</td><td>5V</td></tr>
+            <tr><td>Trig</td><td>pin 10</td></tr>
+            <tr><td>Echo</td><td>pin 11</td></tr>
+            <tr><td>GND</td><td>GND</td></tr>
+            <tr><td rowspan="3">SG90 servo</td><td>orange (signal)</td><td>pin 12</td></tr>
+            <tr><td>red</td><td>5V</td></tr>
+            <tr><td>brown</td><td>GND</td></tr>
+            <tr><td rowspan="2">Buzzer <span class="muted">(optional)</span></td><td>+ (longer leg)</td><td>pin 8</td></tr>
+            <tr><td>−</td><td>GND</td></tr>
+            <tr><td rowspan="2">Red LED <span class="muted">(optional)</span></td><td>long leg</td><td>220 Ω resistor → pin 7</td></tr>
+            <tr><td>short leg</td><td>GND</td></tr>
+          </table></div>
+          <div class="callout">The Arduino only has one 5V pin and a couple of GND pins, so plug them into the <b>+ and − rails of the breadboard</b> and connect the sensor and servo to the rails.</div>
+          <p>Stick the sensor to the servo's arm (the plastic horn) with its "eyes" facing out, then set the servo down so the sensor can swing freely from side to side.</p>
+        </div>
+      </details>
+
+      <details class="panel">
+        <summary>3. Upload the code</summary>
+        <div>
+          <ol>
+            <li>Install the free <a href="https://www.arduino.cc/en/software" target="_blank" rel="noopener">Arduino IDE</a> on a computer.</li>
+            <li>Make a new sketch, delete what's in it, and paste in the code below (or download it).</li>
+            <li>Plug in the Arduino. Pick <b>Tools → Board → Arduino Uno</b> and the right <b>Port</b>.</li>
+            <li>Press <b>Upload</b> (the → arrow).</li>
+            <li>Close the IDE's Serial Monitor if it's open (only one program can use the Arduino at a time).</li>
+            <li>Open this page in <b>Chrome or Edge</b>, pick <b>🔌 My Arduino</b> at the top, and press <b>Connect</b>.</li>
+          </ol>
+          <div class="seg" id="codeTabs" style="margin-top:12px"><button data-v="radar">Radar (for this page)</button><button data-v="radar_tft">Handheld (2.8" screen)</button></div>
+          <p class="note" id="codeNote"></p>
+          <div class="row" style="margin-top:8px"><button class="btn" id="copyCode">📋 Copy code</button><a class="btn" id="dlCode" download>⬇️ Download</a></div>
+          <pre class="code" id="code">Loading…</pre>
+        </div>
+      </details>
+
+      <details class="panel">
+        <summary>4. Make it portable (handheld, military style)</summary>
+        <div>
+          <p>Turn it into a handheld unit you can carry around, with its own screen and battery.</p>
+          <div class="table-wrap"><table>
+            <tr><th>Add</th><th>Why</th><th>Price</th></tr>
+            <tr><td>ELEGOO 2.8" TFT touch screen</td><td>Shows the radar picture, tracks and THREAT warnings</td><td>~$16</td></tr>
+            <tr><td>Arduino stacking headers</td><td>Lets the screen sit on top while you still wire to pins 10–13 and A5</td><td>~$5</td></tr>
+            <tr><td>USB power bank <span class="muted">(any phone one)</span></td><td>Power for hours. A 9V battery on the round jack also works but only lasts about an hour</td><td>you may have one</td></tr>
+            <tr><td>A project box or 3D-printed case</td><td>Holds it all. Cut a window for the screen and a hole for the sensor's "eyes"</td><td>~$8</td></tr>
+            <tr><td>Push button + buzzer</td><td>Range button and threat alarm</td><td><span class="tag have">In your kit</span></td></tr>
+          </table></div>
+          <ol style="margin-top:10px">
+            <li>Push the stacking headers into the Uno, then the screen on top of them. The long pins sticking out are where you plug the jumper wires.</li>
+            <li>Wire the sensor (Trig → 11, Echo → 12), servo (signal → 10), buzzer (+ → A5) and button (pin 13 and GND), with 5V and GND for the sensor and servo.</li>
+            <li>Upload the <b>Handheld (2.8" screen)</b> code from step 3.</li>
+            <li>Mount the servo at the front of the box, on top or through a slot, so the sensor can swing 150° and look forward.</li>
+            <li>Plug in the power bank and you have a portable radar. Press the button to switch range: 50 cm → 1 m → 2 m → 4 m.</li>
+          </ol>
+          <p style="margin-top:10px">On the screen: a <b style="color:#d4b800">yellow square</b> is a tracked object with its number (T01…), a <b style="color:var(--bad)">red diamond</b> is a THREAT (inside 50 cm, or racing toward you), and the top lines show the bearing, range, speed and whether it's CLOSING, OPENING, CROSSING or HOLDING.</p>
+          <div class="callout"><b>Upgrade for a real radar:</b> swap the ultrasonic sensor for a <b>24 GHz mmWave radar module</b> such as the HLK-LD2450 (~$15). It's a true radio radar (no servo needed): it tracks up to 3 moving targets at once up to about 6 m and gives their position and speed. It's more advanced to code, so get the ultrasonic version working first.</div>
+        </div>
+      </details>
+
+      <details class="panel">
+        <summary>5. What can it actually detect?</summary>
+        <div>
+          <p>The ultrasonic sensor sees things from <b>2 cm to about 4 m</b> away, in a narrow cone (about 15° wide) straight in front of it. It's best with things that are bigger than your hand and have flat sides. So it can spot:</p>
+          <ul>
+            <li>✅ A paper plane or a ball flying past close by, your hand, a person walking by</li>
+            <li>✅ A toy drone hovering near it (the spinning props make it a bit jumpy)</li>
+            <li>❌ Planes, birds or anything far up in the sky: sound doesn't go that far and bounce back</li>
+            <li>❌ Soft or fluffy things (curtains, a cat's fur) soak up the sound</li>
+          </ul>
+          <p style="margin-top:10px"><b>Want to detect real aircraft?</b> Real radar uses radio waves, not sound. The easiest way at home is to <b>listen</b> for planes instead: every airliner broadcasts its position on 1090 MHz.</p>
+          <ul style="margin-top:6px">
+            <li>📻 <b>Your own plane receiver:</b> an RTL-SDR USB radio stick with a 1090 MHz antenna (~$30–40) plugged into a computer or Raspberry Pi, running the free <i>dump1090</i> or <i>readsb</i> program. It picks up planes 100+ miles away. That's exactly where the ✈️ Real planes data comes from: thousands of people with these.</li>
+            <li>🌊 <b>Motion sensors:</b> an RCWL-0516 or HB100 microwave sensor (~$1–5) uses real radio "radar" to sense movement through plastic and thin walls. It tells you <i>something moved</i>, not how far.</li>
+            <li>🚁 <b>Drones:</b> spotting drones that don't broadcast is hard (even for professionals), so it's out of reach for an Arduino.</li>
+          </ul>
+        </div>
+      </details>
+    </section>
+  </div>
+
+  <script src="../games/shared.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    const $ = id => document.getElementById(id);
+    const cv = $('cv'), ctx = cv.getContext('2d');
+    const D2R = Math.PI / 180;
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+    const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    // ---------- Saved settings ----------
+    const S = Object.assign({ mode: 'demo', nearRange: 200, alarm: 50, beep: true, baud: 115200, skyRange: 25, units: 'mi', ping: true, loc: null }, GS.store.get('radar-settings', {}));
+    const save = () => GS.store.set('radar-settings', S);
+
+    // ---------- Colors on the scope (it always looks like a real green radar screen) ----------
+    const C = { bg: '#020d07', grid: 'rgba(80,255,150,.22)', gridText: 'rgba(120,255,170,.55)', sweep: '61,255,140', blip: '#5dff9c', near: '#ff4d4d', far: '#ffb020', sel: '#ffe14d', special: '#4de1ff' };
+
+    // ---------- Canvas size ----------
+    let W = 0, H = 0, dpr = 1;
+    function resize() {
+      const w = cv.parentElement.clientWidth;
+      const h = S.mode === 'sky' ? w : Math.round(w * 0.62);
+      dpr = Math.min(devicePixelRatio || 1, 2);
+      if (w === W && h === H) return;
+      W = w; H = h;
+      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.height = h + 'px';
+    }
+    new ResizeObserver(resize).observe(cv.parentElement);
+
+    // Geometry: angles are bearings (0 = straight up / north, clockwise). The Arduino's servo angle a becomes bearing 90 - a.
+    function geo() {
+      if (S.mode === 'sky') { const r = Math.min(W, H) / 2 - 26; return { cx: W / 2, cy: H / 2, R: r, half: false }; }
+      const r = Math.min(W / 2 - 16, H - 40); return { cx: W / 2, cy: H - 24, R: r, half: true };
+    }
+    const pt = (g, b, r) => [g.cx + r * Math.sin(b * D2R), g.cy - r * Math.cos(b * D2R)];
+
+    function drawGrid(g, maxVal, unit) {
+      ctx.strokeStyle = C.grid; ctx.lineWidth = 1; ctx.fillStyle = C.gridText;
+      ctx.font = '11px "JetBrains Mono", monospace';
+      const a0 = g.half ? Math.PI : 0, a1 = g.half ? 2 * Math.PI : 2 * Math.PI;
+      for (let k = 1; k <= 4; k++) {
+        const r = g.R * k / 4;
+        ctx.beginPath(); ctx.arc(g.cx, g.cy, r, a0, a1); ctx.stroke();
+        const label = fmtNum(maxVal * k / 4) + unit;
+        if (g.half) { ctx.textAlign = 'center'; ctx.fillText(label, g.cx + r, g.cy + 15); }
+        else { ctx.textAlign = 'left'; ctx.fillText(label, g.cx + 4, g.cy - r + 12); }
+      }
+      const spokes = g.half ? [-90, -60, -30, 0, 30, 60, 90] : [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330];
+      for (const b of spokes) { const [x, y] = pt(g, b, g.R); ctx.beginPath(); ctx.moveTo(g.cx, g.cy); ctx.lineTo(x, y); ctx.stroke(); }
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      if (g.half) {
+        for (const b of [-60, -30, 0, 30, 60]) { const [x, y] = pt(g, b, g.R + 12); ctx.fillText((90 - b) + '°', x, y); }
+      } else {
+        ctx.font = '600 13px "JetBrains Mono", monospace';
+        [['N', 0], ['E', 90], ['S', 180], ['W', 270]].forEach(([t, b]) => { const [x, y] = pt(g, b, g.R + 14); ctx.fillText(t, x, y); });
+        ctx.fillStyle = C.blip; ctx.beginPath(); ctx.arc(g.cx, g.cy, 3, 0, 7); ctx.fill();
+      }
+      ctx.textBaseline = 'alphabetic';
+    }
+    function fmtNum(v) { return v >= 10 ? Math.round(v) : +v.toFixed(1); }
+
+    // The glowing sweep line with a fading trail behind it
+    function drawSweep(g, b, dir, trail) {
+      const steps = 28;
+      for (let i = steps; i >= 1; i--) {
+        const t0 = b - dir * trail * i / steps, t1 = b - dir * trail * (i - 1) / steps;
+        ctx.fillStyle = `rgba(${C.sweep},${(0.22 * (1 - i / steps)).toFixed(3)})`;
+        ctx.beginPath(); ctx.moveTo(g.cx, g.cy);
+        ctx.arc(g.cx, g.cy, g.R, (Math.min(t0, t1) - 90) * D2R, (Math.max(t0, t1) - 90) * D2R);
+        ctx.closePath(); ctx.fill();
+      }
+      const [x, y] = pt(g, b, g.R);
+      ctx.strokeStyle = `rgb(${C.sweep})`; ctx.lineWidth = 2; ctx.shadowColor = `rgb(${C.sweep})`; ctx.shadowBlur = 10;
+      ctx.beginPath(); ctx.moveTo(g.cx, g.cy); ctx.lineTo(x, y); ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    // ===================== Near radar (Demo + Arduino) =====================
+    // readings: servo angle (whole degrees) -> { cm, t }
+    const readings = new Map();
+    let sweepAngle = 90, sweepDir = 1, lastAngle = null, echoes = 0, lastBeep = 0;
+    const FADE_MS = 6000;
+
+    function onReading(angle, cm) {
+      if (!(angle >= 0 && angle <= 180)) return;
+      angle = Math.round(angle);
+      if (lastAngle !== null && angle !== lastAngle) sweepDir = angle > lastAngle ? 1 : -1;
+      // turned around at an end: count echoes for the sweep that just finished
+      if (lastAngle !== null && (angle - lastAngle) * sweepDir < 0) echoes = 0;
+      lastAngle = angle; sweepAngle = angle;
+      const now = performance.now();
+      readings.set(angle, { cm, t: now });
+      if (cm > 0 && cm <= S.nearRange) echoes++;
+      if (cm > 0 && cm <= S.alarm && S.beep && now - lastBeep > 140) { GS.tone(1500, 0.05, 'square', 0.05); lastBeep = now; }
+      blobFeed(angle, cm, now);
+    }
+
+    // ---------- Tracking: turn echoes into numbered targets, like a military radar ----------
+    // Echoes next to each other in one sweep are one "blob" (one object). Each blob is matched to the
+    // nearest existing track, and the track's speed is worked out from how far it moved between sweeps.
+    let blob = null, tracks = [], nextTrack = 1;
+    function blobFeed(angle, cm, now) {
+      const hit = cm > 0 && cm <= 400;
+      if (blob && (!hit || Math.abs(cm - blob.last) > 30 || Math.abs(angle - blob.lastA) > 4)) { blobEnd(now); }
+      if (hit) {
+        if (!blob) blob = { sa: 0, sc: 0, n: 0, min: cm, last: cm, lastA: angle };
+        blob.sa += angle; blob.sc += cm; blob.n++; blob.min = Math.min(blob.min, cm); blob.last = cm; blob.lastA = angle;
+      }
+    }
+    function blobEnd(now) {
+      const b = blob; blob = null;
+      if (!b || b.n < 1) return;
+      const a = b.sa / b.n * D2R, cm = (b.sc / b.n + b.min) / 2;
+      const x = cm * Math.cos(a), y = cm * Math.sin(a);
+      // match to the closest predicted track
+      let best = null, bd = 70;
+      for (const t of tracks) {
+        const dt = (now - t.t) / 1000, px = t.x + t.vx * dt, py = t.y + t.vy * dt;
+        const d = Math.hypot(px - x, py - y);
+        if (d < bd) { bd = d; best = t; }
+      }
+      if (best) {
+        const dt = Math.max(0.05, (now - best.t) / 1000);
+        if (dt < 0.4) { best.x = (best.x + x) / 2; best.y = (best.y + y) / 2; best.t = now; return; }   // the same object seen twice on one pass
+        const px = best.x + best.vx * dt, py = best.y + best.vy * dt, rx = x - px, ry = y - py;
+        best.x = px + 0.65 * rx; best.y = py + 0.65 * ry;
+        best.vx = clamp(best.vx + 0.35 * rx / dt, -300, 300); best.vy = clamp(best.vy + 0.35 * ry / dt, -300, 300);
+        best.t = now; best.hits++;
+      } else if (tracks.length < 9) {
+        tracks.push({ id: nextTrack, x, y, vx: 0, vy: 0, t: now, born: now, hits: 1 });
+        nextTrack = nextTrack % 99 + 1;
+      }
+    }
+    function trackInfo(t, now) {
+      const dist = Math.hypot(t.x, t.y), ang = Math.atan2(t.y, t.x) / D2R;
+      const radial = dist ? (t.x * t.vx + t.y * t.vy) / dist : 0;   // + moving away, - coming closer (cm/s)
+      const speed = Math.hypot(t.vx, t.vy);
+      const status = t.hits < 2 ? 'NEW' : radial < -10 ? 'CLOSING' : radial > 10 ? 'OPENING' : speed > 10 ? 'CROSSING' : 'HOLDING';
+      const threat = t.hits >= 2 && (dist <= S.alarm || (radial < -10 && dist <= S.alarm * 2.5));
+      return { dist, ang, radial, speed, status, threat, stale: now - t.t > 3000 };
+    }
+    let lastThreatSound = 0;
+    function updateTracks(now) {
+      tracks = tracks.filter(t => now - t.t < (t.hits < 2 ? 4000 : 9000));
+      if (S.beep && tracks.some(t => trackInfo(t, now).threat && now - t.t < 600) && now - lastThreatSound > 1200) {
+        GS.tone(880, 0.12, 'sawtooth', 0.05); GS.tone(660, 0.12, 'sawtooth', 0.05, 0.14); lastThreatSound = now;
+      }
+    }
+    const tid = t => 'T' + String(t.id).padStart(2, '0');
+    function drawTracks(g, now) {
+      ctx.font = '600 11px "JetBrains Mono", monospace'; ctx.textAlign = 'left';
+      for (const t of tracks) {
+        const i = trackInfo(t, now);
+        if (i.dist > S.nearRange || i.ang < 0 || i.ang > 180) continue;
+        const [x, y] = pt(g, 90 - i.ang, g.R * i.dist / S.nearRange);
+        const col = i.threat ? C.near : t.hits < 2 ? C.gridText : C.sel;
+        ctx.globalAlpha = i.stale ? 0.45 : 1;
+        ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 1.5;
+        if (i.threat) {   // a diamond for a threat, a square for everything else (like radar symbols)
+          ctx.beginPath(); ctx.moveTo(x, y - 9); ctx.lineTo(x + 9, y); ctx.lineTo(x, y + 9); ctx.lineTo(x - 9, y); ctx.closePath(); ctx.stroke();
+        } else ctx.strokeRect(x - 7, y - 7, 14, 14);
+        // where it's heading (the next 2 seconds)
+        if (i.speed > 8) {
+          const s = g.R / S.nearRange * 2;
+          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + t.vx * s, y - t.vy * s); ctx.stroke();
+        }
+        ctx.fillText(tid(t), x + 11, y - 3);
+        ctx.fillStyle = C.gridText; ctx.fillText(Math.round(i.dist) + 'cm', x + 11, y + 10);
+        ctx.globalAlpha = 1;
+      }
+    }
+    let lastTrackList = 0;
+    function renderTracks(now) {
+      const list = tracks.map(t => ({ t, i: trackInfo(t, now) })).filter(o => o.i.dist <= S.nearRange).sort((a, b) => (b.i.threat - a.i.threat) || a.i.dist - b.i.dist);
+      $('trackCount').textContent = list.length ? `(${list.length})` : '';
+      $('tracks').innerHTML = list.length ? list.map(({ t, i }) => `<li style="cursor:default"><span class="ic">${i.threat ? '🟥' : t.hits < 2 ? '⬜' : '🟨'}</span>
+          <span><b style="font-family:'JetBrains Mono',monospace">${tid(t)} · ${i.threat ? '<span style="color:var(--bad)">THREAT</span>' : i.status}</b>
+          <small>bearing ${Math.round(i.ang)}° · ${Math.round(i.speed)} cm/s${i.stale ? ' · lost' : ''}</small></span>
+          <span class="d">${Math.round(i.dist)} cm</span></li>`).join('')
+        : '<li style="cursor:default"><span class="ic">·</span><span class="muted">No tracks. Sky is clear.</span><span></span></li>';
+    }
+
+    function drawNear(now) {
+      const g = geo();
+      drawGrid(g, S.nearRange >= 100 ? S.nearRange / 100 : S.nearRange, S.nearRange >= 100 ? ' m' : ' cm');
+      // alarm ring
+      const ar = g.R * S.alarm / S.nearRange;
+      if (ar < g.R) {
+        ctx.strokeStyle = 'rgba(255,77,77,.45)'; ctx.setLineDash([4, 5]);
+        ctx.beginPath(); ctx.arc(g.cx, g.cy, ar, Math.PI, 2 * Math.PI); ctx.stroke(); ctx.setLineDash([]);
+      }
+      // the sweep goes to the left as the servo angle goes up
+      drawSweep(g, 90 - sweepAngle, -sweepDir, 30);
+      let closest = null;
+      for (const [a, r] of readings) {
+        const age = now - r.t;
+        if (age > FADE_MS) { readings.delete(a); continue; }
+        if (!r.cm || r.cm > S.nearRange) continue;
+        if (!closest || r.cm < closest.cm) closest = { cm: r.cm, a };
+        const alpha = clamp(1 - age / FADE_MS, 0, 1);
+        const b = 90 - a, rd = g.R * r.cm / S.nearRange;
+        const isNear = r.cm <= S.alarm;
+        // the area behind the object (the sensor can't see past it)
+        ctx.fillStyle = isNear ? `rgba(255,60,60,${(alpha * 0.28).toFixed(3)})` : `rgba(255,170,40,${(alpha * 0.16).toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(g.cx, g.cy, g.R, (b - 1.3 - 90) * D2R, (b + 1.3 - 90) * D2R);
+        ctx.arc(g.cx, g.cy, rd, (b + 1.3 - 90) * D2R, (b - 1.3 - 90) * D2R, true);
+        ctx.closePath(); ctx.fill();
+        // the echo itself
+        ctx.globalAlpha = alpha; ctx.fillStyle = isNear ? C.near : C.blip;
+        ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 8;
+        const [x, y] = pt(g, b, rd); ctx.beginPath(); ctx.arc(x, y, 3.2, 0, 7); ctx.fill();
+        ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+      }
+      $('r1').textContent = lastAngle === null ? '–' : sweepAngle + '°';
+      $('r2').textContent = closest ? closest.cm + ' cm' : 'nothing';
+      $('r2').style.color = closest && closest.cm <= S.alarm ? 'var(--bad)' : '';
+      updateTracks(now);
+      drawTracks(g, now);
+      const threats = tracks.filter(t => trackInfo(t, now).threat).length, inRange = tracks.filter(t => trackInfo(t, now).dist <= S.nearRange).length;
+      $('r3').textContent = lastAngle === null ? '–' : inRange + (threats ? ` (${threats}⚠)` : '');
+      $('r3').style.color = threats ? 'var(--bad)' : '';
+      if (now - lastTrackList > 500) { lastTrackList = now; renderTracks(now); }
+      if (S.mode === 'demo') drawDemoLabels(g);
+      drawHud(g, now, [
+        `MODE ${S.mode === 'demo' ? 'SIM' : 'LIVE'}  SCAN 150°`,
+        `RNG ${S.nearRange >= 100 ? S.nearRange / 100 + 'M' : S.nearRange + 'CM'}  ALM ${S.alarm}CM`,
+      ], [`TRK ${String(inRange).padStart(2, '0')}`, threats ? `THREAT ${threats}` : 'NO THREAT'], threats > 0);
+    }
+
+    // Military-style text in the corners of the screen
+    function drawHud(g, now, left, right, alarm) {
+      ctx.font = '600 11px "JetBrains Mono", monospace'; ctx.textBaseline = 'top';
+      ctx.fillStyle = C.gridText; ctx.textAlign = 'left';
+      const d = new Date(), z = n => String(n).padStart(2, '0');
+      left.concat([`${z(d.getUTCHours())}:${z(d.getUTCMinutes())}:${z(d.getUTCSeconds())}Z`]).forEach((s, i) => ctx.fillText(s, 10, 10 + i * 14));
+      ctx.textAlign = 'right';
+      right.forEach((s, i) => {
+        const blink = alarm && i === 1;
+        ctx.fillStyle = blink ? (Math.floor(now / 400) % 2 ? C.near : 'rgba(255,77,77,.35)') : C.gridText;
+        ctx.fillText(s, W - 10, 10 + i * 14);
+      });
+      ctx.textBaseline = 'alphabetic';
+    }
+
+    // ---------- Demo: a pretend Arduino with pretend things flying past ----------
+    const FLYERS = [
+      { name: 'paper plane', emoji: '✈️', speed: [35, 60], size: 6 },
+      { name: 'toy drone', emoji: '🚁', speed: [8, 18], size: 10, hover: true },
+      { name: 'ball', emoji: '⚽', speed: [60, 110], size: 8 },
+      { name: 'balloon', emoji: '🎈', speed: [6, 12], size: 12 },
+      { name: 'frisbee', emoji: '🥏', speed: [80, 130], size: 9 },
+    ];
+    let flyers = [], demoAngle = 15, demoDir = 1, demoTimer = 0, demoLast = 0;
+    function spawn(kind) {
+      const k = kind || FLYERS[Math.floor(Math.random() * FLYERS.length)];
+      // start off one side, fly across in front of the sensor (x: left/right cm, y: cm in front)
+      const fromLeft = Math.random() < 0.5, y = 25 + Math.random() * Math.min(S.nearRange, 400) * 0.8;
+      const sp = k.speed[0] + Math.random() * (k.speed[1] - k.speed[0]);
+      const ang = (Math.random() - 0.5) * 0.6;
+      return { k, x: (fromLeft ? -1 : 1) * Math.min(S.nearRange * 1.1, 420), y, vx: (fromLeft ? 1 : -1) * sp * Math.cos(ang), vy: sp * Math.sin(ang), phase: Math.random() * 6 };
+    }
+    function demoReset() { flyers = [spawn(FLYERS[0]), spawn(FLYERS[1]), spawn()]; flyers.forEach((f, i) => { f.x *= 0.3 + i * 0.3; }); }
+    function demoStep(dt) {
+      for (const f of flyers) {
+        f.phase += dt;
+        if (f.k.hover) { f.vx += Math.sin(f.phase * 0.9) * 4 * dt; f.vy = Math.cos(f.phase * 0.7) * 12; }
+        f.x += f.vx * dt; f.y += f.vy * dt;
+      }
+      flyers = flyers.filter(f => Math.abs(f.x) < 460 && f.y > 5 && f.y < 420);
+      while (flyers.length < 3) flyers.push(spawn());
+    }
+    // what the sensor would measure at this servo angle: the closest thing inside its 15° cone
+    function demoMeasure(angle) {
+      let best = 0;
+      for (const f of flyers) {
+        const d = Math.hypot(f.x, f.y), a = Math.atan2(f.y, f.x) / D2R;
+        const halfCone = 7.5 + Math.atan2(f.k.size, d) / D2R * 0.5;
+        if (Math.abs(a - angle) <= halfCone && d <= 400 && (!best || d < best)) best = d;
+      }
+      if (best) best = Math.round(best + (Math.random() - 0.5) * 3);
+      if (!best && Math.random() < 0.004) best = Math.round(30 + Math.random() * 300);   // the odd stray echo, like a real sensor
+      return best;
+    }
+    function demoTick(now) {
+      const dt = demoLast ? Math.min(0.1, (now - demoLast) / 1000) : 0; demoLast = now;
+      demoStep(dt);
+      demoTimer += dt * 1000;
+      while (demoTimer >= 30) {           // one servo step every 30 ms, like the real code
+        demoTimer -= 30;
+        onReading(demoAngle, demoMeasure(demoAngle));
+        demoAngle += 2 * demoDir;
+        if (demoAngle >= 165) { demoAngle = 165; demoDir = -1; }
+        if (demoAngle <= 15) { demoAngle = 15; demoDir = 1; }
+      }
+    }
+    // faint "x-ray" outlines of where things really are, so you can compare with what the sensor sees
+    function drawDemoLabels(g) {
+      ctx.font = '14px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (const f of flyers) {
+        const d = Math.hypot(f.x, f.y); if (d > S.nearRange) continue;
+        const a = Math.atan2(f.y, f.x) / D2R; if (a < 0 || a > 180) continue;
+        const [x, y] = pt(g, 90 - a, g.R * d / S.nearRange);
+        ctx.globalAlpha = 0.35; ctx.fillText(f.k.emoji, x, y - 14); ctx.globalAlpha = 1;
+      }
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = C.gridText; ctx.font = '11px "JetBrains Mono", monospace'; ctx.textAlign = 'center';
+      if (W > 560) ctx.fillText('SIMULATION · faint emoji = where things really are', W / 2, 12);
+    }
+
+    // ---------- Arduino over USB (Web Serial) ----------
+    let port = null, reader = null, readDone = null, serialLines = [];
+    const hasSerial = 'serial' in navigator;
+    function setSer(state, text) { $('serDot').className = 'dot ' + state; $('serText').textContent = text; }
+    function logLine(s) {
+      serialLines.push(s); if (serialLines.length > 60) serialLines.shift();
+      const el = $('log'); el.textContent = serialLines.join('\n'); el.scrollTop = el.scrollHeight;
+    }
+    async function send(text) {
+      if (!port || !port.writable) return;
+      try { const w = port.writable.getWriter(); await w.write(new TextEncoder().encode(text + '\n')); w.releaseLock(); } catch (e) {}
+    }
+    function handleLine(line) {
+      line = line.trim(); if (!line) return;
+      logLine(line);
+      if (line[0] === '#') return;
+      const m = line.match(/(-?\d+(?:\.\d+)?)\s*[,;:\s]\s*(-?\d+(?:\.\d+)?)/);
+      if (m) onReading(+m[1], Math.max(0, Math.round(+m[2])));
+    }
+    async function connect() {
+      if (port) return disconnect();
+      try { port = await navigator.serial.requestPort(); }
+      catch (e) { port = null; return; }   // closed the picker
+      try { await port.open({ baudRate: +S.baud }); }
+      catch (e) { port = null; setSer('bad', 'Couldn\'t open it. Is the Arduino IDE\'s Serial Monitor still open? Close it and try again.'); return; }
+      setSer('ok', 'Connected · waiting for data…'); $('connect').textContent = 'Disconnect';
+      $('logBox').hidden = false; readings.clear(); lastAngle = null; echoes = 0;
+      send('A' + S.alarm); send('B' + (S.beep ? 1 : 0));
+      const decoder = new TextDecoderStream();
+      readDone = port.readable.pipeTo(decoder.writable).catch(() => {});
+      reader = decoder.readable.getReader();
+      let buf = '', got = false;
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += value;
+          let i;
+          while ((i = buf.indexOf('\n')) >= 0) { handleLine(buf.slice(0, i)); buf = buf.slice(i + 1); }
+          if (!got && lastAngle !== null) { got = true; setSer('ok', 'Connected · radar running'); }
+          if (buf.length > 2000) buf = '';
+        }
+      } catch (e) { setSer('bad', 'The Arduino was unplugged'); }
+      finally { try { reader.releaseLock(); } catch (e) {} }
+    }
+    async function disconnect() {
+      const p = port; port = null;
+      try { if (reader) await reader.cancel(); } catch (e) {}
+      try { if (readDone) await readDone; } catch (e) {}
+      try { if (p) await p.close(); } catch (e) {}
+      reader = null; readDone = null;
+      setSer('', 'Not connected'); $('connect').textContent = 'Connect';
+    }
+    if (hasSerial) navigator.serial.addEventListener('disconnect', e => { if (port && e.target === port) { port = null; setSer('bad', 'The Arduino was unplugged'); $('connect').textContent = 'Connect'; } });
+
+    // ===================== Real planes (OpenSky) =====================
+    let planes = [], fetchedAt = 0, skyTimer = 0, skyBusy = false, seen = new Set(), firstLoad = true, selected = null, skySweep = 0, skyHits = [];
+    const KM_PER_MI = 1.609344;
+    const rangeKm = () => S.units === 'mi' ? S.skyRange * KM_PER_MI : S.skyRange;
+    const fmtDist = km => S.units === 'mi' ? (km / KM_PER_MI).toFixed(km / KM_PER_MI < 10 ? 1 : 0) + ' mi' : km.toFixed(km < 10 ? 1 : 0) + ' km';
+    const fmtSpeed = ms => ms == null ? '?' : S.units === 'mi' ? Math.round(ms * 2.23694) + ' mph' : Math.round(ms * 3.6) + ' km/h';
+    const fmtAlt = m => m == null ? '?' : Math.round(m * 3.28084).toLocaleString() + ' ft';
+    const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    const compass = b => COMPASS[Math.round(((b % 360) + 360) % 360 / 45) % 8];
+    // OpenSky's aircraft categories
+    const CATS = { 2: ['🛩️', 'Light plane'], 3: ['✈️', 'Small plane'], 4: ['✈️', 'Airliner'], 5: ['✈️', 'Big airliner (757)'], 6: ['✈️', 'Heavy jet'], 7: ['🛩️', 'Fast jet'],
+      8: ['🚁', 'Helicopter'], 9: ['🪂', 'Glider'], 10: ['🎈', 'Balloon or blimp'], 11: ['🪂', 'Skydiver'], 12: ['🪂', 'Ultralight / paraglider'], 14: ['🛸', 'Drone (UAV)'], 15: ['🚀', 'Space vehicle'] };
+    const SPECIAL = new Set([8, 9, 10, 11, 12, 14, 15]);
+
+    function setSky(state, text) { $('skyDot').className = 'dot ' + state; $('skyText').textContent = text; }
+
+    async function loadPlanes() {
+      if (!S.loc || skyBusy) return;
+      skyBusy = true; setSky('wait', planes.length ? 'Updating…' : 'Looking for planes…');
+      const { lat, lon } = S.loc, km = Math.max(rangeKm(), 10) * 1.05;
+      const dLat = km / 111.32, dLon = km / (111.32 * Math.max(0.1, Math.cos(lat * D2R)));
+      const url = `https://opensky-network.org/api/states/all?extended=1&lamin=${(lat - dLat).toFixed(3)}&lomin=${(lon - dLon).toFixed(3)}&lamax=${(lat + dLat).toFixed(3)}&lomax=${(lon + dLon).toFixed(3)}`;
+      try {
+        const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 15000);
+        const res = await fetch(url, { signal: ctl.signal }); clearTimeout(to);
+        if (res.status === 429) throw new Error('limit');
+        if (!res.ok) throw new Error('http ' + res.status);
+        const d = await res.json();
+        const t = d.time || Date.now() / 1000;
+        const next = [];
+        for (const s of d.states || []) {
+          const [icao, callsign, country, timePos, , lon2, lat2, baro, onGround, vel, track, vrate, , geoAlt, squawk, , , cat] = s;
+          if (lat2 == null || lon2 == null || onGround) continue;
+          next.push({ id: icao, call: (callsign || '').trim(), country, lat: lat2, lon: lon2, t: timePos || t, alt: baro != null ? baro : geoAlt, vel, track, vrate, squawk, cat: cat || 0 });
+        }
+        const newOnes = next.filter(p => !seen.has(p.id));
+        next.forEach(p => seen.add(p.id));
+        planes = next; fetchedAt = t;
+        if (!firstLoad && newOnes.length && S.ping && S.mode === 'sky') GS.sfx.point();
+        firstLoad = false;
+        setSky('ok', `Live · ${S.loc.name || 'your location'} · updated ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`);
+      } catch (e) {
+        setSky('bad', e.message === 'limit' ? 'OpenSky\'s free daily limit is used up for now. Try again later.' : 'Couldn\'t reach OpenSky. Check your internet and press ↻.');
+      }
+      skyBusy = false;
+    }
+    function scheduleSky() {
+      clearInterval(skyTimer);
+      if (S.mode !== 'sky' || !S.loc) return;
+      skyTimer = setInterval(() => { if (!document.hidden) loadPlanes(); }, 30000);
+    }
+
+    // where a plane is now: its last report moved forward along its track at its speed
+    function planeNow(p, nowS) {
+      const { lat, lon } = S.loc;
+      const kx = 111.32 * Math.cos(lat * D2R), ky = 111.32;
+      let x = (p.lon - lon) * kx, y = (p.lat - lat) * ky;   // km east, km north
+      const dt = clamp(nowS - p.t, 0, 120);
+      if (p.vel != null && p.track != null) { x += p.vel * dt / 1000 * Math.sin(p.track * D2R); y += p.vel * dt / 1000 * Math.cos(p.track * D2R); }
+      const dist = Math.hypot(x, y), bearing = (Math.atan2(x, y) / D2R + 360) % 360;
+      return { x, y, dist, bearing };
+    }
+
+    let lastList = 0;
+    function drawSky(now) {
+      const g = geo();
+      drawGrid(g, S.skyRange, S.units === 'mi' ? ' mi' : ' km');
+      if (!S.loc) { $('r1').textContent = '–'; $('r2').textContent = '–'; $('r3').textContent = '–'; return; }
+      skySweep = (now / 1000 * 90) % 360;   // one turn every 4 seconds
+      drawSweep(g, skySweep, 1, 60);
+      const nowS = Date.now() / 1000, rk = rangeKm(), shown = [];
+      skyHits = [];
+      ctx.font = '11px "JetBrains Mono", monospace'; ctx.textAlign = 'left';
+      for (const p of planes) {
+        const n = planeNow(p, nowS);
+        if (n.dist > rk) continue;
+        shown.push(Object.assign({ p }, n));
+        const behind = ((skySweep - n.bearing) % 360 + 360) % 360;   // degrees since the sweep passed it
+        const isSel = selected === p.id;
+        const alpha = isSel ? 1 : clamp(1 - behind / 330, 0.18, 1);
+        const [x, y] = pt(g, n.bearing, g.R * n.dist / rk);
+        const col = isSel ? C.sel : SPECIAL.has(p.cat) ? C.special : C.blip;
+        ctx.globalAlpha = alpha;
+        // heading line: where it will be in about a minute
+        if (p.vel != null && p.track != null) {
+          const len = clamp(g.R * (p.vel * 60 / 1000) / rk, 6, 60);
+          ctx.strokeStyle = col; ctx.lineWidth = 1.2;
+          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + len * Math.sin(p.track * D2R), y - len * Math.cos(p.track * D2R)); ctx.stroke();
+        }
+        ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = behind < 25 ? 14 : 6;
+        ctx.beginPath(); ctx.arc(x, y, isSel ? 5 : 3.5, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+        if (isSel) { ctx.strokeStyle = C.sel; ctx.beginPath(); ctx.arc(x, y, 10, 0, 7); ctx.stroke(); }
+        ctx.fillText(p.call || p.id.toUpperCase(), x + 7, y - 4);
+        ctx.fillStyle = C.gridText;
+        ctx.fillText(p.alt != null ? 'FL' + String(Math.round(p.alt * 3.28084 / 100)).padStart(3, '0') : '', x + 7, y + 9);
+        ctx.globalAlpha = 1;
+        skyHits.push({ id: p.id, x, y });
+      }
+      shown.sort((a, b) => a.dist - b.dist);
+      $('r1').textContent = String(shown.length);
+      $('r2').textContent = shown.length ? fmtDist(shown[0].dist) : 'none';
+      const hi = shown.reduce((m, s) => s.p.alt != null && s.p.alt > m ? s.p.alt : m, -1);
+      $('r3').textContent = hi >= 0 ? fmtAlt(hi) : '–';
+      if (now - lastList > 1000) { lastList = now; renderContacts(shown); }
+      const special = shown.filter(s => SPECIAL.has(s.p.cat)).length;
+      drawHud(g, now, ['MODE ADS-B  SCAN 360°', `RNG ${S.skyRange}${S.units === 'mi' ? 'MI' : 'KM'}`],
+        [`TRK ${String(shown.length).padStart(2, '0')}`, special ? `SPECIAL ${special}` : $('skyDot').classList.contains('bad') ? 'LINK LOST' : 'LINK OK'], $('skyDot').classList.contains('bad'));
+    }
+
+    function renderContacts(shown) {
+      $('contactCount').textContent = shown.length ? `(${shown.length})` : '';
+      const el = $('contacts');
+      if (!S.loc) { el.innerHTML = ''; return; }
+      if (!shown.length) { el.innerHTML = `<li style="cursor:default"><span class="ic">🌤️</span><span class="muted">${planes.length || fetchedAt ? 'No planes in range right now. Try a bigger range.' : 'Waiting for data…'}</span><span></span></li>`; }
+      else el.innerHTML = shown.map(s => {
+        const p = s.p, c = CATS[p.cat] || ['✈️', ''];
+        const climb = p.vrate > 1.5 ? ' ↗' : p.vrate < -1.5 ? ' ↘' : '';
+        return `<li data-id="${esc(p.id)}" class="${selected === p.id ? 'on' : ''}"><span class="ic">${c[0]}</span>
+          <span><b>${esc(p.call || p.id.toUpperCase())}</b><small>${esc(fmtAlt(p.alt))}${climb} · ${esc(fmtSpeed(p.vel))}${c[1] ? ' · ' + esc(c[1]) : ''}</small></span>
+          <span class="d">${esc(fmtDist(s.dist))}<br><small>${compass(s.bearing)}</small></span></li>`;
+      }).join('');
+      renderDetail(shown.find(s => s.p.id === selected));
+    }
+    function renderDetail(s) {
+      const el = $('detail');
+      if (!s) { el.classList.remove('show'); return; }
+      const p = s.p, c = CATS[p.cat];
+      const climb = p.vrate == null ? '?' : Math.abs(p.vrate) < 1 ? 'level' : (p.vrate > 0 ? 'climbing ' : 'descending ') + Math.abs(Math.round(p.vrate * 196.85)).toLocaleString() + ' ft/min';
+      const emergency = { '7500': 'hijack', '7600': 'radio failure', '7700': 'emergency' }[p.squawk];
+      el.innerHTML = `<h3>${c ? c[0] : '✈️'} ${esc(p.call || 'No callsign')}</h3>
+        <dl>
+          <dt>Distance</dt><dd>${esc(fmtDist(s.dist))} ${compass(s.bearing)} (${Math.round(s.bearing)}°)</dd>
+          <dt>Altitude</dt><dd>${esc(fmtAlt(p.alt))}, ${esc(climb)}</dd>
+          <dt>Speed</dt><dd>${esc(fmtSpeed(p.vel))}</dd>
+          <dt>Heading</dt><dd>${p.track != null ? Math.round(p.track) + '° (' + compass(p.track) + ')' : '?'}</dd>
+          ${c ? `<dt>Type</dt><dd>${esc(c[1])}</dd>` : ''}
+          <dt>From</dt><dd>${esc(p.country || '?')}</dd>
+          <dt>Squawk</dt><dd>${esc(p.squawk || '?')}${emergency ? ` <b style="color:var(--bad)">(${emergency})</b>` : ''}</dd>
+        </dl>
+        <div class="row" style="margin-top:8px">${p.call ? `<a class="btn" target="_blank" rel="noopener" href="https://www.flightradar24.com/${encodeURIComponent(p.call)}">Flightradar24 ↗</a>` : ''}
+        <a class="btn" target="_blank" rel="noopener" href="https://globe.adsbexchange.com/?icao=${encodeURIComponent(p.id)}">ADS-B Exchange ↗</a></div>`;
+      el.classList.add('show');
+    }
+    $('contacts').addEventListener('click', e => {
+      const li = e.target.closest('li[data-id]'); if (!li) return;
+      selected = selected === li.dataset.id ? null : li.dataset.id; lastList = 0;
+    });
+    cv.addEventListener('click', e => {
+      if (S.mode !== 'sky') return;
+      const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+      let best = null, bd = 22;
+      for (const h of skyHits) { const d = Math.hypot(h.x - x, h.y - y); if (d < bd) { bd = d; best = h.id; } }
+      selected = best; lastList = 0;
+    });
+
+    function setLocation(lat, lon, name) {
+      S.loc = { lat, lon, name }; save();
+      planes = []; seen = new Set(); firstLoad = true; selected = null; fetchedAt = 0;
+      loadPlanes(); scheduleSky(); updateMsg();
+    }
+    $('locate').addEventListener('click', () => {
+      if (!navigator.geolocation) { setSky('bad', 'This browser can\'t find your location. Type a city instead.'); return; }
+      setSky('wait', 'Finding you…');
+      navigator.geolocation.getCurrentPosition(
+        pos => setLocation(+pos.coords.latitude.toFixed(3), +pos.coords.longitude.toFixed(3), 'your location'),
+        () => setSky('bad', 'Location was blocked. Type a city or airport instead.'),
+        { timeout: 15000, maximumAge: 600000 });
+    });
+    $('placeForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const q = $('place').value.trim(); if (!q) return;
+      setSky('wait', 'Finding ' + q + '…');
+      try {
+        const res = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(q));
+        const d = await res.json();
+        if (!d.length) { setSky('bad', 'Couldn\'t find "' + q + '". Try another name.'); return; }
+        setLocation(+(+d[0].lat).toFixed(3), +(+d[0].lon).toFixed(3), d[0].display_name.split(',')[0]);
+      } catch (err) { setSky('bad', 'Couldn\'t look that up. Check your internet.'); }
+    });
+    $('refresh').addEventListener('click', loadPlanes);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && S.mode === 'sky' && S.loc && Date.now() / 1000 - fetchedAt > 30) loadPlanes(); });
+
+    // ===================== Modes, settings and the main loop =====================
+    function seg(id, key, onChange) {
+      const el = $(id);
+      const mark = () => el.querySelectorAll('button').forEach(b => b.classList.toggle('on', String(S[key]) === b.dataset.v));
+      el.addEventListener('click', e => {
+        const b = e.target.closest('button'); if (!b) return;
+        S[key] = isNaN(+b.dataset.v) ? b.dataset.v : +b.dataset.v; save(); mark(); onChange && onChange();
+      });
+      mark();
+    }
+    seg('nearRange', 'nearRange');
+    seg('skyRange', 'skyRange', () => { lastList = 0; if (S.loc) loadPlanes(); });
+    seg('units', 'units', () => { lastList = 0; updateSkyRangeLabels(); });
+    function updateSkyRangeLabels() { $('skyRange').querySelectorAll('button').forEach(b => b.textContent = b.dataset.v + (S.units === 'mi' ? ' mi' : ' km')); }
+    updateSkyRangeLabels();
+
+    $('alarm').value = S.alarm; $('alarmVal').textContent = S.alarm;
+    $('alarm').addEventListener('input', () => { S.alarm = +$('alarm').value; $('alarmVal').textContent = S.alarm; save(); });
+    $('alarm').addEventListener('change', () => send('A' + S.alarm));
+    $('beep').checked = S.beep;
+    $('beep').addEventListener('change', () => { S.beep = $('beep').checked; save(); send('B' + (S.beep ? 1 : 0)); });
+    $('ping').checked = S.ping;
+    $('ping').addEventListener('change', () => { S.ping = $('ping').checked; save(); });
+    $('baud').value = String(S.baud);
+    $('baud').addEventListener('change', () => { S.baud = +$('baud').value; save(); });
+    $('connect').addEventListener('click', connect);
+    $('demoAdd').addEventListener('click', () => { const f = spawn(FLYERS[0]); f.y = 40 + Math.random() * Math.min(S.nearRange, 300) * 0.8; flyers.push(f); GS.sfx.flap(); });
+    if (!hasSerial) { $('noSerial').hidden = false; $('connect').disabled = true; }
+
+    function updateMsg() {
+      let text = '';
+      if (S.mode === 'arduino' && !port) text = hasSerial
+        ? 'Plug in your Arduino radar and press <b>Connect</b>.<br><br>No radar yet? Scroll down to build one, or try the 🧪 Demo.'
+        : 'Connecting an Arduino needs Chrome or Edge on a computer.<br><br>Try the 🧪 Demo, or ✈️ Real planes.';
+      if (S.mode === 'sky' && !S.loc) text = 'Where are you?<br><br>Press <b>📍 Use my location</b> or type a city, and the radar will show real planes flying nearby.';
+      $('msgText').innerHTML = text;
+      $('msg').classList.toggle('show', !!text);
+    }
+
+    function setMode(m) {
+      S.mode = m; save();
+      $('modes').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+      $('pnl-near').hidden = m === 'sky';
+      $('pnl-sky').hidden = m !== 'sky';
+      $('pnl-demo').hidden = m !== 'demo';
+      $('pnl-arduino').hidden = m !== 'arduino';
+      const labels = m === 'sky' ? ['Planes', 'Closest', 'Highest'] : ['Bearing', 'Closest', 'Tracks'];
+      ['r1l', 'r2l', 'r3l'].forEach((id, i) => $(id).textContent = labels[i]);
+      readings.clear(); lastAngle = null; echoes = 0; tracks = []; blob = null; nextTrack = 1;
+      if (m === 'demo') { demoReset(); demoLast = 0; }
+      if (m === 'sky' && S.loc && (!fetchedAt || Date.now() / 1000 - fetchedAt > 30)) loadPlanes();
+      scheduleSky(); resize(); updateMsg();
+    }
+    $('modes').addEventListener('click', e => { const b = e.target.closest('button[data-mode]'); if (b) setMode(b.dataset.mode); });
+
+    function frame(now) {
+      if (S.mode === 'demo') demoTick(now);
+      if (S.mode === 'arduino') updateMsg();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+      // soft green glow in the middle like an old screen
+      const g = geo(), grad = ctx.createRadialGradient(g.cx, g.cy, 0, g.cx, g.cy, g.R);
+      grad.addColorStop(0, 'rgba(30,120,60,.18)'); grad.addColorStop(1, 'rgba(30,120,60,0)');
+      ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+      if (S.mode === 'sky') drawSky(now); else drawNear(now);
+      requestAnimationFrame(frame);
+    }
+
+    // ===================== Code in the guide =====================
+    const CODE_NOTES = {
+      radar: 'Works with this page. Uses pins 10, 11, 12 (plus 8 and 7 for the buzzer and LED).',
+      radar_tft: 'The portable, military-style version for the ELEGOO 2.8" screen: draws the radar, numbered tracks and THREAT warnings on the screen itself, no computer needed. A kit push button changes the range. First install the "MCUFRIEND_kbv" and "Adafruit GFX Library" libraries (Tools → Manage Libraries). The screen covers the pins, so you need stacking headers to wire the sensor, servo, buzzer and button (the pins are listed at the top of the code).',
+    };
+    let codeKey = 'radar', codeText = {};
+    async function showCode(key) {
+      codeKey = key;
+      $('codeTabs').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === key));
+      $('codeNote').textContent = CODE_NOTES[key];
+      const path = `arduino/${key}/${key}.ino`;
+      $('dlCode').href = path; $('dlCode').setAttribute('download', key + '.ino');
+      if (!codeText[key]) {
+        $('code').textContent = 'Loading…';
+        try { const r = await fetch(path); if (!r.ok) throw 0; codeText[key] = await r.text(); }
+        catch (e) { $('code').textContent = 'Couldn\'t load the code. Open ' + path + ' from the site\'s files instead.'; return; }
+      }
+      if (codeKey === key) $('code').textContent = codeText[key];
+    }
+    $('codeTabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) showCode(b.dataset.v); });
+    $('copyCode').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(codeText[codeKey] || ''); GS.toast('Code copied'); } catch (e) { GS.toast('Couldn\'t copy. Select the code and copy it yourself.'); }
+    });
+    showCode('radar');
+
+    resize();
+    setMode(['demo', 'arduino', 'sky'].includes(S.mode) ? S.mode : 'demo');
+    requestAnimationFrame(frame);
+  })();
+  </script>
+</body>
+</html>
