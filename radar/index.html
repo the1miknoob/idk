@@ -189,7 +189,7 @@
             <tr><td><b>HC-SR04 ultrasonic sensor</b></td><td><span class="tag buy">Buy</span></td><td>~$2 each, or a 5-pack for ~$9</td></tr>
             <tr><td><b>SG90 micro servo</b></td><td><span class="tag buy">Buy</span></td><td>~$3 each, or a pack for ~$10</td></tr>
             <tr><td>Tape, hot glue or a rubber band <span class="muted">(to stick the sensor on the servo)</span></td><td></td><td></td></tr>
-            <tr><td><span class="muted">Handheld version: ELEGOO 2.8" TFT screen + Arduino stacking headers</span></td><td><span class="tag buy">Optional</span></td><td>~$16 + ~$5</td></tr>
+            <tr><td><span class="muted">Handheld version: ELEGOO 2.8" TFT screen + Proto Screw Shield</span></td><td><span class="tag buy">Optional</span></td><td>~$16 + ~$12</td></tr>
           </table></div>
           <p class="note">On Amazon, search "HC-SR04" and "SG90 servo". ELEGOO's bigger kits (Super Starter, Most Complete) come with both.</p>
         </div>
@@ -277,14 +277,14 @@
           <div class="table-wrap"><table>
             <tr><th>Add</th><th>Why</th><th>Price</th></tr>
             <tr><td>ELEGOO 2.8" TFT touch screen</td><td>Shows the radar picture, tracks and THREAT warnings</td><td>~$16</td></tr>
-            <tr><td>Arduino stacking headers</td><td>Lets the screen sit on top while you still wire to pins 10–13 and A5</td><td>~$5</td></tr>
+            <tr><td>Proto Screw Shield <span class="muted">(search "Arduino Uno proto screw shield")</span></td><td>Sits between the Uno and the screen. Every pin comes out to a screw terminal, so you can wire pins 10–13 and A5 with no soldering. Get one that has sockets on top and comes assembled</td><td>~$12</td></tr>
             <tr><td>USB power bank <span class="muted">(any phone one)</span></td><td>Power for hours. A 9V battery on the round jack also works but only lasts about an hour</td><td>you may have one</td></tr>
             <tr><td>A project box or 3D-printed case</td><td>Holds it all. Cut a window for the screen and a hole for the sensor's "eyes"</td><td>~$8</td></tr>
             <tr><td>Push button + buzzer</td><td>Range button and threat alarm</td><td><span class="tag have">In your kit</span></td></tr>
           </table></div>
           <ol style="margin-top:10px">
-            <li>Push the stacking headers into the Uno, then the screen on top of them. The long pins sticking out are where you plug the jumper wires.</li>
-            <li>Wire the sensor (Trig → 11, Echo → 12), servo (signal → 10), buzzer (+ → A5) and button (pin 13 and GND), with 5V and GND for the sensor and servo.</li>
+            <li>Push the Proto Screw Shield onto the Uno. Push the bare end of each jumper wire into a screw terminal and tighten it. Do the wiring <b>before</b> the screen goes on, because the screen partly covers the screws.</li>
+            <li>Wire the screw terminals: sensor (Trig → 11, Echo → 12), servo (signal → 10), buzzer (+ → A5) and button (pin 13 and GND), with 5V and GND for the sensor and servo. Then push the screen onto the screw shield's sockets.</li>
             <li>Upload the <b>Handheld (2.8" screen)</b> code from step 3.</li>
             <li>Mount the servo at the front of the box, on top or through a slot, so the sensor can swing 150° and look forward.</li>
             <li>Plug in the power bank and you have a portable radar. Press the button to switch range: 50 cm → 1 m → 2 m → 4 m.</li>
@@ -933,7 +933,7 @@
     // ===================== Code in the guide =====================
     const CODE_NOTES = {
       radar: 'Works with this page. Uses pins 10, 11, 12 (plus 8 and 7 for the buzzer and LED).',
-      radar_tft: 'The portable, military-style version for the ELEGOO 2.8" screen: draws the radar, numbered tracks and THREAT warnings on the screen itself, no computer needed. A kit push button changes the range. First install the "MCUFRIEND_kbv" and "Adafruit GFX Library" libraries (Tools → Manage Libraries). The screen covers the pins, so you need stacking headers to wire the sensor, servo, buzzer and button (the pins are listed at the top of the code).',
+      radar_tft: 'The portable, military-style version for the ELEGOO 2.8" screen: draws the radar, numbered tracks and THREAT warnings on the screen itself, no computer needed. A kit push button changes the range. First install the "MCUFRIEND_kbv" and "Adafruit GFX Library" libraries (Tools → Manage Libraries). The screen covers the pins, so put a Proto Screw Shield between the Uno and the screen and wire the sensor, servo, buzzer and button to its screw terminals (the pins are listed at the top of the code).',
     };
     let codeKey = 'radar', codeText = {};
     async function showCode(key) {

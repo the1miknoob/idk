@@ -12,7 +12,7 @@
 // Libraries (Arduino IDE: Tools -> Manage Libraries...): "MCUFRIEND_kbv" and "Adafruit GFX Library".
 //
 // The screen uses almost every pin, so the radar parts go on the few that are left.
-// Reach them with stacking headers between the Uno and the screen (or solder to the shield's pads):
+// Reach them with a Proto Screw Shield between the Uno and the screen (each pin has a screw terminal):
 //   HC-SR04 sensor:     VCC -> 5V, GND -> GND, Trig -> pin 11, Echo -> pin 12
 //   SG90 servo:         brown -> GND, red -> 5V, orange -> pin 10
 //   Buzzer (kit):       + -> A5, - -> GND
