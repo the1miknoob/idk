@@ -6,6 +6,8 @@
 //   - echoes that belong together become numbered TRACKS (T01, T02...) with a square symbol
 //   - it works out if each track is CLOSING (coming at you), OPENING (moving away) or HOLDING
 //   - a track inside the alarm ring, or closing in near it, becomes a THREAT: red diamond + alarm beeps
+//   - LOCK-ON: the most important track gets ACQUIRED (slow beeps), then LOCKED (fast, almost solid
+//     tone and red brackets around it on the screen), like a fighter jet's radar
 //   - a push button changes the range (50 cm / 1 m / 2 m / 4 m)
 //   - it also sends "angle,distance" lines over USB, so the Radar page on the site works with it too
 //
@@ -39,6 +41,10 @@ const int STEP          = 2;
 const int STEP_DELAY_MS = 30;
 const int ALARM_CM      = 50;     // a track this close is a THREAT
 const bool SOUND        = true;
+const int LOCK_CM       = 100;    // a confirmed track this close (or any THREAT) gets LOCKED
+// The kit's buzzer is an "active" one (one fixed pitch): leave this true.
+// With a passive buzzer (it can play different pitches) set it to false for real lock-on tones.
+const bool ACTIVE_BUZZER = true;
 const int RANGES[]      = { 50, 100, 200, 400 };   // the button steps through these (cm)
 int rangeIdx            = 2;                        // start at 2 m
 
@@ -68,6 +74,11 @@ struct Track { bool used; uint8_t id; float x, y, vx, vy; unsigned long t; uint8
 const int MAX_TRACKS = 6;
 Track tracks[MAX_TRACKS];
 uint8_t nextId = 1;
+
+// Lock-on: SEARCH (nothing to follow), ACQUIRE (following a track), LOCKED (locked on)
+enum LockState { SEARCH, ACQUIRE, LOCKED };
+LockState lockState = SEARCH;
+uint8_t lockId = 0;
 
 // a blob = echoes next to each other in one sweep (one object)
 bool inBlob = false;
@@ -164,9 +175,16 @@ void drawTrackSymbol(Track &t, bool threat) {
   } else {
     tft.drawRect(x - 6, y - 6, 13, 13, c);
   }
+  if (lockState == LOCKED && t.id == lockId) {   // lock brackets: four red corners around the target
+    const int b = 12, l = 5;
+    tft.drawFastHLine(x - b, y - b, l, COL_RED); tft.drawFastVLine(x - b, y - b, l, COL_RED);
+    tft.drawFastHLine(x + b - l + 1, y - b, l, COL_RED); tft.drawFastVLine(x + b, y - b, l, COL_RED);
+    tft.drawFastHLine(x - b, y + b, l, COL_RED); tft.drawFastVLine(x - b, y + b - l + 1, l, COL_RED);
+    tft.drawFastHLine(x + b - l + 1, y + b, l, COL_RED); tft.drawFastVLine(x + b, y + b - l + 1, l, COL_RED);
+  }
   tft.setTextSize(1);
   tft.setTextColor(c);
-  tft.setCursor(x + 10, y - 3);
+  tft.setCursor(x + 14, y - 3);
   tft.print('T');
   if (t.id < 10) tft.print('0');
   tft.print(t.id);
@@ -240,19 +258,64 @@ void dropOldTracks() {
     if (tracks[i].used && now - tracks[i].t > (tracks[i].hits < 2 ? 12000UL : 16000UL)) tracks[i].used = false;
 }
 
+// ---------- Buzzer ----------
+// Works with the kit's active buzzer (switch it on and off) or a passive one (play a pitch).
+bool buzzOn = false;
+unsigned long buzzAt = 0, beepOffAt = 0;
+void buzz(bool on, int freq) {
+  if (!SOUND) on = false;
+  if (on == buzzOn) return;
+  buzzOn = on; buzzAt = millis();
+  if (ACTIVE_BUZZER) digitalWrite(BUZZER_PIN, on ? HIGH : LOW);
+  else if (on) tone(BUZZER_PIN, freq); else noTone(BUZZER_PIN);
+}
+void beep(int ms, int freq) { buzz(true, freq); beepOffAt = millis() + ms; }
+
+// called every step: the lock-on sounds
+void lockSound() {
+  unsigned long now = millis();
+  if (beepOffAt && now >= beepOffAt) { beepOffAt = 0; buzz(false, 0); }
+  if (beepOffAt) return;                                   // a one-off beep is playing
+  if (lockState == ACQUIRE) {                              // slow beeps: following a target
+    if (!buzzOn && now - buzzAt >= 500) beep(60, 1000);
+  } else if (lockState == LOCKED) {                        // fast, almost solid tone: locked on
+    if (buzzOn && now - buzzAt >= 250) buzz(false, 0);
+    else if (!buzzOn && now - buzzAt >= 40) buzz(true, 1800);
+  } else if (buzzOn) buzz(false, 0);
+}
+
+float trackDist(Track &t) { return sqrt(t.x * t.x + t.y * t.y); }
+
+// Pick the track to follow (threats first, then the closest confirmed one) and work out the lock state
+int updateLock() {
+  int target = -1; float best = 1e9;
+  for (int i = 0; i < MAX_TRACKS; i++) {
+    if (!tracks[i].used || tracks[i].hits < 2 || trackDist(tracks[i]) > rangeCm()) continue;
+    float score = trackDist(tracks[i]) - (isThreat(tracks[i]) ? 10000 : 0) - (tracks[i].id == lockId ? 30 : 0);   // stick with the current target
+    if (score < best) { best = score; target = i; }
+  }
+  LockState was = lockState;
+  if (target < 0) lockState = SEARCH;
+  else {
+    Track &t = tracks[target];
+    lockId = t.id;
+    lockState = (isThreat(t) || (t.hits >= 3 && trackDist(t) <= LOCK_CM)) ? LOCKED : ACQUIRE;
+  }
+  if (lockState == LOCKED && was != LOCKED) {
+    Serial.print("# LOCK T"); Serial.println(lockId);
+    drawTrackSymbol(tracks[target], isThreat(tracks[target]));   // draw the brackets straight away
+  }
+  if (was == LOCKED && lockState != LOCKED) { buzz(false, 0); beep(200, 400); Serial.println("# LOCK LOST"); }   // low beep: lock lost
+  return target;
+}
+
 // ---------- The text lines at the top ----------
-unsigned long lastAlarm = 0;
 void drawInfo(int deg, int d) {
   char buf[60];
-  int count = 0, threats = 0, top = -1; float topD = 9999;
-  for (int i = 0; i < MAX_TRACKS; i++) {
-    if (!tracks[i].used) continue;
-    count++;
-    bool th = isThreat(tracks[i]);
-    if (th) threats++;
-    float dd = sqrt(tracks[i].x * tracks[i].x + tracks[i].y * tracks[i].y) - (th ? 10000 : 0);   // threats first
-    if (dd < topD) { topD = dd; top = i; }
-  }
+  int count = 0;
+  for (int i = 0; i < MAX_TRACKS; i++) if (tracks[i].used) count++;
+  int target = updateLock();
+
   tft.setTextSize(1);
   tft.setTextColor(COL_TEXT, COL_BLACK);
   tft.setCursor(4, 24);
@@ -263,18 +326,26 @@ void drawInfo(int deg, int d) {
   snprintf(buf, sizeof buf, "   TRK %d ", count);
   tft.print(buf);
 
-  // threat banner (blinks)
+  // lock status (blinks when locked)
   tft.setCursor(226, 24);
-  if (threats > 0 && (millis() / 400) % 2 == 0) { tft.setTextColor(COL_WHITE, COL_RED); tft.print(" !! THREAT !! "); }
-  else if (threats > 0) { tft.setTextColor(COL_RED, COL_BLACK); tft.print(" !! THREAT !! "); }
-  else { tft.setTextColor(COL_TEXT, COL_BLACK); tft.print("  NO THREAT   "); }
+  if (lockState == LOCKED) {
+    snprintf(buf, sizeof buf, ">> LOCK T%02d <<", lockId);
+    if ((millis() / 300) % 2 == 0) tft.setTextColor(COL_WHITE, COL_RED); else tft.setTextColor(COL_RED, COL_BLACK);
+  } else if (lockState == ACQUIRE) {
+    snprintf(buf, sizeof buf, " ACQUIRE T%02d  ", lockId);
+    tft.setTextColor(COL_YELLOW, COL_BLACK);
+  } else {
+    snprintf(buf, sizeof buf, "  SEARCHING   ");
+    tft.setTextColor(COL_TEXT, COL_BLACK);
+  }
+  tft.print(buf);
 
-  // the most important track
+  // the target (or "scanning")
   tft.setCursor(4, 38);
-  if (top >= 0) {
-    Track &t = tracks[top];
-    float dd = sqrt(t.x * t.x + t.y * t.y), rs = radialSpeed(t), sp = sqrt(t.vx * t.vx + t.vy * t.vy);
-    const char *st = t.hits < 2 ? "NEW     " : rs < -10 ? "CLOSING " : rs > 10 ? "OPENING " : sp > 10 ? "CROSSING" : "HOLDING ";
+  if (target >= 0) {
+    Track &t = tracks[target];
+    float dd = trackDist(t), rs = radialSpeed(t), sp = sqrt(t.vx * t.vx + t.vy * t.vy);
+    const char *st = rs < -10 ? "CLOSING " : rs > 10 ? "OPENING " : sp > 10 ? "CROSSING" : "HOLDING ";
     int brg = (int)(atan2(t.y, t.x) * RAD_TO_DEG);
     snprintf(buf, sizeof buf, "T%02d %s RNG %3dCM BRG %03d SPD %3dCM/S  ", t.id, st, (int)dd, brg, (int)sp);
     tft.setTextColor(isThreat(t) ? COL_RED : COL_YELLOW, COL_BLACK);
@@ -283,13 +354,7 @@ void drawInfo(int deg, int d) {
     tft.setTextColor(COL_TEXT, COL_BLACK);
   }
   tft.print(buf);
-
-  if (SOUND && threats > 0 && millis() - lastAlarm > 1200) {   // two-tone threat alarm
-    tone(BUZZER_PIN, 880, 120);
-    lastAlarm = millis();
-  } else if (SOUND && threats > 0 && millis() - lastAlarm > 150 && millis() - lastAlarm < 250) {
-    tone(BUZZER_PIN, 660, 120);
-  }
+  lockSound();
 }
 
 // ---------- Range button ----------
@@ -302,7 +367,7 @@ void checkButton() {
       rangeIdx = (rangeIdx + 1) % 4;
       for (int i = 0; i < STEPS; i++) dist[i] = 0;
       drawFrame();
-      if (SOUND) tone(BUZZER_PIN, 2400, 30);
+      beep(30, 2400);
     }
   }
 }
@@ -312,6 +377,7 @@ void setup() {
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
   pinMode(BUTTON_PIN, INPUT_PULLUP);
+  pinMode(BUZZER_PIN, OUTPUT);
 
   uint16_t id = tft.readID();
   if (id == 0xD3D3) id = 0x9486;                    // some shields can't be read; this is the usual fix
@@ -332,6 +398,7 @@ void loop() {
   int deg = MIN_ANGLE + idx * STEP;
   servo.write(deg);
   delay(STEP_DELAY_MS);
+  lockSound();
   int d = readDistanceCm();
   dist[idx] = d;
 

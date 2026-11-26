@@ -141,7 +141,7 @@
           <label class="row" style="margin-top:6px;font-size:14px"><input type="checkbox" id="beep" checked> Beep (here and on the Arduino's buzzer)</label>
           <h2>Tracks <span class="muted" id="trackCount" style="font-weight:400"></span></h2>
           <ul class="contacts" id="tracks"></ul>
-          <p class="note">Each thing the radar keeps seeing gets a track number (T01, T02…). It works out whether it's coming closer (<b>CLOSING</b>) or moving away, and marks it <b style="color:var(--bad)">THREAT</b> when it's closing in or inside the alarm ring.</p>
+          <p class="note">Each thing the radar keeps seeing gets a track number (T01, T02…). It works out whether it's coming closer (<b>CLOSING</b>) or moving away, and marks it <b style="color:var(--bad)">THREAT</b> when it's closing in or inside the alarm ring. The most important track gets <b>ACQUIRED</b> (yellow brackets, slow beeps), then <b style="color:var(--bad)">LOCKED</b> (red brackets, fast lock tone) when it's a threat or within 1 m.</p>
           <div id="logBox" hidden>
             <h2>What the Arduino is sending</h2>
             <div class="log" id="log"></div>
@@ -291,7 +291,8 @@
             <li>Mount the servo at the front of the box, on top or through a slot, so the sensor can swing 150° and look forward.</li>
             <li>Plug in the power bank and you have a portable radar. Press the button to switch range: 50 cm → 1 m → 2 m → 4 m.</li>
           </ol>
-          <p style="margin-top:10px">On the screen: a <b style="color:#d4b800">yellow square</b> is a tracked object with its number (T01…), a <b style="color:var(--bad)">red diamond</b> is a THREAT (inside 50 cm, or racing toward you), and the top lines show the bearing, range, speed and whether it's CLOSING, OPENING, CROSSING or HOLDING.</p>
+          <p style="margin-top:10px">On the screen: a <b style="color:#d4b800">yellow square</b> is a tracked object with its number (T01…), a <b style="color:var(--bad)">red diamond</b> is a THREAT (inside 50 cm, or racing toward you), and the top lines show the bearing, range, speed and whether it's CLOSING, OPENING, CROSSING or HOLDING. The top right shows the lock-on: <b>SEARCHING</b> (silent), <b>ACQUIRE T03</b> (slow beeps while it follows a target) and a blinking <b style="color:var(--bad)">&gt;&gt; LOCK T03 &lt;&lt;</b> with red brackets around the target and a fast lock tone on the buzzer.</p>
+          <p class="note">The kit's buzzer plays one pitch, so lock-on is told apart by the beep rhythm. For real rising tones, get a <b>passive buzzer</b> (~$5), wire it the same way, and set <code>ACTIVE_BUZZER = false</code> at the top of the code.</p>
           <div class="callout"><b>Upgrade for a real radar:</b> swap the ultrasonic sensor for a <b>24 GHz mmWave radar module</b> such as the HLK-LD2450 (~$15). It's a true radio radar (no servo needed): it tracks up to 3 moving targets at once up to about 6 m and gives their position and speed. It's more advanced to code, so get the ultrasonic version working first.</div>
         </div>
       </details>
@@ -458,12 +459,32 @@
       const threat = t.hits >= 2 && (dist <= S.alarm || (radial < -10 && dist <= S.alarm * 2.5));
       return { dist, ang, radial, speed, status, threat, stale: now - t.t > 5000 };
     }
-    let lastThreatSound = 0;
+    // Lock-on: SEARCH (nothing to follow) → ACQUIRE (following the most important track: slow beeps)
+    // → LOCK (a threat, or a confirmed track within 1 m: fast, almost solid tone), like a fighter jet's radar
+    const LOCK_CM = 100;
+    let lock = { state: 'SEARCH', id: 0 }, lockSoundAt = 0;
     function updateTracks(now) {
       tracks = tracks.filter(t => now - t.t < (t.hits < 2 ? 6000 : 10000));
-      if (S.beep && tracks.some(t => trackInfo(t, now).threat && now - t.t < 600) && now - lastThreatSound > 1200) {
-        GS.tone(880, 0.12, 'sawtooth', 0.05); GS.tone(660, 0.12, 'sawtooth', 0.05, 0.14); lastThreatSound = now;
+      let target = null, best = Infinity;
+      for (const t of tracks) {
+        const i = trackInfo(t, now);
+        if (t.hits < 2 || i.dist > S.nearRange) continue;
+        const score = i.dist - (i.threat ? 10000 : 0) - (t.id === lock.id ? 30 : 0);   // threats first, and stick with the current target
+        if (score < best) { best = score; target = t; }
       }
+      const was = lock.state;
+      if (!target) lock.state = 'SEARCH';
+      else {
+        const i = trackInfo(target, now);
+        lock.id = target.id;
+        lock.state = i.threat || (target.hits >= 3 && i.dist <= LOCK_CM) ? 'LOCK' : 'ACQUIRE';
+      }
+      if (!S.beep) return;
+      if (lock.state === 'LOCK' && was !== 'LOCK') { GS.tone(1200, 0.08, 'square', 0.05); GS.tone(1800, 0.12, 'square', 0.05, 0.08); lockSoundAt = now + 200; }
+      else if (was === 'LOCK' && lock.state !== 'LOCK') GS.tone(500, 0.25, 'square', 0.05, 0, 250);   // lock lost
+      if (now < lockSoundAt) return;
+      if (lock.state === 'ACQUIRE') { GS.tone(1000, 0.06, 'square', 0.04); lockSoundAt = now + 500; }
+      else if (lock.state === 'LOCK') { GS.tone(1800, 0.26, 'square', 0.045); lockSoundAt = now + 290; }
     }
     const tid = t => 'T' + String(t.id).padStart(2, '0');
     function drawTracks(g, now) {
@@ -483,8 +504,17 @@
           const s = g.R / S.nearRange * 2;
           ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + t.vx * s, y - t.vy * s); ctx.stroke();
         }
-        ctx.fillText(tid(t), x + 11, y - 3);
-        ctx.fillStyle = C.gridText; ctx.fillText(Math.round(i.dist) + 'cm', x + 11, y + 10);
+        if (lock.state !== 'SEARCH' && t.id === lock.id) {   // brackets around the target: yellow while acquiring, red when locked
+          const b = 14 + (lock.state === 'LOCK' ? 0 : 3 * Math.sin(now / 120)), l = 6;
+          ctx.strokeStyle = lock.state === 'LOCK' ? C.near : C.sel; ctx.lineWidth = 2;
+          [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sy]) => {
+            ctx.beginPath(); ctx.moveTo(x + sx * b, y + sy * (b - l)); ctx.lineTo(x + sx * b, y + sy * b); ctx.lineTo(x + sx * (b - l), y + sy * b); ctx.stroke();
+          });
+          ctx.lineWidth = 1.5;
+        }
+        ctx.fillStyle = col;
+        ctx.fillText(tid(t), x + 17, y - 3);
+        ctx.fillStyle = C.gridText; ctx.fillText(Math.round(i.dist) + 'cm', x + 17, y + 10);
         ctx.globalAlpha = 1;
       }
     }
@@ -544,7 +574,8 @@
       drawHud(g, now, [
         `MODE ${S.mode === 'demo' ? 'SIM' : 'LIVE'}  SCAN 150°`,
         `RNG ${S.nearRange >= 100 ? S.nearRange / 100 + 'M' : S.nearRange + 'CM'}  ALM ${S.alarm}CM`,
-      ], [`TRK ${String(inRange).padStart(2, '0')}`, threats ? `THREAT ${threats}` : 'NO THREAT'], threats > 0);
+      ], [`TRK ${String(inRange).padStart(2, '0')}`, lock.state === 'LOCK' ? `>> LOCK ${tid({ id: lock.id })} <<` : lock.state === 'ACQUIRE' ? `ACQUIRE ${tid({ id: lock.id })}` : 'SEARCHING',
+        threats ? `THREAT ${threats}` : 'NO THREAT'], lock.state === 'LOCK');
     }
 
     // Military-style text in the corners of the screen
@@ -912,7 +943,7 @@
       $('pnl-arduino').hidden = m !== 'arduino';
       const labels = m === 'sky' ? ['Planes', 'Closest', 'Highest'] : ['Bearing', 'Closest', 'Tracks'];
       ['r1l', 'r2l', 'r3l'].forEach((id, i) => $(id).textContent = labels[i]);
-      readings.clear(); lastAngle = null; echoes = 0; tracks = []; blob = null; nextTrack = 1;
+      readings.clear(); lastAngle = null; echoes = 0; tracks = []; blob = null; nextTrack = 1; lock = { state: 'SEARCH', id: 0 };
       if (m === 'demo') { demoReset(); demoLast = 0; }
       if (m === 'sky' && S.loc && (!fetchedAt || Date.now() / 1000 - fetchedAt > 30)) loadPlanes();
       scheduleSky(); resize(); updateMsg();
