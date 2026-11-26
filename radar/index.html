@@ -247,6 +247,7 @@
             <tr><td rowspan="2">Red LED <span class="muted">(optional)</span></td><td>long leg</td><td>220 Ω resistor → pin 7</td></tr>
             <tr><td>short leg</td><td>GND</td></tr>
           </table></div>
+          <div class="callout"><b>Stop the servo making the radar glitch:</b> put the kit's capacitor (the small black cylinder) across the breadboard's + and − rails. The leg next to the <b>stripe is −</b> and goes to GND. It smooths the power bursts each time the servo moves.</div>
           <div class="callout">The Arduino only has one 5V pin and a couple of GND pins, so plug them into the <b>+ and − rails of the breadboard</b> and connect the sensor and servo to the rails.</div>
           <p>Stick the sensor to the servo's arm (the plastic horn) with its "eyes" facing out, then set the servo down so the sensor can swing freely from side to side.</p>
         </div>
@@ -256,10 +257,10 @@
         <summary>3. Upload the code</summary>
         <div>
           <ol>
-            <li>Install the free <a href="https://www.arduino.cc/en/software" target="_blank" rel="noopener">Arduino IDE</a> on a computer.</li>
+            <li>Install the free <a href="https://www.arduino.cc/en/software" target="_blank" rel="noopener">Arduino IDE</a> on a computer (Windows, Mac or Linux). You need a computer once to put the code on the Arduino, even for the handheld version. A phone or iPad can't do it. If your computer only has USB-C ports, you'll need a USB-C to USB-A adapter for the kit's cable.</li>
             <li>Make a new sketch, delete what's in it, and paste in the code below (or download it).</li>
             <li>Plug in the Arduino. Pick <b>Tools → Board → Arduino Uno</b> and the right <b>Port</b>.</li>
-            <li>Press <b>Upload</b> (the → arrow).</li>
+            <li>Press <b>Upload</b> (the → arrow). If the Port menu is empty, the board may need the free "CH340" USB driver: search "CH340 driver" for your computer, install it, and plug the Arduino in again.</li>
             <li>Close the IDE's Serial Monitor if it's open (only one program can use the Arduino at a time).</li>
             <li>Open this page in <b>Chrome or Edge</b>, pick <b>🔌 My Arduino</b> at the top, and press <b>Connect</b>.</li>
           </ol>
@@ -277,14 +278,15 @@
           <div class="table-wrap"><table>
             <tr><th>Add</th><th>Why</th><th>Price</th></tr>
             <tr><td>ELEGOO 2.8" TFT touch screen</td><td>Shows the radar picture, tracks and THREAT warnings</td><td>~$16</td></tr>
-            <tr><td>Proto Screw Shield <span class="muted">(search "Arduino Uno proto screw shield")</span></td><td>Sits between the Uno and the screen. Every pin comes out to a screw terminal, so you can wire pins 10–13 and A5 with no soldering. Get one that has sockets on top and comes assembled</td><td>~$12</td></tr>
+            <tr><td>Proto Screw Shield <span class="muted">(search "Arduino Uno proto screw shield")</span></td><td>Sits between the Uno and the screen. Every pin comes out to a screw terminal, so you can wire pins 10–13, A5, 5V and GND with no soldering. Get one that has sockets on top and comes assembled</td><td>~$12</td></tr>
             <tr><td>USB power bank <span class="muted">(any phone one)</span></td><td>Power for hours. A 9V battery on the round jack also works but only lasts about an hour</td><td>you may have one</td></tr>
             <tr><td>A project box or 3D-printed case</td><td>Holds it all. Cut a window for the screen and a hole for the sensor's "eyes"</td><td>~$8</td></tr>
             <tr><td>Push button + buzzer</td><td>Range button and threat alarm</td><td><span class="tag have">In your kit</span></td></tr>
           </table></div>
           <ol style="margin-top:10px">
+            <li>Put a piece of electrical tape on top of the Uno's metal USB socket, so the screw shield's solder points can't touch it.</li>
             <li>Push the Proto Screw Shield onto the Uno. Push the bare end of each jumper wire into a screw terminal and tighten it. Do the wiring <b>before</b> the screen goes on, because the screen partly covers the screws.</li>
-            <li>Wire the screw terminals: sensor (Trig → 11, Echo → 12), servo (signal → 10), buzzer (+ → A5) and button (pin 13 and GND), with 5V and GND for the sensor and servo. Then push the screen onto the screw shield's sockets.</li>
+            <li>Wire the screw terminals: sensor (Trig → 11, Echo → 12), servo (signal → 10), buzzer (+ → pin 13) and button (A5 and GND), with 5V and GND for the sensor and servo. If a terminal needs two wires (like 5V), twist their ends together before screwing them in. The kit's button legs are short, so plug the button into a small piece of the breadboard (or the kit's breadboard) and run two jumpers from it to the terminals. Then push the screen onto the screw shield's sockets.</li>
             <li>Upload the <b>Handheld (2.8" screen)</b> code from step 3.</li>
             <li>Mount the servo at the front of the box, on top or through a slot, so the sensor can swing 150° and look forward.</li>
             <li>Plug in the power bank and you have a portable radar. Press the button to switch range: 50 cm → 1 m → 2 m → 4 m.</li>
@@ -454,11 +456,11 @@
       const speed = Math.hypot(t.vx, t.vy);
       const status = t.hits < 2 ? 'NEW' : radial < -10 ? 'CLOSING' : radial > 10 ? 'OPENING' : speed > 10 ? 'CROSSING' : 'HOLDING';
       const threat = t.hits >= 2 && (dist <= S.alarm || (radial < -10 && dist <= S.alarm * 2.5));
-      return { dist, ang, radial, speed, status, threat, stale: now - t.t > 3000 };
+      return { dist, ang, radial, speed, status, threat, stale: now - t.t > 5000 };
     }
     let lastThreatSound = 0;
     function updateTracks(now) {
-      tracks = tracks.filter(t => now - t.t < (t.hits < 2 ? 4000 : 9000));
+      tracks = tracks.filter(t => now - t.t < (t.hits < 2 ? 6000 : 10000));
       if (S.beep && tracks.some(t => trackInfo(t, now).threat && now - t.t < 600) && now - lastThreatSound > 1200) {
         GS.tone(880, 0.12, 'sawtooth', 0.05); GS.tone(660, 0.12, 'sawtooth', 0.05, 0.14); lastThreatSound = now;
       }

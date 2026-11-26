@@ -15,9 +15,10 @@
 // Reach them with a Proto Screw Shield between the Uno and the screen (each pin has a screw terminal):
 //   HC-SR04 sensor:     VCC -> 5V, GND -> GND, Trig -> pin 11, Echo -> pin 12
 //   SG90 servo:         brown -> GND, red -> 5V, orange -> pin 10
-//   Buzzer (kit):       + -> A5, - -> GND
-//   Push button (kit):  one side -> pin 13, the other side -> GND   (changes the range)
+//   Buzzer (kit):       + -> pin 13, - -> GND
+//   Push button (kit):  one side -> A5, the other side -> GND   (changes the range)
 // Pins 10-13 are the screen's SD card slot, so leave the SD card out.
+// A sweep takes about 5 seconds here (drawing the screen takes time), so tracks are kept a bit longer.
 // Power it with a USB power bank (best) or a 9V battery on the barrel jack, so it's portable.
 
 #include <Adafruit_GFX.h>
@@ -28,8 +29,8 @@
 const int SERVO_PIN  = 10;
 const int TRIG_PIN   = 11;
 const int ECHO_PIN   = 12;
-const int BUTTON_PIN = 13;
-const int BUZZER_PIN = A5;
+const int BUZZER_PIN = 13;   // pin 13 also goes to the screen's SD slot, which is fine for an output
+const int BUTTON_PIN = A5;   // A5 is the one pin the screen doesn't touch at all, so the button reads cleanly
 
 // ✏️ EDIT: how it sweeps and warns
 const int MIN_ANGLE     = 15;
@@ -236,7 +237,7 @@ void blobEnd() {
 void dropOldTracks() {
   unsigned long now = millis();
   for (int i = 0; i < MAX_TRACKS; i++)
-    if (tracks[i].used && now - tracks[i].t > (tracks[i].hits < 2 ? 4000UL : 9000UL)) tracks[i].used = false;
+    if (tracks[i].used && now - tracks[i].t > (tracks[i].hits < 2 ? 12000UL : 16000UL)) tracks[i].used = false;
 }
 
 // ---------- The text lines at the top ----------
@@ -313,7 +314,8 @@ void setup() {
   pinMode(BUTTON_PIN, INPUT_PULLUP);
 
   uint16_t id = tft.readID();
-  if (id == 0xD3D3) id = 0x9486;   // some shields can't be read; this is the usual fix
+  if (id == 0xD3D3) id = 0x9486;                    // some shields can't be read; this is the usual fix
+  if (id == 0x0000 || id == 0xFFFF) id = 0x9341;    // couldn't tell: the ELEGOO 2.8" screen uses an ILI9341
   tft.begin(id);
   tft.setRotation(1);              // landscape: 320 x 240
   drawFrame();
